@@ -3,7 +3,8 @@
  *
  * T3 范围：`splitLines` 行切分（保留每行原始 eol）。
  * T4 范围：`lexDocument` 按 docs/JCX_SPEC.md §13.3 的**不可交换优先级**对每行分类，
- *          并切出该行的 token 序列。body 行内部的细粒度切分留给 T5/T6。
+ *          并切出该行的 token 序列。
+ * T5 范围：body 行的正文段交给 `lexBodyPitch`（模式 A）细分；模式 B 与模式切换留给 T6/T7。
  *
  * 行尾规则（docs/JCX_SPEC.md §5.1 / §5.2 / §5.11）：
  * - 只有 `\n` 会触发切行；`\r\n` 作为一个整体 eol 保留。
@@ -29,6 +30,7 @@ import { createPositionTracker } from './sourceSpan';
 import type { SourcePosition, SourceSpan } from './sourceSpan';
 import type { DiagnosticBag } from './diagnostics';
 import type { JcxLexLine, JcxLineKind, JcxPlainToken, JcxToken } from './token';
+import { lexBodyPitch } from './lexBodyPitch';
 
 /** 无附属字段的 plain kind（T1 `JcxPlainToken['kind']` 派生），不含 rest/fieldKey 等需要附属字段的 kind。 */
 type PlainTokenKind = JcxPlainToken['kind'];
@@ -258,6 +260,8 @@ interface TokenBuilder {
   push(kind: PlainTokenKind, raw: string): void;
   /** 需要附属字段（如 rest、fieldKey）的 token 由调用方自行构造完整对象后传入。 */
   pushToken(token: JcxToken): void;
+  /** §13：正文段按模式 A 细分（T5）；span 由 body lexer 依当前游标位置直接算出。 */
+  pushBody(content: string, bag: DiagnosticBag): void;
 }
 
 function createTokenBuilder(
@@ -284,6 +288,15 @@ function createTokenBuilder(
       const start = tracker.current();
       const end = tracker.advance(token.raw.length);
       commit({ ...token, span: { start, end } });
+    },
+    pushBody(content, bag) {
+      if (content.length === 0) {
+        return;
+      }
+      for (const token of lexBodyPitch(content, tracker.current(), bag)) {
+        commit(token);
+      }
+      tracker.advance(content.length);
     },
   };
 }
@@ -569,8 +582,9 @@ function lexLineContent(
     return 'raw';
   }
 
-  // 8. §13：其余为正文行；行内细粒度切分留给 T5/T6。
-  splitContentTokens(builder, content);
+  // 8. §13：其余为正文行。
+  // T5 起一律按模式 A（pitch）切分；模式 B 与模式切换分别由 T6 / T7 接管。
+  builder.pushBody(content, bag);
   return 'body';
 }
 
@@ -580,7 +594,7 @@ function lexLineContent(
  * 契约：
  * - 永不抛异常；所有异常写法一律降级为 raw + diagnostic。
  * - 逐行不变量（§29.5）：`rawOf(line.tokens) === text.slice(line.span)`。
- * - body 行本阶段只产出单个 `raw` token（`kind: 'body'`），T5/T6 再细分。
+ * - body 行（`kind: 'body'`）的正文段一律按模式 A 切分，`mode: 'pitch'`；T7 接入模式切换后此处改为按声部 style 派发。
  */
 export function lexDocument(text: string, bag: DiagnosticBag): JcxLexLine[] {
   const rawLines = splitLines(text);
@@ -604,12 +618,11 @@ export function lexDocument(text: string, bag: DiagnosticBag): JcxLexLine[] {
     const kind = lexLineContent(builder, content, isFirstLine, rawLine.span, bag, ctx);
     builder.push('eol', rawLine.eol);
 
-    lines.push({
-      index: rawLine.index,
-      span: rawLine.span,
-      kind,
-      tokens,
-    });
+    lines.push(
+      kind === 'body'
+        ? { index: rawLine.index, span: rawLine.span, kind, tokens, mode: 'pitch' }
+        : { index: rawLine.index, span: rawLine.span, kind, tokens },
+    );
   }
 
   if (ctx.inTextBlock) {

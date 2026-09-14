@@ -129,14 +129,18 @@ describe('lexDocument：空文本 / 单换行', () => {
 });
 
 describe('lexDocument：行首/行尾空白拆分', () => {
-  it('正文行的行首/行尾空白各自独立成 whitespace token，中段是 raw', () => {
+  it('正文行的行首/行尾空白各自独立成 whitespace token（T5 起中段按 pitch 模式细分）', () => {
     const bag = createDiagnosticBag();
     // 用正文行而非 `K:C`：T4 起 `K:C` 会被分类为字段行（见 lexDocument.classify.test.ts）。
     const lines = lexDocument('  CDEF|  \n', bag);
     const tokens = lines[0]?.tokens ?? [];
     expect(tokens.map((t) => [t.kind, t.raw])).toEqual([
       ['whitespace', '  '],
-      ['raw', 'CDEF|'],
+      ['pitchLetter', 'C'],
+      ['pitchLetter', 'D'],
+      ['pitchLetter', 'E'],
+      ['pitchLetter', 'F'],
+      ['barline', '|'],
       ['whitespace', '  '],
       ['eol', '\n'],
     ]);

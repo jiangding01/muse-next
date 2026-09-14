@@ -446,7 +446,12 @@ describe('§9 行首内联字段', () => {
     const result = run('[CEG]|\n');
     expect(result.lines[0]?.kind).toBe('body');
     expect(pairs(result.lines[0])).toEqual([
-      ['raw', '[CEG]|'],
+      ['chordOpen', '['],
+      ['pitchLetter', 'C'],
+      ['pitchLetter', 'E'],
+      ['pitchLetter', 'G'],
+      ['chordClose', ']'],
+      ['barline', '|'],
       ['eol', '\n'],
     ]);
   });
@@ -454,31 +459,45 @@ describe('§9 行首内联字段', () => {
   it('缺少闭合 ] 时不认作内联字段，降级为正文行', () => {
     const result = run('[V:1\n');
     expect(result.lines[0]?.kind).toBe('body');
-    expect(codes(result)).toEqual([]);
+    // T5 起正文按 pitch 模式细分：`V` 与 `:` 都不是已知 body token → raw + warning（§29.3）。
+    expect(codes(result)).toEqual(['jcx.body.unknown-token', 'jcx.body.unknown-token']);
   });
 });
 
 describe('§13 正文行', () => {
-  it('普通正文行整串作单个 raw token（T5/T6 再切）', () => {
+  it('普通正文行按 pitch 模式逐 token 切分（T5）', () => {
     const result = run('CDEF|GABc|\n');
     expect(result.lines[0]?.kind).toBe('body');
-    expect(pairs(result.lines[0])).toEqual([
-      ['raw', 'CDEF|GABc|'],
-      ['eol', '\n'],
+    expect(result.lines[0]?.mode).toBe('pitch');
+    expect(pairs(result.lines[0])?.map(([kind]) => kind)).toEqual([
+      'pitchLetter',
+      'pitchLetter',
+      'pitchLetter',
+      'pitchLetter',
+      'barline',
+      'pitchLetter',
+      'pitchLetter',
+      'pitchLetter',
+      'pitchLetter',
+      'barline',
+      'eol',
     ]);
   });
 
-  it('TAB 形态正文行同样只作 raw，本阶段不区分模式', () => {
+  it('TAB 形态正文行在 T5 阶段一律按 pitch 模式处理（模式切换留给 T7）', () => {
     const result = run('a0*4b1*4|\n');
     expect(result.lines[0]?.kind).toBe('body');
-    expect(result.lines[0]?.mode).toBeUndefined();
+    expect(result.lines[0]?.mode).toBe('pitch');
+    // `*` 是 TAB 专有的时值分隔符（§26.5），pitch 模式下必然降级为 raw。
+    expect(codes(result)).toEqual(['jcx.body.unknown-token', 'jcx.body.unknown-token']);
   });
 
   it('带前导/尾随空白的正文行，空白独立成 token', () => {
     const result = run('  z2  \n');
     expect(pairs(result.lines[0])).toEqual([
       ['whitespace', '  '],
-      ['raw', 'z2'],
+      ['rest', 'z'],
+      ['duration', '2'],
       ['whitespace', '  '],
       ['eol', '\n'],
     ]);
