@@ -17,5 +17,13 @@
     "resolveJsonModule": true,
     "types": ["node", "vite/client"]
   },
-  "include": ["src", "tests", "*.ts"]
+  "include": ["src", "tests", "*.ts"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "out",
+    ".vite",
+    "coverage",
+    "legacy-corpus"
+  ]
 }
