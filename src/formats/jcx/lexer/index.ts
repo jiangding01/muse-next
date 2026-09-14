@@ -39,8 +39,8 @@ export { createDiagnosticBag } from './diagnostics';
 import type { JcxLexLine } from './token';
 import type { JcxDiagnostic } from './diagnostics';
 
-/** T2 迁移到 `encoding/types.ts` 后改为 re-export。 */
-export type JcxEncoding = 'utf-8' | 'gb18030' | 'utf-16le' | 'utf-16be';
+export type { JcxEncoding } from '../encoding/types';
+import type { JcxEncoding } from '../encoding/types';
 
 export interface JcxLexResult {
   readonly encoding: JcxEncoding;

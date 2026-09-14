@@ -1,97 +1,24 @@
-import { TextDecoder } from "node:util";
-
-import type { DecodedJcxFile, JcxEncoding } from "./types";
-
-function hasPrefix(bytes: Uint8Array, prefix: readonly number[]): boolean {
-  if (bytes.length < prefix.length) {
-    return false;
-  }
-
-  return prefix.every((value, index) => bytes[index] === value);
-}
-
-function decode(
-  bytes: Uint8Array,
-  encoding: JcxEncoding,
-  fatal = true,
-): string {
-  const decoder = new TextDecoder(encoding, {
-    fatal,
-  });
-
-  return decoder.decode(bytes);
-}
-
-function stripBom(text: string): string {
-  return text.replace(/^\uFEFF/, "");
-}
-
 /**
- * JCX files from old Muse versions are commonly stored
- * using legacy Simplified Chinese encodings.
+ * Re-export shim（M1.4 T2，D8）：真正实现已迁移到
+ * `src/formats/jcx/encoding/decodeJcx.ts`。
  *
- * Detection strategy:
- *
- * 1. Respect Unicode BOM if present.
- * 2. Try strict UTF-8.
- * 3. Fall back to GB18030.
- *
- * GB18030 is preferred instead of GBK because it is a
- * superset and is supported by WHATWG TextDecoder.
+ * 与 src 版本的差异：src 的 `decodeJcx` **不剥离 BOM**（保留 `hasBom`
+ * 供 preserve 模式写回），但 `scan-corpus.ts` / `classifyLine.ts` 是
+ * 「BOM 已剥离」假设下写的旧行分类逻辑（例如 `%MUSE` magic header
+ * 的 `^%MUSE\d*` 正则不认识前导 U+FEFF）。为保持 `jcx:scan` 输出
+ * 不变，这里在 scanner 侧补一次 BOM 剥离，不让 src 的 decoder 剥离。
  */
+
+import { decodeJcx as decodeJcxSrc } from '../../../src/formats/jcx/encoding/decodeJcx';
+
+import type { DecodedJcxFile, JcxEncoding } from './types';
+
 export function decodeJcx(bytes: Uint8Array): DecodedJcxFile {
-  // UTF-8 BOM
-  if (hasPrefix(bytes, [0xef, 0xbb, 0xbf])) {
-    return {
-      encoding: "utf-8",
-      text: stripBom(decode(bytes, "utf-8")),
-    };
-  }
+  const decoded = decodeJcxSrc(bytes);
 
-  // UTF-16 LE BOM
-  if (hasPrefix(bytes, [0xff, 0xfe])) {
-    return {
-      encoding: "utf-16le",
-      text: stripBom(decode(bytes, "utf-16le")),
-    };
-  }
+  const text = decoded.hasBom ? decoded.text.replace(/^\uFEFF/, '') : decoded.text;
 
-  // UTF-16 BE BOM
-  if (hasPrefix(bytes, [0xfe, 0xff])) {
-    return {
-      encoding: "utf-16be",
-      text: stripBom(decode(bytes, "utf-16be")),
-    };
-  }
+  const encoding: JcxEncoding = decoded.encoding;
 
-  // First try strict UTF-8.
-  //
-  // "fatal: true" is important here. Otherwise invalid
-  // UTF-8 bytes would silently become replacement chars
-  // and we would incorrectly identify many GBK files
-  // as UTF-8.
-  try {
-    return {
-      encoding: "utf-8",
-      text: decode(bytes, "utf-8", true),
-    };
-  } catch {
-    // Continue to legacy encoding fallback.
-  }
-
-  try {
-    return {
-      encoding: "gb18030",
-      text: decode(bytes, "gb18030", true),
-    };
-  } catch (error) {
-    throw new Error(
-      [
-        "Unable to decode JCX file.",
-        "Tried UTF-8 and GB18030.",
-        "",
-        error instanceof Error ? error.message : String(error),
-      ].join("\n"),
-    );
-  }
+  return { text, encoding };
 }
