@@ -4,7 +4,8 @@
  * T3 范围：`splitLines` 行切分（保留每行原始 eol）。
  * T4 范围：`lexDocument` 按 docs/JCX_SPEC.md §13.3 的**不可交换优先级**对每行分类，
  *          并切出该行的 token 序列。
- * T5 范围：body 行的正文段交给 `lexBodyPitch`（模式 A）细分；模式 B 与模式切换留给 T6/T7。
+ * 当前范围：body 行的正文段经 `lexBody` 分发，固定走模式 A（pitch）；
+ * 按 voice style 选择模式是 T7 的职责。
  *
  * 行尾规则（docs/JCX_SPEC.md §5.1 / §5.2 / §5.11）：
  * - 只有 `\n` 会触发切行；`\r\n` 作为一个整体 eol 保留。
@@ -30,7 +31,7 @@ import { createPositionTracker } from './sourceSpan';
 import type { SourcePosition, SourceSpan } from './sourceSpan';
 import type { DiagnosticBag } from './diagnostics';
 import type { JcxLexLine, JcxLineKind, JcxPlainToken, JcxToken } from './token';
-import { lexBodyPitch } from './lexBodyPitch';
+import { lexBody } from './lexBody';
 
 /** 无附属字段的 plain kind（T1 `JcxPlainToken['kind']` 派生），不含 rest/fieldKey 等需要附属字段的 kind。 */
 type PlainTokenKind = JcxPlainToken['kind'];
@@ -293,7 +294,7 @@ function createTokenBuilder(
       if (content.length === 0) {
         return;
       }
-      for (const token of lexBodyPitch(content, tracker.current(), bag)) {
+      for (const token of lexBody(content, tracker.current(), bag, 'pitch')) {
         commit(token);
       }
       tracker.advance(content.length);

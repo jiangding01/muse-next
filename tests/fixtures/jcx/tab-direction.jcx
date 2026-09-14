@@ -1,0 +1,8 @@
+%MUSE2
+X:1
+T:Tab Direction Sample
+M:4/4
+L:1/8
+K:C
+V:1 style=tab clef=standardtab
+[V:1]"C"V[ax/bx/cx/]U[ax/bx/cx/]B[ax*3/2bx*3/2] |

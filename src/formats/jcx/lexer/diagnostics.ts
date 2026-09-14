@@ -23,7 +23,9 @@ export type JcxDiagnosticCode =
   | 'jcx.rest.hidden'
   | 'jcx.rest.uppercase-z'
   | 'jcx.voice.segment-by-order'
-  | 'jcx.inline-field.trailing-body';
+  | 'jcx.inline-field.trailing-body'
+  /** §26.4：TAB 拨弦前缀未紧跟音符 / 音符组，无法确证其前缀身份。 */
+  | 'jcx.tab.dangling-stroke-prefix';
 
 export interface JcxDiagnostic {
   readonly code: JcxDiagnosticCode;

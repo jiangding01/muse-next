@@ -1,0 +1,8 @@
+%MUSE2
+X:1
+T:Tab Relation Sample
+M:4/4
+L:1/8
+K:C
+V:1 style=tab clef=standardtab
+[V:1]a1-S-a3 b8-H-b9 c5-P-c3 d2-d2 |

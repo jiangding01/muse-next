@@ -25,26 +25,19 @@ import type { JcxToken } from './token';
 import {
   createBodyLexContext,
   emit,
-  emitCustom,
   lexBarline,
   lexChordSymbol,
   lexDecoration,
+  lexGrace,
+  lexRawFallback,
+  lexRest,
+  lexSlur,
+  lexTupletStart,
   lexWhitespace,
+  matchOneOf,
   restOf,
 } from './lexBodyCommon';
 import type { BodyLexContext } from './lexBodyCommon';
-
-/** §21：`{` / `{@`（后倚音）/ `}`。`{@` 必须整体匹配，见文件头消歧说明。 */
-function lexGrace(ctx: BodyLexContext): number {
-  const ch = ctx.text[ctx.offset];
-  if (ch === '{') {
-    return emit(ctx, 'graceOpen', ctx.text[ctx.offset + 1] === '@' ? 2 : 1);
-  }
-  if (ch === '}') {
-    return emit(ctx, 'graceClose', 1);
-  }
-  return 0;
-}
 
 /** §19.2：`[` 紧跟数字 → 跳房子段号；这是与和弦块 `[CEG]`、内联字段 `[V:` 的唯一区分。 */
 const REPEAT_ENDING_RE = /^\[\d+/;
@@ -58,16 +51,11 @@ const REPEAT_ENDING_RE = /^\[\d+/;
 const TUPLET_START_RE = /^\(\d+(?::\d+){0,2}/;
 
 function lexRepeatOrTuplet(ctx: BodyLexContext): number {
-  const rest = restOf(ctx);
-  const repeat = REPEAT_ENDING_RE.exec(rest);
+  const repeat = REPEAT_ENDING_RE.exec(restOf(ctx));
   if (repeat) {
     return emit(ctx, 'repeatEnding', repeat[0].length);
   }
-  const tuplet = TUPLET_START_RE.exec(rest);
-  if (tuplet) {
-    return emit(ctx, 'tupletStart', tuplet[0].length);
-  }
-  return 0;
+  return lexTupletStart(ctx);
 }
 
 /** §17：`^^` / `__` 必须先于 `^` / `_`（最长匹配）。 */
@@ -81,15 +69,6 @@ const OCTAVE_MARK_RE = /^[,']+/;
 /** §16.1：`N/N` 必须先于 `N`，`//` 必须先于 `/N` 与 `/`。 */
 const DURATION_RE = /^(?:\d+\/\d+|\d+|\/\/|\/\d+|\/)/;
 
-function matchOneOf(rest: string, forms: readonly string[]): string | undefined {
-  for (const form of forms) {
-    if (rest.startsWith(form)) {
-      return form;
-    }
-  }
-  return undefined;
-}
-
 /** 模式 A 专有 token（§14–§22）。返回 0 表示本规则组未命中。 */
 function lexPitchSpecific(ctx: BodyLexContext, bag: DiagnosticBag): number {
   const rest = restOf(ctx);
@@ -98,26 +77,13 @@ function lexPitchSpecific(ctx: BodyLexContext, bag: DiagnosticBag): number {
     return 0;
   }
 
+  if (lexRest(ctx, bag) > 0) {
+    return 1;
+  }
+
   const accidental = matchOneOf(rest, ACCIDENTAL_FORMS);
   if (accidental !== undefined) {
     return emit(ctx, 'accidental', accidental.length);
-  }
-
-  // §15.1 / §15.2：`z` 与 `Z` 都是 rest，但语义不合并，仅记录原字母。
-  if (ch === 'z' || ch === 'Z') {
-    const letter = ch;
-    const start = ctx.position;
-    const consumed = emitCustom(ctx, 1, (raw, span) => ({ kind: 'rest', raw, span, letter }));
-    if (letter === 'Z') {
-      // §15.2：`Z` 的精确语义 UNVERIFIED，禁止按 ABC 多小节休止实现 → 只发 info。
-      bag.report(
-        'jcx.rest.uppercase-z',
-        'info',
-        "rest 'Z' has unverified semantics; it is not ABC's multi-measure rest",
-        { start, end: ctx.position },
-      );
-    }
-    return consumed;
   }
 
   if (PITCH_LETTER_RE.test(rest)) {
@@ -160,11 +126,8 @@ function lexPitchSpecific(ctx: BodyLexContext, bag: DiagnosticBag): number {
     return emit(ctx, 'chordClose', 1);
   }
   // §22.2：走到这里的 `(` 一定不紧跟数字 → slur 起始。
-  if (ch === '(') {
-    return emit(ctx, 'slurOpen', 1);
-  }
-  if (ch === ')') {
-    return emit(ctx, 'slurClose', 1);
+  if (lexSlur(ctx) > 0) {
+    return 1;
   }
   if (ch === '-') {
     return emit(ctx, 'tie', 1);
@@ -186,41 +149,6 @@ function isKnownStart(ch: string): boolean {
     ch === 'Z' ||
     PITCH_LETTER_RE.test(ch)
   );
-}
-
-/** 未知字符的「同类」判定：字母归一类（可跨中西文），其余按字符本身归类。 */
-function unknownClassOf(ch: string): string {
-  return /\p{L}/u.test(ch) ? 'letter' : ch;
-}
-
-/**
- * §29.3 兜底：按「最短可疑片段」切出 raw —— 单个字符，或连续的同类未知字符。
- *
- * 注意它必须至少消费 1 个字符，否则主循环会死循环（例如孤立的 `:`：它是
- * 小节线的起始字符，但 `::` / `:|` 均未命中，最终只能落到这里）。
- */
-function lexRawFallback(ctx: BodyLexContext, bag: DiagnosticBag): number {
-  const text = ctx.text;
-  const first = text[ctx.offset] as string;
-  const cls = unknownClassOf(first);
-  let length = 1;
-  while (ctx.offset + length < text.length) {
-    const next = text[ctx.offset + length] as string;
-    if (isKnownStart(next) || unknownClassOf(next) !== cls) {
-      break;
-    }
-    length += 1;
-  }
-  const snippet = text.slice(ctx.offset, ctx.offset + length);
-  const start = ctx.position;
-  const consumed = emit(ctx, 'raw', length);
-  bag.report(
-    'jcx.body.unknown-token',
-    'warning',
-    `unrecognized body token '${snippet}'`,
-    { start, end: ctx.position },
-  );
-  return consumed;
 }
 
 /**
@@ -245,7 +173,7 @@ export function lexBodyPitch(
     if (lexBarline(ctx) > 0) continue;
     if (lexRepeatOrTuplet(ctx) > 0) continue;
     if (lexPitchSpecific(ctx, bag) > 0) continue;
-    lexRawFallback(ctx, bag);
+    lexRawFallback(ctx, bag, isKnownStart);
   }
 
   return ctx.tokens;

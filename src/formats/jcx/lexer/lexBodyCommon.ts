@@ -193,6 +193,80 @@ export function lexDecoration(ctx: BodyLexContext): number {
 }
 
 /**
+ * §15.1 / §15.2：`z` 与 `Z` 都是休止符，但语义不合并，仅记录原字母。
+ *
+ * 两种模式共享：语料在 `style=tab` 声部中同样出现 `z` / `zzz`（§26.9），
+ * 其词法形态与 pitch 模式完全一致，没有任何理由分叉实现。
+ */
+export function lexRest(ctx: BodyLexContext, bag: DiagnosticBag): number {
+  const ch = ctx.text[ctx.offset];
+  if (ch !== 'z' && ch !== 'Z') {
+    return 0;
+  }
+  const letter = ch;
+  const start = ctx.position;
+  const consumed = emitCustom(ctx, 1, (raw, span) => ({ kind: 'rest', raw, span, letter }));
+  if (letter === 'Z') {
+    // §15.2：`Z` 的精确语义 UNVERIFIED，禁止按 ABC 多小节休止实现 → 只发 info。
+    bag.report(
+      'jcx.rest.uppercase-z',
+      'info',
+      "rest 'Z' has unverified semantics; it is not ABC's multi-measure rest",
+      { start, end: ctx.position },
+    );
+  }
+  return consumed;
+}
+
+/**
+ * §20：`(` 紧跟数字 → tuplet；这是与 slur 起始 `(`（§22.2）的唯一区分。
+ *
+ * grammar 为 `"(" digit [ ":" digit [ ":" digit ] ]`，**不含闭合括号** ——
+ * 因此 `(3:2:3)` 会切成 `tupletStart('(3:2:3')` + `slurClose(')')`，这是规格的直接结论。
+ * 数字按多位宽容处理（语料只有单位数，多位不发 diagnostic，留待 Parser 判断）。
+ */
+const TUPLET_START_RE = /^\(\d+(?::\d+){0,2}/;
+
+/** §20：两种模式共享（语料的 `(3:0:3` 在 tab 声部同样出现，§26.9）。 */
+export function lexTupletStart(ctx: BodyLexContext): number {
+  const tuplet = TUPLET_START_RE.exec(restOf(ctx));
+  return tuplet ? emit(ctx, 'tupletStart', tuplet[0].length) : 0;
+}
+
+/**
+ * §22.2：连音线 `(` / `)`。
+ *
+ * **必须在 `lexTupletStart` 之后调用** —— 否则 `(3:0:3` 的 `(` 会被当成 slur 起始。
+ * 两种模式共享（§26.9）。
+ */
+export function lexSlur(ctx: BodyLexContext): number {
+  const ch = ctx.text[ctx.offset];
+  if (ch === '(') {
+    return emit(ctx, 'slurOpen', 1);
+  }
+  if (ch === ')') {
+    return emit(ctx, 'slurClose', 1);
+  }
+  return 0;
+}
+
+/**
+ * 「按给定顺序取第一个匹配的前缀」。
+ *
+ * 之所以不用正则交替：JS 正则的交替是**最左优先**而非最长优先，
+ * 写成 `/^(\||\|\])/` 会让 `|]` 永远切成 `|`。改用显式的「长度降序数组」，
+ * 顺序即优先级，读者一眼可见 —— 这也是 §18 / §17 / §16.2 共同的需求。
+ */
+export function matchOneOf(rest: string, forms: readonly string[]): string | undefined {
+  for (const form of forms) {
+    if (rest.startsWith(form)) {
+      return form;
+    }
+  }
+  return undefined;
+}
+
+/**
  * §18 记载的全部小节线形态，**按长度降序排列**。
  *
  * 顺序即最长匹配优先的实现：`|]` 必须先于 `|`，否则会被切成 `|` + `]`，
@@ -202,11 +276,64 @@ export const BARLINE_FORMS: readonly string[] = ['[|]', '[:]', '|]', '||', '[|',
 
 /** §18：小节线，最长匹配优先。 */
 export function lexBarline(ctx: BodyLexContext): number {
-  const rest = restOf(ctx);
-  for (const form of BARLINE_FORMS) {
-    if (rest.startsWith(form)) {
-      return emit(ctx, 'barline', form.length);
-    }
+  const form = matchOneOf(restOf(ctx), BARLINE_FORMS);
+  return form === undefined ? 0 : emit(ctx, 'barline', form.length);
+}
+
+/**
+ * §21：`{` / `{@`（后倚音）/ `}`。
+ *
+ * grace-group 的**外壳**语法与模式无关（§21 grammar：`"{" [ "@" ] content "}"`），
+ * 两种模式只有**内容**的 grammar 不同 —— 因此外壳在此共享，内容由各模式主循环继续切。
+ * `{@` 必须整体匹配：§15.3 的隐藏休止符与 §23.2 的 `@x` 共用 `@`，靠位置消歧。
+ */
+export function lexGrace(ctx: BodyLexContext): number {
+  const ch = ctx.text[ctx.offset];
+  if (ch === '{') {
+    return emit(ctx, 'graceOpen', ctx.text[ctx.offset + 1] === '@' ? 2 : 1);
+  }
+  if (ch === '}') {
+    return emit(ctx, 'graceClose', 1);
   }
   return 0;
+}
+
+/** 未知字符的「同类」判定：字母归一类（可跨中西文），其余按字符本身归类。 */
+function unknownClassOf(ch: string): string {
+  return /\p{L}/u.test(ch) ? 'letter' : ch;
+}
+
+/**
+ * §29.3 兜底：按「最短可疑片段」切出 raw —— 单个字符，或连续的同类未知字符。
+ *
+ * `isKnownStart` 由各模式提供（两种模式的已知起始字符集不同）。
+ * 本函数必须至少消费 1 个字符，否则主循环会死循环（例如孤立的 `:`：它是小节线的
+ * 起始字符，但 `::` / `:|` 均未命中，最终只能落到这里）。
+ */
+export function lexRawFallback(
+  ctx: BodyLexContext,
+  bag: DiagnosticBag,
+  isKnownStart: (ch: string) => boolean,
+): number {
+  const text = ctx.text;
+  const first = text[ctx.offset] as string;
+  const cls = unknownClassOf(first);
+  let length = 1;
+  while (ctx.offset + length < text.length) {
+    const next = text[ctx.offset + length] as string;
+    if (isKnownStart(next) || unknownClassOf(next) !== cls) {
+      break;
+    }
+    length += 1;
+  }
+  const snippet = text.slice(ctx.offset, ctx.offset + length);
+  const start = ctx.position;
+  const consumed = emit(ctx, 'raw', length);
+  bag.report(
+    'jcx.body.unknown-token',
+    'warning',
+    `unrecognized body token '${snippet}'`,
+    { start, end: ctx.position },
+  );
+  return consumed;
 }
