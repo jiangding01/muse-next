@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "jcx:scan": "tsx scripts/jcx/scan-corpus.ts"
+    "jcx:scan": "tsx scripts/jcx/scan-corpus.ts",
+    "jcx:corpus-test": "tsx scripts/jcx/corpus-lex-test.ts"
   },
   "engines": {
     "node": ">=22.12"
