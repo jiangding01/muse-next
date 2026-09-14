@@ -1,0 +1,16 @@
+node_modules/
+.vite/
+out/
+dist/
+coverage/
+.DS_Store
+*.log
+
+# Do not commit legacy binaries or proprietary assets.
+legacy/
+*.exe
+*.dll
+
+# Legacy Muse corpus - local compatibility data only
+/legacy-corpus/jcx/*
+!/legacy-corpus/jcx/.gitkeep
