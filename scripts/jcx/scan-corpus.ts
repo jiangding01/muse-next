@@ -131,34 +131,58 @@ async function scanFile(filePath: string): Promise<JcxFileReport> {
 
     headers: {},
 
+    inlineFields: {},
+
     directives: {},
 
     voiceStyles: {},
 
     bodyFeatures: {},
 
+    textBlockLines: 0,
+
     voices: [],
 
     unknownLines: [],
   };
+
+  /**
+   * Some JCX directives are stateful.
+   *
+   * %%begintext
+   * arbitrary literal text
+   * %%endtext
+   */
+  let blockMode: null | "text" = null;
 
   for (let index = 0; index < lines.length; index += 1) {
     const raw = lines[index] ?? "";
 
     const lineNumber = index + 1;
 
-    let classified = classifyLine(raw);
+    const classified = classifyLine(raw);
 
     /**
-     * Once inside a voice, legacy Muse body syntax can
-     * contain constructs that our initial heuristic does
-     * not yet understand.
-     *
-     * Do not immediately mark those as unknown.
-     *
-     * Headers/directives still take precedence because
-     * classifyLine() already recognized them.
+     * Everything inside %%begintext / %%endtext is literal
+     * text. It must not be classified as musical notation.
      */
+    if (blockMode === "text") {
+      const isEndText =
+        classified.kind === "directive" &&
+        classified.directiveName?.toLowerCase() === "endtext";
+
+      if (isEndText) {
+        increment(report.directives, "endtext");
+
+        blockMode = null;
+
+        continue;
+      }
+
+      report.textBlockLines += 1;
+
+      continue;
+    }
 
     switch (classified.kind) {
       case "blank":
@@ -194,10 +218,33 @@ async function scanFile(filePath: string): Promise<JcxFileReport> {
         break;
       }
 
+      case "inline-field": {
+        const key = classified.inlineFieldKey ?? "";
+
+        increment(report.inlineFields, key);
+
+        break;
+      }
+
       case "directive": {
         const name = (classified.directiveName ?? "").toLowerCase();
 
         increment(report.directives, name);
+
+        if (name === "begintext") {
+          blockMode = "text";
+        }
+
+        break;
+      }
+
+      /**
+       * Currently text lines are handled by the state machine
+       * above. Keep this branch because JcxLineKind includes
+       * "text" and the switch should remain exhaustive.
+       */
+      case "text": {
+        report.textBlockLines += 1;
 
         break;
       }
@@ -251,11 +298,15 @@ function buildSummary(files: JcxFileReport[]): JcxCorpusSummary {
 
     headers: {},
 
+    inlineFields: {},
+
     directives: {},
 
     voiceStyles: {},
 
     bodyFeatures: {},
+
+    textBlockLines: 0,
 
     unknownLineCount: 0,
 
@@ -275,11 +326,15 @@ function buildSummary(files: JcxFileReport[]): JcxCorpusSummary {
 
     mergeCounts(summary.headers, file.headers);
 
+    mergeCounts(summary.inlineFields, file.inlineFields);
+
     mergeCounts(summary.directives, file.directives);
 
     mergeCounts(summary.voiceStyles, file.voiceStyles);
 
     mergeCounts(summary.bodyFeatures, file.bodyFeatures);
+
+    summary.textBlockLines += file.textBlockLines;
 
     summary.unknownLineCount += file.unknownLines.length;
 
@@ -374,6 +429,8 @@ function renderMarkdown(report: JcxCorpusReport): string {
 
   out.push(`| Total lines | ${summary.totalLines} |`);
 
+  out.push(`| Text block lines | ${summary.textBlockLines} |`);
+
   out.push(`| Unknown lines | ${summary.unknownLineCount} |`);
 
   out.push(`| Unknown patterns | ${summary.unknownPatterns.length} |`);
@@ -385,6 +442,8 @@ function renderMarkdown(report: JcxCorpusReport): string {
   renderCountSection(out, "Magic Headers", summary.magicHeaders);
 
   renderCountSection(out, "Headers", summary.headers);
+
+  renderCountSection(out, "Inline Fields", summary.inlineFields);
 
   renderCountSection(out, "Directives", summary.directives);
 
@@ -510,6 +569,14 @@ function renderMarkdown(report: JcxCorpusReport): string {
     out.push("");
 
     renderCompactCounts(out, "Headers", file.headers);
+
+    renderCompactCounts(out, "Inline fields", file.inlineFields);
+
+    if (file.textBlockLines > 0) {
+      out.push(`Text block lines: **${file.textBlockLines}**`);
+
+      out.push("");
+    }
 
     renderCompactCounts(out, "Directives", file.directives);
 
@@ -647,6 +714,12 @@ function printSummary(report: JcxCorpusReport): void {
   console.log(
     `Headers:          ${Object.keys(summary.headers).length} unique`,
   );
+
+  console.log(
+    `Inline fields:    ${Object.keys(summary.inlineFields).length} unique`,
+  );
+
+  console.log(`Text block lines: ${summary.textBlockLines}`);
 
   console.log(
     `Directives:       ${Object.keys(summary.directives).length} unique`,

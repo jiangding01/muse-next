@@ -7,6 +7,20 @@ const DIRECTIVE_PATTERN = /^%%([A-Za-z0-9_-]+)(?:\s+(.*))?$/;
 const HEADER_PATTERN = /^([A-Za-z][A-Za-z0-9_-]*):(.*)$/;
 
 /**
+ * Inline ABC/Muse field.
+ *
+ * Muse corpus contains both:
+ *
+ * [V:1]
+ * [V: 1]
+ *
+ * We intentionally tolerate whitespace around
+ * the colon and value.
+ */
+const INLINE_FIELD_PATTERN =
+  /^\[\s*([A-Za-z][A-Za-z0-9_-]*)\s*:\s*([^\]]*)\]\s*$/;
+
+/**
  * Attribute syntax examples:
  *
  * name="主旋律"
@@ -39,6 +53,9 @@ export function classifyLine(raw: string): ClassifiedLine {
       headerKey: null,
       headerValue: null,
 
+      inlineFieldKey: null,
+      inlineFieldValue: null,
+
       directiveName: directiveMatch[1] ?? "",
 
       directiveValue: directiveMatch[2]?.trim() ?? "",
@@ -54,6 +71,27 @@ export function classifyLine(raw: string): ClassifiedLine {
     return createResult("comment", raw, trimmed);
   }
 
+  const inlineFieldMatch = INLINE_FIELD_PATTERN.exec(trimmed);
+
+  if (inlineFieldMatch) {
+    return {
+      kind: "inline-field",
+
+      raw,
+      trimmed,
+
+      headerKey: null,
+      headerValue: null,
+
+      inlineFieldKey: inlineFieldMatch[1] ?? "",
+
+      inlineFieldValue: inlineFieldMatch[2]?.trim() ?? "",
+
+      directiveName: null,
+      directiveValue: null,
+    };
+  }
+
   const headerMatch = HEADER_PATTERN.exec(trimmed);
 
   if (headerMatch) {
@@ -66,6 +104,9 @@ export function classifyLine(raw: string): ClassifiedLine {
       headerKey: headerMatch[1] ?? "",
 
       headerValue: headerMatch[2]?.trim() ?? "",
+
+      inlineFieldKey: null,
+      inlineFieldValue: null,
 
       directiveName: null,
       directiveValue: null,
@@ -98,6 +139,9 @@ function createResult(
 
     headerKey: null,
     headerValue: null,
+
+    inlineFieldKey: null,
+    inlineFieldValue: null,
 
     directiveName: null,
     directiveValue: null,

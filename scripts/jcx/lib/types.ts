@@ -1,17 +1,15 @@
-export type JcxEncoding =
-  | 'utf-8'
-  | 'utf-16le'
-  | 'utf-16be'
-  | 'gb18030';
+export type JcxEncoding = "utf-8" | "utf-16le" | "utf-16be" | "gb18030";
 
 export type JcxLineKind =
-  | 'blank'
-  | 'magic'
-  | 'comment'
-  | 'header'
-  | 'directive'
-  | 'body'
-  | 'unknown';
+  | "blank"
+  | "magic"
+  | "comment"
+  | "header"
+  | "inline-field"
+  | "directive"
+  | "text"
+  | "body"
+  | "unknown";
 
 export interface DecodedJcxFile {
   text: string;
@@ -53,6 +51,18 @@ export interface ClassifiedLine {
    * Directive content after directive name.
    */
   directiveValue: string | null;
+
+  /**
+   * Inline ABC/Muse field.
+   *
+   * Examples:
+   *
+   * [V:1]
+   * [V: 1]
+   */
+  inlineFieldKey: string | null;
+
+  inlineFieldValue: string | null;
 }
 
 export interface VoiceDiscovery {
@@ -122,6 +132,14 @@ export interface JcxFileReport {
   voices: VoiceDiscovery[];
 
   unknownLines: UnknownLine[];
+
+  inlineFields: Record<string, number>;
+
+  /**
+   * Physical lines occurring inside
+   * %%begintext / %%endtext.
+   */
+  textBlockLines: number;
 }
 
 export interface JcxCorpusSummary {
@@ -146,6 +164,10 @@ export interface JcxCorpusSummary {
   unknownLineCount: number;
 
   unknownPatterns: UnknownPatternSummary[];
+
+  inlineFields: Record<string, number>;
+
+  textBlockLines: number;
 }
 
 export interface JcxCorpusReport {
