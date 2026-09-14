@@ -1,0 +1,14 @@
+%MUSE2
+X:1
+T:Inline Voice Sample
+M:4/4
+L:1/8
+K:C
+V:1 style=staff
+V:2 style=tab clef=standardtab
+[V:1]
+CDEF|GABc|
+[V:2]
+a0 b2*2 | c3/2 z |
+[V:1]
+cBAG|FEDC|

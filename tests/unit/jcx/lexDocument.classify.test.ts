@@ -418,16 +418,22 @@ describe('§9 行首内联字段', () => {
     expect(codes(result)).toEqual(['jcx.inline-field.odd-whitespace']);
   });
 
-  it('§9.2：[V:1] ABCD| 同行跟随正文 —— 余下部分作单个 raw 并发 info', () => {
+  it('§9.2：[V:1] ABCD| 同行跟随正文 —— 余下部分按当前模式切分并发 info', () => {
     const result = run('[V:1] ABCD|\n');
     expect(result.lines[0]?.kind).toBe('inlineField');
+    // T7 起余下正文不再是 raw 占位，而是按 `[V:1]` 切换后的模式送 body lexer。
     expect(pairs(result.lines[0])).toEqual([
       ['inlineFieldOpen', '['],
       ['inlineFieldKey', 'V'],
       ['inlineFieldColon', ':'],
       ['inlineFieldValue', '1'],
       ['inlineFieldClose', ']'],
-      ['raw', ' ABCD|'],
+      ['whitespace', ' '],
+      ['pitchLetter', 'A'],
+      ['pitchLetter', 'B'],
+      ['pitchLetter', 'C'],
+      ['pitchLetter', 'D'],
+      ['barline', '|'],
       ['eol', '\n'],
     ]);
     expect(result.diagnostics[0]).toMatchObject({

@@ -1,0 +1,10 @@
+%MUSE2
+X:1
+T:Inline Voice Spaced Sample
+M:4/4
+L:1/8
+K:C
+V:1 style=staff
+V:2 style=tab
+[V: 1] CDEF|
+[V: 2] a0 b2*2|
