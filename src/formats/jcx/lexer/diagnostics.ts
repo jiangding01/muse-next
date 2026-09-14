@@ -15,6 +15,8 @@ export type JcxDiagnosticCode =
   | 'jcx.voice.unknown-style'
   | 'jcx.directive.unknown'
   | 'jcx.field.unknown'
+  /** §8.0 / §29.4：字段形态的行使用了全角冒号 `：`，按未知行保留。 */
+  | 'jcx.field.fullwidth-colon'
   | 'jcx.body.unknown-token'
   | 'jcx.textblock.unterminated'
   | 'jcx.inline-field.odd-whitespace'

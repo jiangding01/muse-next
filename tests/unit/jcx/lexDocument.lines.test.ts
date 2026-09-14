@@ -100,9 +100,9 @@ describe('lexDocument：BOM', () => {
     const lines = lexDocument(text, bag);
     const first = lines[0];
     expect(first?.tokens[0]).toMatchObject({ kind: 'bom', raw: '﻿' });
-    // BOM 之后紧跟内容 token（此处是纯正文 raw token，不含 BOM 字符）。
-    const rawToken = first?.tokens.find((t) => t.kind === 'raw');
-    expect(rawToken?.raw).toBe('%MUSE2');
+    // BOM 之后紧跟内容 token（§7.3：BOM 不占一行，首行仍按 magic header 分类）。
+    const headerToken = first?.tokens.find((t) => t.kind === 'magicHeader');
+    expect(headerToken?.raw).toBe('%MUSE2');
     expect(rawOf(first?.tokens ?? [])).toBe('﻿%MUSE2\n');
   });
 
@@ -129,13 +129,14 @@ describe('lexDocument：空文本 / 单换行', () => {
 });
 
 describe('lexDocument：行首/行尾空白拆分', () => {
-  it('行首与行尾空白各自独立成 whitespace token，中段是 raw', () => {
+  it('正文行的行首/行尾空白各自独立成 whitespace token，中段是 raw', () => {
     const bag = createDiagnosticBag();
-    const lines = lexDocument('  K:C  \n', bag);
+    // 用正文行而非 `K:C`：T4 起 `K:C` 会被分类为字段行（见 lexDocument.classify.test.ts）。
+    const lines = lexDocument('  CDEF|  \n', bag);
     const tokens = lines[0]?.tokens ?? [];
     expect(tokens.map((t) => [t.kind, t.raw])).toEqual([
       ['whitespace', '  '],
-      ['raw', 'K:C'],
+      ['raw', 'CDEF|'],
       ['whitespace', '  '],
       ['eol', '\n'],
     ]);
