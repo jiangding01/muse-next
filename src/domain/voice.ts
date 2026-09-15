@@ -61,13 +61,15 @@ export interface LyricLine {
 /**
  * 声部事件序列上「生效单位音长发生变化」的位置（spec §8.5 的 body 区 `L:`）。
  *
- * 记录的是**事实的位置映射**，不是语义：`L:` 在源文本里是文档级的一行，而 Domain
- * 里没有「行」，只有各声部的事件序列——所以这里把它落到「变化后第一个事件」上。
- * `beforeEventId` 指的就是那个事件（该声部内，从它起 `unitLength` 生效）。
+ * **这是 effective normalized fact，不是纯源位置事实**：它由「每个声部的事件序列 ×
+ * 该位置生效的 `L:`」派生出的 unit-length transition，而不是源文本里 `L:` 行的清单。
+ * `L:` 在源文本里是文档级的一行，Domain 里却没有「行」，只有各声部的事件序列，所以
+ * 一条源码 `L:` 影响到 N 个声部就对应 N 条 voice-local change（`raw` / `origin` 同源，
+ * `beforeEventId` 各不相同），影响不到任何事件就一条都不产生。
  *
- * 口径是**逐声部的生效值变化**而不是「原文里的 `L:` 行清单」：一条全局 `L:` 若影响
- * 多个声部就产生多条 change（各自的 `beforeEventId` 不同，`raw` / `origin` 同源），
- * 影响不到任何事件就不产生 change。因此 `beforeEventId` 恒存在，没有 `null` 分支。
+ * 因此**不要试图把它压回源码的 `L:` 行数**：两者不是一一对应，条数相等只是巧合。
+ * 每条 change 里 `raw` / `origin` 仍是原拼写与原位置引用（可直接写回），
+ * `beforeEventId` 则是该声部内「从它起新值生效」的那个事件，故恒存在，无 `null` 分支。
  */
 export interface UnitLengthChange {
   readonly beforeEventId: EventId;

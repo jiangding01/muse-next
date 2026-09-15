@@ -18,10 +18,10 @@
  * | `jcx.parse.tuplet.incomplete` | warning | 吸收到的成员少于 `r` |
  * | `jcx.parse.tuplet.q-zero` | info（每文档一次） | `(p:0:r`（U25 UNVERIFIED） |
  * | `jcx.parse.tuplet.unparsed` | warning | 形态不符 §20（lexer 保证下不可达） |
- * | `jcx.parse.tab-relation.unresolved` | warning | `-S-`/`-H-`/`-P-` 缺一侧 |
+ * | `jcx.parse.tab-relation.unresolved` | warning | `-S-`/`-H-`/`-P-` 缺一侧，或端点是组且定不到唯一同弦成员 |
  * | `jcx.parse.tab-relation.cross-string` | warning | `-S-`/`-H-`/`-P-` 两端弦号已知且不同（§26.6 要求同弦），不建关系 |
  * | `jcx.parse.broken-rhythm.unresolved` | warning | `>`/`<` 缺一侧或缺时值 |
- * | `jcx.parse.broken-rhythm.overflow` | warning | `>`/`<` 改写后的时值越界，不改写也不登记 |
+ * | `jcx.parse.broken-rhythm.overflow` | warning | `>`/`<` 改写后的时值越界，不改写时值但保留关系 |
  * | `jcx.parse.broken-rhythm.left-unobserved` | info（每文档一次） | 出现 `<`（语料 0 次） |
  * | `jcx.parse.marker.unhandled` | warning | 审计兜底：有 marker 没被任何配对器消费 |
  *
@@ -47,7 +47,7 @@ export interface PairingResult {
   readonly slurs: readonly Slur[];
   readonly tuplets: readonly Tuplet[];
   readonly tabRelations: readonly TabRelation[];
-  /** 实际发生了时值改写的 `>` / `<`；未改写的 marker 不在此列。 */
+  /** 两侧结构端点成立的 `>` / `<`；时值是否改写成功不影响登记（M1.7 T0）。 */
   readonly brokenRhythms: readonly BrokenRhythm[];
   /** broken rhythm 改写后的事件数组；未改写时逐个对象与输入相同。 */
   readonly events: readonly MusicEvent[];

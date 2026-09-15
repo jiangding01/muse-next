@@ -1,0 +1,8 @@
+%MUSE2
+X:1
+T:Tab Relation Group Endpoints
+M:4/4
+L:1/8
+K:C
+V:1 style=tab clef=standardtab
+[V:1]a1-S-[a3c5] [b3c5]-H-b7 a1-P-[a3a5] [a1b2]-S-[a3b4] [a1b2]-H-[a3c4]|

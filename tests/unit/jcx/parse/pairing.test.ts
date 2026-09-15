@@ -490,9 +490,15 @@ describe('M1.7 T0：broken rhythm 登记为事实关系（spec §16.2）', () =>
     ]);
   });
 
-  it('单位音长未知（E1）时不改写也不登记', () => {
-    const voice = voiceOf(parseFixture('broken-rhythm-no-unit-length').score, voiceId(1));
-    expect(brokenRhythms(voice)).toEqual([]);
+  it('单位音长未知（E1）时不改写时值，但关系照常登记（marker 存在是文本事实）', () => {
+    const { score, diagnostics } = parseFixture('broken-rhythm-no-unit-length');
+    const voice = voiceOf(score, voiceId(1));
+    expect(brokenRhythms(voice)).toEqual(['> v1:e0→v1:e1']);
+    expect(voice.brokenRhythms).toHaveLength(1);
+    // 两侧事件本就没有 duration，`durationRaw` 保持原文。
+    const first = voice.events[0];
+    expect(first?.kind === 'note' ? first.note.duration : 'missing').toBeUndefined();
+    expect(parseCodes(diagnostics)).toContain('jcx.parse.broken-rhythm.unresolved');
   });
 
   it('brokenRhythms 进 DomainIndex：两端都能反查到同一个 relation id', () => {
@@ -509,10 +515,10 @@ describe('M1.7 T0：broken rhythm 改写越界（M1.6 debt）', () => {
   const { score, diagnostics } = parseFixture('broken-rhythm-overflow');
   const voice = voiceOf(score, voiceId(1));
 
-  it('越界不抛异常，只发 warning 且不改写、不登记；同行其余 marker 照常', () => {
+  it('越界不抛异常，只发 warning 且不改写时值，但关系保留；同行其余 marker 照常', () => {
     expect(parseCodes(diagnostics)).toContain('jcx.parse.broken-rhythm.overflow');
     expect(diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
-    expect(brokenRhythms(voice)).toEqual(['> v1:e2→v1:e3']);
+    expect(brokenRhythms(voice)).toEqual(['> v1:e0→v1:e1', '> v1:e2→v1:e3']);
   });
 
   it('越界的两侧事件保持原时值（不改写）', () => {
@@ -554,6 +560,22 @@ describe('M1.7 T0：TAB 连接标记的同弦校验（spec §26.6 CONFIRMED）',
     expect(diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
   });
 
+  it('端点是整个组时按「唯一同弦成员」落定，定不下来就不建关系', () => {
+    const { score, diagnostics } = parseFixture('tab-relation-group-endpoints');
+    const voice = voiceOf(score, voiceId(1));
+    expect(relations(voice)).toEqual([
+      // `a1-S-[a3c5]`：note → group，组里第 1 弦成员唯一，落到 memberIndex 0。
+      { kind: 'slide', status: 'paired', from: 'v1:e0', to: 'v1:e1#0' },
+      // `[b3c5]-H-b7`：group → note，组里第 2 弦成员唯一。
+      { kind: 'hammer', status: 'paired', from: 'v1:e2#0', to: 'v1:e3' },
+      // `[a1b2]-H-[a3c4]`：两端都是组，只有第 1 弦在两组里各自唯一。
+      { kind: 'hammer', status: 'paired', from: 'v1:e8#0', to: 'v1:e9#0' },
+    ]);
+    // `a1-P-[a3a5]`（组内两个第 1 弦成员）与 `[a1b2]-S-[a3b4]`（两个候选弦）各一条。
+    expect(parseCodes(diagnostics).filter((c) => c === 'jcx.parse.tab-relation.unresolved')).toHaveLength(2);
+    expect(diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+  });
+
   it('同弦的既有 fixture 不受影响，不产生 cross-string', () => {
     expect(parseCodes(parseFixture('tab-relations').diagnostics)).not.toContain(
       'jcx.parse.tab-relation.cross-string',
@@ -585,6 +607,7 @@ describe('DomainIndex 自动登记 relationsByNote', () => {
       'broken-rhythm-no-unit-length',
       'broken-rhythm-overflow',
       'tab-relation-cross-string',
+      'tab-relation-group-endpoints',
     ]) {
       const { diagnostics } = parseFixture(name);
       expect(diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
