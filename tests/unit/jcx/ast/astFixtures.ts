@@ -7,6 +7,7 @@ import { createPositionTracker } from '../../../../src/formats/jcx/lexer/sourceS
 import type { SourceSpan } from '../../../../src/formats/jcx/lexer/sourceSpan';
 import type { JcxToken } from '../../../../src/formats/jcx/lexer/token';
 import { childPath, linePath } from '../../../../src/formats/jcx/ast';
+import { bodyLeaf, tokenLeaf } from '../../../../src/formats/jcx/ast/leaf';
 import type {
   AstPath,
   JcxAstDocument,
@@ -44,13 +45,13 @@ export const reader = (source: string) => {
     leaf<S extends TokenSeed>(seed: S): JcxTokenLeafOf<S['kind']> {
       const span = take(seed.raw);
       const token = { ...seed, span } as JcxToken & { readonly kind: S['kind'] };
-      return { kind: 'token', token, raw: token.raw, path: path(), span: token.span };
+      return tokenLeaf<S['kind']>(token, path());
     },
     /** 正文单 token 叶子。 */
     bodyLeaf<K extends JcxBodyLeafKind>(kind: K, seed: TokenSeed): JcxBodyLeafNode {
       const span = take(seed.raw);
       const token = { ...seed, span } as JcxToken;
-      return { kind, token, raw: token.raw, path: path(), span: token.span } as JcxBodyLeafNode;
+      return bodyLeaf(kind, token, path());
     },
   };
 };

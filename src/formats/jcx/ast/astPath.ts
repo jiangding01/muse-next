@@ -67,3 +67,11 @@ function assertIndex(index: number, name: string): number {
   }
   return index;
 }
+
+/**
+ * 文档级 BOM 叶子的 path。它不属于任何一行，因此不是 `L<n>` 数字形态；
+ * `parseAstPath` 对它返回 null 是预期行为。与所有行 path 天然不冲突。
+ */
+export function bomPath(): AstPath {
+  return 'Lbom';
+}
