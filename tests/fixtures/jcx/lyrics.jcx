@@ -1,0 +1,15 @@
+%MUSE2
+X:1
+T:Lyrics Sample
+M:4/4
+L:1/4
+K:C
+V:1
+CDEF|
+w: la li lu la
+{G}A B z C|
+w: la * lu
+[CEG] A|
+w: la~li lu
+A B C|
+w: la-li lu_x y|z

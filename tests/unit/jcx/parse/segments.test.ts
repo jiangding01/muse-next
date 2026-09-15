@@ -204,7 +204,8 @@ describe('w: 行归属（spec §8.13：w: 必然在 body 中；本任务只记 v
     }
     expect(lyric.voiceId).toBe(voiceId(1));
     expect(lyric.unit.node.path).toBe('L8');
-    expect(lyric.unit.target?.path).toBe('L7');
+    expect(lyric.unit.target?.kind).toBe('bodyLine');
+    expect(lyric.unit.target?.line.path).toBe('L7');
     expect(parseCodes(diagnostics)).toEqual([]);
   });
 });

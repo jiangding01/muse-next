@@ -1884,6 +1884,30 @@ npm run jcx:scan
   span —— 每个节点的 `span`；no renderer dependency —— `src/formats/jcx/ast/`
   下无任何渲染层 import。
 
+**已知工程限制**（实现内部一致性问题，不是 JCX 格式语义未验证，因此不进
+`JCX_SPEC.md` Appendix A）：
+
+- **orderly 模式下「当前声部」判定在两个模块里不一致**（M1.6 T8 排查歌词对齐
+  时发现）：`src/formats/jcx/parse/body/segments.ts` 的 `advanceOrderly`
+  （T5 P1 修复）按 body 区 `V:` 行**自身写的 id** 切换「当前声部」，决定段落
+  归属（`VoiceSegment.voiceId`）；但决定**词法扫描模式**（pitch 还是 tab，
+  直接影响正文 token 被切成 `note`/`chord` 还是 `tabNote`/`tabGroup`）的
+  `src/formats/jcx/lexer/lexModes.ts` 的 `resolveMode`（`'field'` 分支，约
+  L335–349）仍按**声明顺序位置** `prescan.order[state.segmentIndex]` clamp，
+  不看该行自身写的 id。两者在现有 11 个语料文件上从未分叉（`segments.ts`
+  文件头注释已如此声称），但用最小构造样本可复现分叉：2 个声部、`V:2` 声明
+  `style=tab`，body 区用 `V:2` 切换到该声部——`segments.ts` 正确把后续正文
+  行归到 v2，但 `lexModes.ts` 仍按 position 把它解析成 pitch 模式，导致
+  T6 扫出的事件 kind 与「预期该声部的 style」不一致。复现文件已用于 M1.6 T8
+  的排查（未入库，属临时调试产物）。
+  - 影响面：仅当 orderly 模式（无 `[V:...]`）下同时出现「≥2 个声部且 style
+    不同」时才可能触发；11 个语料文件全部使用 `[V:...]`（inline 模式）或单
+    一 style，不受影响。
+  - 修复方向：统一两个模块的「当前声部」判定逻辑（例如让 `lexModes.ts` 也
+    按行自身 id 查表，而不是 position clamp），属于 T4–T7 既有代码的改动，
+    不在 M1.6 T8（歌词对齐）范围内，留给后续处理 orderly 多声部场景时一并
+    解决。
+
 ---
 
 # 31. 下一步：M1.3 `docs/JCX_SPEC.md`

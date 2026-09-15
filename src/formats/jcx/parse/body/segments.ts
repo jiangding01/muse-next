@@ -52,10 +52,21 @@ import type { VoiceRegistry } from '../voice';
 import { splitVoiceAttributes } from '../voice';
 
 /** 一个正文行 / 行内尾随正文 / 歌词行被归属到某个声部的最小单位。 */
+/**
+ * `w:` 行能绑定的「上一行音符」：可能是一条独立正文行，也可能是 `[V:x] CDE` 这种
+ * inline 字段行的同行尾随正文（P2 修复：后者此前从未被记录，导致紧跟其后的 `w:`
+ * 绑不到任何目标，或错误绑到更早的一条独立正文行）。判别联合而非裸节点联合，
+ * 是为了让 `lyrics.ts` 定位可唱事件时不必对节点形状做鸭子类型判断——`kind` 已经
+ * 明确告诉调用方这是哪一种，且两个分支各自的 `line` 字段类型精确。
+ */
+export type LyricTarget =
+  | { readonly kind: 'bodyLine'; readonly line: JcxBodyLineNode }
+  | { readonly kind: 'inlineTrailing'; readonly line: JcxInlineFieldLineNode };
+
 export type SegmentUnit =
   | { readonly kind: 'bodyLine'; readonly node: JcxBodyLineNode }
   | { readonly kind: 'trailing'; readonly node: JcxInlineFieldLineNode }
-  | { readonly kind: 'lyric'; readonly node: JcxFieldLineNode; readonly target: JcxBodyLineNode | undefined };
+  | { readonly kind: 'lyric'; readonly node: JcxFieldLineNode; readonly target: LyricTarget | undefined };
 
 export interface VoiceSegment {
   readonly voiceId: VoiceId;
@@ -94,8 +105,8 @@ interface WalkState {
   readonly segments: VoiceSegment[];
   readonly ignoredFields: IgnoredField[];
   currentVoiceId: VoiceId | undefined;
-  lastBodyLine: JcxBodyLineNode | undefined;
-  lastBodyLineVoiceId: VoiceId | undefined;
+  lastLyricTarget: LyricTarget | undefined;
+  lastLyricTargetVoiceId: VoiceId | undefined;
 }
 
 /**
@@ -193,8 +204,8 @@ function advanceOrderly(
 
 function pushBodyLine(state: WalkState, id: VoiceId, node: JcxBodyLineNode): void {
   state.segments.push({ voiceId: id, unit: { kind: 'bodyLine', node } });
-  state.lastBodyLine = node;
-  state.lastBodyLineVoiceId = id;
+  state.lastLyricTarget = { kind: 'bodyLine', line: node };
+  state.lastLyricTargetVoiceId = id;
 }
 
 function handleInlineFieldLine(state: WalkState, ctx: ParseContext, node: JcxInlineFieldLineNode): void {
@@ -224,6 +235,10 @@ function handleInlineFieldLine(state: WalkState, ctx: ParseContext, node: JcxInl
   if (node.trailing.length > 0) {
     // spec §9.2：help 示例 `[V:1] ABCD|`——同行尾随正文按切换后的声部归属。
     state.segments.push({ voiceId: id, unit: { kind: 'trailing', node } });
+    // P2 修复：同行尾随正文本身就是「上一行音符」，`w:` 紧跟其后时应绑定到它，
+    // 而不是更早的某条独立正文行（或压根没有目标）。
+    state.lastLyricTarget = { kind: 'inlineTrailing', line: node };
+    state.lastLyricTargetVoiceId = id;
   }
 }
 
@@ -253,8 +268,8 @@ export function assignSegments(
     segments: [],
     ignoredFields: [],
     currentVoiceId: undefined,
-    lastBodyLine: undefined,
-    lastBodyLineVoiceId: undefined,
+    lastLyricTarget: undefined,
+    lastLyricTargetVoiceId: undefined,
   };
 
   for (const line of ast.lines) {
@@ -287,9 +302,9 @@ export function assignSegments(
           break;
         }
         if (line.key === 'w') {
-          const owner = state.lastBodyLineVoiceId ?? state.currentVoiceId;
+          const owner = state.lastLyricTargetVoiceId ?? state.currentVoiceId;
           if (owner !== undefined) {
-            state.segments.push({ voiceId: owner, unit: { kind: 'lyric', node: line, target: state.lastBodyLine } });
+            state.segments.push({ voiceId: owner, unit: { kind: 'lyric', node: line, target: state.lastLyricTarget } });
           }
         }
         break;

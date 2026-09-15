@@ -29,6 +29,7 @@ import { assignSegments } from './body/segments';
 import type { ScanByVoice, ScanResult } from './body/scan';
 import { scanSegments } from './body/scan';
 import { pairMarkers } from './body/pairing';
+import { alignLyrics } from './body/lyrics';
 
 export type { HasAstPath } from './origin';
 export { originOf, originsOf } from './origin';
@@ -60,6 +61,7 @@ export type { ScanByVoice, ScanMarker, ScanMarkerAnchor, ScanMarkerKind, ScanRes
 export { scanSegments } from './body/scan';
 export type { PairingResult } from './body/pairing';
 export { pairMarkers } from './body/pairing';
+export { alignLyrics } from './body/lyrics';
 export { parseDurationRaw, parseTabDurationRaw, resolveDuration, scaleByUnitLength } from './duration';
 
 /** `parseHeader` / `parseVoices` 共享的上下文，额外携带声部注册表与 T5 段落归属结果供后续阶段（T6）复用。 */
@@ -79,7 +81,7 @@ export interface ParseResult {
 /**
  * 由已归一化的描述头拼出 Score。
  *
- * lyricLines 仍为空（T8 的产出）；其余字段已由 T3–T7（描述头 / 声部 / 正文）与
+ * `voices` 传入时已带上 T8 对齐好的 `lyricLines`；其余字段由 T3–T7（描述头 / 声部 / 正文）与
  * T9（`%%` 指令、gchord、text block）填满。
  */
 function buildScore(
@@ -112,7 +114,7 @@ function buildScore(
  * 把 Lossless AST 归一化为 Domain `Score`。
  *
  * 当前进度：T3 描述头、T4 声部属性、T5 段落归属、T6 事件扫描、T7 marker 配对、
- * T9 指令 / gchord / text block 已接入；歌词仍待 T8。
+ * T8 歌词对齐、T9 指令 / gchord / text block 均已接入。
  */
 export function parseJcxDocument(ast: JcxAstDocument): ParseResult {
   const bag = createDiagnosticBag();
@@ -150,8 +152,13 @@ export function parseJcxDocument(ast: JcxAstDocument): ParseResult {
   });
   // T9：`%%` 指令、gchord 和弦图与 text block（与正文扫描互不依赖）。
   const directives = collectDirectives(ast, ctx);
-  // T8 用 header.lyricFields。此处刻意不放 stub 函数，避免死代码。
-  const score = buildScore(header, voices, segmentsResult.ignoredFields, directives);
+  // T8：用 T5 归属好的 `lyric` 段落单元 + T6 扫描出的事件流对齐歌词，不重新扫描 AST。
+  const lyricsByVoice = alignLyrics(segmentsResult.segments, scan, ctx);
+  const voicesWithLyrics = voices.map((voice) => ({
+    ...voice,
+    lyricLines: lyricsByVoice.get(voice.id) ?? voice.lyricLines,
+  }));
+  const score = buildScore(header, voicesWithLyrics, segmentsResult.ignoredFields, directives);
 
   return {
     score,
