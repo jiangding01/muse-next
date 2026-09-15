@@ -390,9 +390,11 @@ describe('scan-markers fixture（方案 §0-5：marker 不进 events、时值不
     expect(grace.members[0]).toMatchObject({ durationRaw: '2', duration: { num: 1, den: 4 } });
   });
 
-  it('broken rhythm 两侧时值未被改写（改写是 T7 的事）', () => {
+  it('扫描期不改写 broken rhythm 两侧时值（改写在 T7 配对层，见 pairing.test.ts）', () => {
+    // 断言对象改为**扫描输出**而不是 Score：T7 接入后 Score 里的 `C2>D2` 已按 §16.2 改写。
+    const scanned = scan.get(voiceId(1))?.events ?? [];
     // 无时值原文的音符取隐含 1 倍（1/8）；`C2>D2` 两侧在扫描期仍是各自的 1/4。
-    expect(durations(pitchVoice).slice(0, 10)).toEqual([
+    expect(scanned.map(durationOf).slice(0, 10)).toEqual([
       { num: 1, den: 4 },
       { num: 1, den: 4 },
       { num: 1, den: 8 },

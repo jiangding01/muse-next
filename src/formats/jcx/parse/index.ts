@@ -24,8 +24,9 @@ import type { VoiceRegistry } from './voice';
 import { parseVoices } from './voice';
 import type { SegmentsResult, VoiceSegment } from './body/segments';
 import { assignSegments } from './body/segments';
-import type { ScanByVoice } from './body/scan';
+import type { ScanByVoice, ScanResult } from './body/scan';
 import { scanSegments } from './body/scan';
+import { pairMarkers } from './body/pairing';
 
 export type { HasAstPath } from './origin';
 export { originOf, originsOf } from './origin';
@@ -52,6 +53,8 @@ export type { SegmentsResult, SegmentUnit, VoiceSegment } from './body/segments'
 export { assignSegments } from './body/segments';
 export type { ScanByVoice, ScanMarker, ScanMarkerAnchor, ScanMarkerKind, ScanResult } from './body/scan';
 export { scanSegments } from './body/scan';
+export type { PairingResult } from './body/pairing';
+export { pairMarkers } from './body/pairing';
 export { parseDurationRaw, parseTabDurationRaw, resolveDuration, scaleByUnitLength } from './duration';
 
 /** `parseHeader` / `parseVoices` 共享的上下文，额外携带声部注册表与 T5 段落归属结果供后续阶段（T6）复用。 */
@@ -101,7 +104,7 @@ function buildScore(
 /**
  * 把 Lossless AST 归一化为 Domain `Score`。
  *
- * 当前进度：T3 描述头、T4 声部属性、T5 段落归属、T6 事件扫描已接入；配对 / 歌词仍待 T7–T8。
+ * 当前进度：T3 描述头、T4 声部属性、T5 段落归属、T6 事件扫描、T7 marker 配对已接入；歌词仍待 T8。
  */
 export function parseJcxDocument(ast: JcxAstDocument): ParseResult {
   const bag = createDiagnosticBag();
@@ -124,10 +127,19 @@ export function parseJcxDocument(ast: JcxAstDocument): ParseResult {
   // T6：扫描事件流；marker 挂在 ctx 上供 T7 配对，不进 Score（方案 §0-5）。
   const scan = scanSegments(segmentsResult.segments, header.unitLengthScope, ctx);
   ctx.scan = scan;
-  const voices = segmentsResult.voices.map((voice) => ({
-    ...voice,
-    events: scan.get(voice.id)?.events ?? [],
-  }));
+  // T7：消费 marker，产出四类 relation 与 broken rhythm 改写后的事件流。
+  const empty: ScanResult = { events: [], markers: [] };
+  const voices = segmentsResult.voices.map((voice) => {
+    const paired = pairMarkers(scan.get(voice.id) ?? empty, voice.id, ctx);
+    return {
+      ...voice,
+      events: paired.events,
+      ties: paired.ties,
+      slurs: paired.slurs,
+      tuplets: paired.tuplets,
+      tabRelations: paired.tabRelations,
+    };
+  });
   // T8 用 header.lyricFields。此处刻意不放 stub 函数，避免死代码。
   const score = buildScore(header, voices, segmentsResult.ignoredFields);
 

@@ -145,6 +145,7 @@ function collectMembers(items: readonly JcxBodyNode[], state: ScanState): Member
             kind: marker,
             raw: item.raw,
             origin: item.path,
+            span: item.span,
             beforeMemberIndex: members.notes.length + members.tabNotes.length,
           });
           break;
@@ -290,6 +291,7 @@ function scanNode(node: JcxBodyNode, state: ScanState): void {
           kind: marker,
           raw: node.raw,
           origin: node.path,
+          span: node.span,
           anchor: 'event',
           // 定义：marker 之后下一个事件的下标；marker 在末尾时等于 events.length。
           beforeEventIndex: state.voice.events.length,

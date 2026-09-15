@@ -1,0 +1,8 @@
+%MUSE2
+X:1
+T:Tab Relation Grace Exit
+M:4/4
+L:1/8
+K:C
+V:1 style=tab clef=standardtab
+[V:1]{d8-S-}d10*6 {b8-H-b9-P-}b8 |

@@ -7,6 +7,7 @@
 
 import type { JcxBodyNode } from '../../ast';
 import type { ChordSymbol, Decoration, Rest, SourceRef } from '../../../../domain';
+import type { SourceSpan } from '../../lexer/sourceSpan';
 import type { ParseContext } from '../header';
 
 /** 交给 T7 配对的语法标记；本层只识别形态，不解释语义（方案 §0-5）。 */
@@ -51,6 +52,8 @@ export type ScanMarker = {
   readonly kind: ScanMarkerKind;
   readonly raw: string;
   readonly origin: SourceRef;
+  /** T7 的 diagnostic 要指到 marker 本身（而不是它两端的事件），故随 marker 一并带出。 */
+  readonly span: SourceSpan;
 } & ScanMarkerAnchor;
 
 /** 组内 marker：`eventIndex` 要等组合事件推入后才知道，故先只记 member 下标。 */
@@ -58,6 +61,7 @@ export interface PendingMemberMarker {
   readonly kind: ScanMarkerKind;
   readonly raw: string;
   readonly origin: SourceRef;
+  readonly span: SourceSpan;
   readonly beforeMemberIndex: number;
 }
 
