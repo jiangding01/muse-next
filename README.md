@@ -2,7 +2,7 @@
 
 TypeScript-first, clean-room reimplementation of the legacy Muse score editor.
 
-This repository starts with a real vertical slice: open a `%MUSE2` `.jcx` file, decode legacy Chinese text, parse document/track/chord metadata, and render parsed guitar chord diagrams as SVG.
+This repository starts with a real vertical slice: open a `.jcx` file, decode legacy Chinese text, run it through the lexer / lossless AST / parser pipeline into a music domain model, and render parsed guitar chord diagrams as SVG.
 
 ## Stack
 
@@ -28,6 +28,8 @@ Quality checks:
 ```bash
 npm run typecheck
 npm test
+npm run jcx:corpus-test   # local legacy corpus regression (lexer / AST / parse levels)
+npm run jcx:scan
 ```
 
 Create a local distributable:
@@ -41,12 +43,14 @@ npm run make
 - Electron desktop shell with a sandboxed renderer.
 - Native open-file dialog for `.jcx`.
 - UTF-8 first, GB18030 fallback decoding for legacy Muse files.
-- `%MUSE2` structural parsing.
-- Score metadata: `T/C/M/L/Q/K`.
-- Track declarations and `[V:n]` raw bodies.
+- Lossless JCX lexer + AST (`printAst` round-trips the decoded source byte-for-byte).
+- Parser producing the music domain model (`src/domain/`): score header, voices,
+  events, ties / slurs / tuplets / TAB relations, lyrics, directives.
+- The `%MUSE2` magic header is optional, as in the legacy format.
+- Structured diagnostics instead of exceptions for anything that cannot be normalised.
 - `%%gchord` definitions including open/muted strings and finger numbers.
 - SVG chord diagram rendering.
-- Synthetic parser tests.
+- Synthetic fixture tests plus a local legacy-corpus regression.
 
 ## Clean-room rule
 

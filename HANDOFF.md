@@ -1546,22 +1546,29 @@ scripts/jcx/corpus-lex-test.ts     # npm run jcx:corpus-test；Lexer + AST 两�
 scripts/jcx/lib/astInvariants.ts    # AST 不变量校验，测试与脚本共用，避免两份实现漂移
 ```
 
-正式的 JCX 格式层实现（M1.4 Lexer + M1.5 AST，详见 §30.1 的文件结构清单）：
+正式的 JCX 格式层实现（M1.4 Lexer + M1.5 AST + M1.6 Parser，详见 §30.1 的
+文件结构清单）：
 
 ```text
-src/formats/jcx/encoding/   # 编码检测 + 解码
-src/formats/jcx/lexer/       # M1.4：source → token 流
-src/formats/jcx/ast/          # M1.5：token 流 → Lossless AST
+src/formats/jcx/index.ts      # 对外唯一入口：loadJcx + 类型再导出
+src/formats/jcx/loadJcx.ts     # lexJcx → buildAst → parseJcxDocument 一站式
+src/formats/jcx/encoding/       # 编码检测 + 解码
+src/formats/jcx/lexer/           # M1.4：source → token 流
+src/formats/jcx/ast/              # M1.5：token 流 → Lossless AST
+src/formats/jcx/parse/             # M1.6：AST → Domain（归一化 + diagnostics）
+src/domain/                         # M1.6：纯音乐模型，零 formats 依赖
 ```
 
-早期 scaffold（M0 时期，**已标 `@deprecated`**，M1.6 Parser 落地后删除；不要
-把它们当作当前格式层实现，也不要在其之上继续开发）：
+**M1.6 T10b 已删除的早期 scaffold**（M0 时期产物，不要再去找它们，也不要按
+旧签名写代码）：`src/formats/jcx/parseJcx.ts`、`src/formats/jcx/parseGChord.ts`、
+`src/domain/music.ts`（旧 `MuseScoreDocument` / `MuseTrack` / `GuitarChord.baseFret`），
+以及对应的 `tests/unit/parseJcx.test.ts`、`tests/unit/parseGChord.test.ts`、
+`tests/fixtures/minimal.jcx`。应用层现状：
 
 ```text
-src/formats/jcx/parseJcx.ts     # @deprecated，见文件内 JSDoc
-src/formats/jcx/parseGChord.ts   # @deprecated，见文件内 JSDoc
-src/domain/music.ts               # legacy scaffold model，M1.6 将重构/替换（非被 AST 替代）
-src/notation/chord/ChordDiagram.tsx
+src/renderer/app/store.ts             # 走 loadJcx，状态为 { score, diagnostics }
+src/renderer/components/*.tsx          # 读 score.titles/credits/voices/chordShapes + 诊断列表
+src/notation/chord/ChordDiagram.tsx     # 读 domain 的 GuitarChord（capoFret + strings[6]）
 ```
 
 接手 Agent 开始工作前应先检查真实项目树：
@@ -1742,8 +1749,8 @@ Lexer / Tokenizer
 ✅ M1.5
 Lossless JCX AST
 
-→ M1.6
-Parser
+✅ M1.6
+Parser / Domain Model
 
 → M1.7
 Serializer
@@ -1907,6 +1914,159 @@ npm run jcx:scan
     按行自身 id 查表，而不是 position clamp），属于 T4–T7 既有代码的改动，
     不在 M1.6 T8（歌词对齐）范围内，留给后续处理 orderly 多声部场景时一并
     解决。
+
+### M1.6 实际状态（Parser / Domain，T10b 收口）
+
+M1.6 已完成并通过 §58 DoD（逐条证据见本小节末尾）。管线定型为
+**Lossless AST → `src/formats/jcx/parse/`（归一化）→ `src/domain/`（纯音乐模型）**，
+应用层唯一入口是 `loadJcx`。
+
+**文件结构**：
+
+```text
+src/formats/jcx/
+  index.ts              对外唯一入口（loadJcx + Score/Voice/Diagnostic 等类型再导出）
+  loadJcx.ts             lexJcx → buildAst → parseJcxDocument 一站式；LoadResult = ParseResult & { lex, ast }
+  parse/
+    index.ts              parseJcxDocument()；ParseResult { score, diagnostics, index } 的唯一定义处
+    origin.ts              AST 节点 → SourceRef（AstPath 字符串）
+    diagnostics.ts          parse 层 DiagnosticBag（`jcx.parse.<area>.<problem>`）
+    header.ts               header 字段归一化（T/C/I/N/X/M/L/Q/K + unknown/ignored 分流）
+    keyMeter.ts              M: / K: / Q: 解析（C、C| 等只留 raw）
+    duration.ts               durationRaw × unitLength → Rational（L: 缺省推导）
+    voice.ts                   V: 属性别名归一化 + unknownAttributes
+    gchord.ts / directives.ts   %%gchord → GuitarChord；全部 %% 指令 + text block
+    buildIndex.ts               DomainIndex（byPath / eventById / relationById / relationsByNote / voiceById）
+    body/
+      segments.ts                段落 → 声部归属（inline [V:n] 与 orderly 两种模式）
+      scan.ts / scanLeaf.ts / scanPitch.ts / scanTab.ts
+                                  AST item → MusicEvent + ScanMarker（marker 不进 events）
+      pairing.ts + pairTies / pairSlurs / pairTuplets / pairTabRelations /
+      pairBrokenRhythm / pairShared
+                                  marker 配对为 Relation；broken rhythm 直接改写相邻时值
+      lyrics.ts                    w: 音节对齐到可唱事件
+src/domain/
+  index.ts       公共入口 + DomainIndex 定义
+  rational.ts     Rational（den>0、gcd=1；cmp 用 BigInt 交叉乘，无浮点近似）
+  ids.ts           VoiceId / EventId / RelationId / NoteRef / noteRefKey
+  sourceRef.ts      SourceRef（domain 自有的字符串类型，不 import AstPath）
+  event.ts           MusicEvent 十个分支 + Note/Rest/TabNote/Decoration/ChordSymbol 值对象
+  relation.ts         Tie / Slur / Tuplet / TabRelation（status 为 parse-recovery fact）
+  voice.ts             Voice + LyricLine + isKnownVoiceStyle
+  score.ts              Score 聚合根 + Meter/Tempo/KeySignature/GuitarChord/RawDirective/TextBlock
+```
+
+**Domain 边界**（已拍板，不在 M1.7 之前重新讨论）：
+
+- **Event / Relation 是唯一真相源**：syntax marker（tuplet 起始、slur 括号、
+  tie 连接符、broken rhythm、TAB 关系连接符）**永远不出现在 `Voice.events`**，
+  它们在 parse 层被消费成 `Voice.ties/slurs/tuplets/tabRelations`；
+  `pairing.ts` 有 consumed/unhandled 审计，语料上 unhandled 恒为 0。
+- **NoteRef 而非独立 NoteId**：chord member 没有独立生命周期，
+  `NoteRef { eventId, memberIndex? }`，省略 `memberIndex` 即指整个事件，
+  反查 key 为 `noteRefKey()` = `` `${eventId}#${memberIndex ?? ''}` ``。
+- **SourceRef 是 domain 自有的 `string`**：parse 层把 `AstPath` 的字符串形式写入，
+  domain 因此不需要 import ast 层。
+- **Rational 不用浮点**：`fromParts` 约分前后各查一次 safe integer 越界；
+  `cmp` 用 BigInt 交叉乘。
+- **零 formats 依赖守卫**：`tests/unit/domain/architecture.test.ts` 递归扫描
+  `src/domain/**/*.ts`，禁止 import `formats/` `renderer/` `main/` `preload/`
+  `notation/` `node:` `electron`（含 type-only 与动态 import）。T10b 删除
+  `music.ts` 后该测试**不再有任何豁免文件**。
+- **id 只在快照内稳定**：`voiceId` 按声明序号、`eventId` 按事件流下标、
+  `relationId` 按 kind + 序号，**不跨编辑稳定**，reconciliation 留给 M3。
+
+**归一化规则要点**（完整表见方案 v1.1 §2）：
+
+- V: 属性别名 `nm/ins/vol/volumn/brk/brc/stv/spc/gch` → 正名字段；
+  未识别 `k=v`（含 `play=`）进 `unknownAttributes`，不猜别名、不提升为布尔。
+- `T:/C:/I:/N:` 多条保持有序数组，禁止拼接；同 id `V:` 重复为属性级后者赢、
+  origins 累加。
+- `L:` 缺省且有 `M:`：`<0.75 → 1/16`，`≥0.75 → 1/8`（CONFIRMED BY DOCUMENTATION）；
+  缺省且无 `M:`：`unitLength` 留空、只存 `durationRaw`、不算 `duration`（方案 §7 E1）+ warning。
+- `M:C` / `C|` 不换算，只留 raw（`Meter` 的 `raw` 分支）。
+- body 内 `T:/C:/M:/K:/Q:/X:` 等非法 header 字段进 `score.ignoredFields`，
+  不污染正式字段（`L:`/`w:` 除外）。
+- `%%gchord` 项数 ≠ 6 或形态非法时**不构造** `GuitarChord`，
+  但 `Score.directives` 永久保留每一条指令原文——「解析失败」永远不等于「原文丢失」。
+
+**Evidence 策略（§0 固定审查项第 1 条）**：任何 spec 标 UNVERIFIED 的语义
+**不得**因为「看起来合理」或「语料恒为某值」提升为 Domain 行为或字段，
+只保留 raw + diagnostic。当前按此处理的已知未验证项：
+
+| 项 | Domain 表示 | 未做什么 |
+| --- | --- | --- |
+| `play=` (§12.2) | `Voice.unknownAttributes` | 不提升为布尔、不猜别名 |
+| `Z` 多小节休止 (§15.2) | `Rest { variant: 'Z', duration? }` | 不赋多小节语义 |
+| `@` 隐藏休止 (§15.3) | `Rest { variant: '@' }` | 不赋隐藏行为，正常占时 |
+| tuplet `q === 0` (U25) | `Tuplet { q: undefined }` + info | 不派生任何时值缩放 |
+| `corpus#10.jcx` 的 `\|\|\|2` 残留裸 `2` (U26) | `UnknownEvent { raw: '2', tokenKind: 'duration' }` | 不实现通用 `\|N` 记号 |
+| 临时记号跨音符延续 (§14.3) | 只存 `Note.accidental` 原值 | 不做小节内延续推断 |
+| 横按记法 (§10.1) | `GuitarChord.barres` 恒为 `[]` | 不从指法反推横按 |
+| repeat 形态的 barline (§18) | `BarlineEvent.raw` | 不解析反复语义，留 M2/M4 |
+| 装饰属于哪个音 (方案 E2) | `DecorationEvent` 独立事件 | 归属由 M2 渲染层推断，Domain 不固化 |
+| 歌词 `-` / `_` / `\|` (§24.3) | 普通字符 | 不做连字符/延长线语义 |
+
+**对外入口**：
+
+```ts
+import { loadJcx } from 'src/formats/jcx';
+const { score, diagnostics, index, lex, ast } = loadJcx(sourceOrBytes);
+```
+
+`loadJcx` 本身永不抛异常；唯一可能逸出的是字节输入时 `decodeJcx` 的
+`JcxEncodingError`（UTF-16 BOM / 不支持的编码）。**结构问题一律以 diagnostic
+呈现**，因此 renderer 的 store 里没有 `error` 状态，永远有一个可渲染的 `Score`。
+
+**验证命令**：
+
+```bash
+npm run typecheck
+npx vitest run             # 34 个测试文件 / 1706 个用例
+npm run jcx:corpus-test    # 三级：Lexer / AST / parse，本地语料不进 git，缺目录时 skip 并 exit 0
+npm run jcx:scan
+```
+
+**语料 parse 级结果**（11 个本地文件，`npm run jcx:corpus-test` 实际输出）：
+
+- parse 级 11/11 OK，**0 条 error 级 diagnostic**。
+- 27 个 voice、9288 个 event。
+- tie：1161 resolved / 12 unresolved；slur：333 closed / 0 unclosed；
+  tuplet：16 complete / 0 incomplete；TAB relation 24；lyric 音节对齐 94。
+- gchord 6 个（`corpus#07.jcx`），`%%` 指令 13 条。
+- parse 级 diagnostic 直方图（观测指标，非失败条件）：14 个 distinct code，
+  最高的是 `jcx.rest.uppercase-z` 20、`jcx.parse.lyrics.overflow` 16、
+  `jcx.parse.tie.unresolved` 12、`jcx.voice.segment-by-order` 9。
+- `UnknownEvent` 清单：2 个，`tokenKind` 分别是 `duration`（U26 那个 `|||2`）
+  与 `raw`（U34a 那个孤立 `.`）——与 AST 级「残留通用叶子」是同源的两处，
+  是真实语料中未解释的 syntax residual，不是缺陷清单。
+
+**§58 DoD 逐条证据**：
+
+1. *11 local corpus files parse* —— `npm run jcx:corpus-test` parse 级 11/11 OK。
+2. *no crash* —— `loadJcx` 异常契约（见 `loadJcx.ts` 顶部 JSDoc）+ 语料 0 error。
+3. *meaningful diagnostics* —— `parse/diagnostics.ts` + 上方 14 code 直方图；
+   每条 diagnostic 带 severity、span 与 `path`（AstPath 字符串）。
+4. *V aliases normalize* —— `parse/voice.ts` + `tests/unit/jcx/parse/voice.test.ts`。
+5. *styles optional* —— `Voice.style?: string`（原值保留）+ `isKnownVoiceStyle`
+   守卫；`tests/unit/domain/architecture.test.ts` 有该守卫的用例。
+6. *UTF-8 / GB18030 supported* —— `encoding/decodeJcx.ts`；语料 10 个 gb18030 +
+   1 个 utf-8 全部 OK。
+7. *Muse marker optional* —— 11 个语料里 **5 个没有 `%MUSE2`**
+   （`corpus#02` / `corpus#03` / `corpus#08` / `corpus#10` / `corpus#11`）
+   照样 parse 通过；T10b 同时移除了 renderer store 里 scaffold 自造的
+   「无 `%MUSE2` 抛错」。
+8. *text block safe* —— `parse/directives.ts` 的 `toTextBlock`，未闭合时
+   `closed: false` 而不是拒绝构造或丢内容。
+9. *guitar directives represented* —— `Score.chordShapes`（派生，只含合法 gchord）
+   + `Score.directives`（事实，全部 `%%` 原文）；
+   `tests/unit/jcx/parse/gchord.test.ts` / `directives.test.ts`。
+10. *music body represented structurally* —— `MusicEvent` 十分支 + 四类 Relation +
+    `LyricLine`；语料 9288 个 event；`tests/unit/jcx/parse/{scan,pairing,lyrics,invariants}.test.ts`。
+
+**已知工程限制**：沿用上方 T8 写的「orderly 模式下当前声部判定在两个模块里
+不一致」小节——M1.6 收口时仍未修复，影响面与修复方向不变（语料 11 个文件
+全部不受影响）。
 
 ---
 
@@ -2916,18 +3076,18 @@ AST（**全部完成**；命令见 §30.1）：
 
 # 58. M1.6 Definition of Done
 
-Parser：
+Parser（**已完成**，逐条证据见 §30.1「M1.6 实际状态」末尾的 DoD 清单）：
 
-- [ ] 11 local corpus files parse
-- [ ] no crash
-- [ ] meaningful diagnostics
-- [ ] V aliases normalize
-- [ ] styles optional
-- [ ] UTF-8 / GB18030 supported
-- [ ] Muse marker optional
-- [ ] text block safe
-- [ ] guitar directives represented
-- [ ] music body represented structurally
+- [x] 11 local corpus files parse
+- [x] no crash
+- [x] meaningful diagnostics
+- [x] V aliases normalize
+- [x] styles optional
+- [x] UTF-8 / GB18030 supported
+- [x] Muse marker optional
+- [x] text block safe
+- [x] guitar directives represented
+- [x] music body represented structurally
 
 ---
 
@@ -3326,16 +3486,21 @@ JCX
 
 # 69. 当前明确的下一任务
 
-M1.3 / M1.4 / M1.5 已完成（§30.1 有文件结构、不变量、语料回归结果的完整
-现状快照；§55–§57 DoD 已逐条打勾给证据）。接手后请直接做：
+M1.3 / M1.4 / M1.5 / M1.6 已完成（§30.1 有文件结构、Domain 边界、归一化规则、
+evidence 策略与语料回归结果的完整现状快照；§55–§58 DoD 已逐条打勾给证据）。
+接手后请直接做：
 
 ```text
-M1.6 — Parser（docs/JCX_SPEC.md §58 DoD）
+M1.7 — Serializer（§59 DoD）
 ```
 
-从 §57 已完成的 Lossless AST 出发，把 AST 结构化为 Muse Domain Model：
-Voice 属性别名归一化（§12.3）、style 缺省语义、`V:` 重复定义合并、
-duplicate 字段的累加型/覆盖型分流（§8.12）等，都是这一步的工作范围。
+衔接点：**preserve 模式基于 AST + `printAst`**（M1.5 已保证
+`printAst(buildAst(lexJcx(bytes))) === decodeJcx(bytes).text`，逐字节还原，
+原文里的重复字段、注释、text block、未知语法一律照抄）；**canonical 模式基于
+Domain**（M1.6 的 `Score`——归一化后的正名字段、有序数组、`Rational` 时值——
+按规范形态重新排版输出，允许丢弃纯排版层面的原文细节，但不得输出任何
+UNVERIFIED 语义所派生的内容）。两种模式共用编码层 `encoding/`（UTF-8 /
+GB18030），round-trip 三级定义见 §38。
 
 不要把第一步改成：
 
@@ -3410,7 +3575,8 @@ Unknown lines:    0
 Unknown patterns: 0
 ```
 
-确认 `jcx:corpus-test` 输出两级 OK（Lexer 级 + AST 级，见 §30.1）。
+确认 `jcx:corpus-test` 输出三级 OK（Lexer 级 + AST 级 + parse 级，见 §30.1）。
 
-然后阅读 §30.1（M1.4 / M1.5 实际状态）与 `docs/JCX_SPEC.md` §12 / §58，
-开始 M1.6 Parser。
+然后阅读 §30.1（M1.4 / M1.5 实际状态 + M1.6 实际状态）与 §37 / §38 / §59，
+开始 M1.7 Serializer：preserve 模式基于 AST + `printAst`，canonical 模式基于
+`src/domain/` 的 `Score`。

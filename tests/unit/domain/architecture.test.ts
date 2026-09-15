@@ -8,9 +8,6 @@ import { eventId, isKnownVoiceStyle, relationId, voiceId } from '../../../src/do
 
 const DOMAIN_DIR = join(import.meta.dirname, '../../../src/domain');
 
-/** M1.6 T10b 会删除的 legacy scaffold，不参与本轮守卫。 */
-const LEGACY_FILES: readonly string[] = ['music.ts'];
-
 const FORBIDDEN = [
   /(^|\/)formats(\/|$)/,
   /(^|\/)renderer(\/|$)/,
@@ -27,7 +24,7 @@ function collectFiles(dir: string): string[] {
     const full = join(dir, entry.name);
     if (entry.isDirectory()) {
       out.push(...collectFiles(full));
-    } else if (entry.name.endsWith('.ts') && !LEGACY_FILES.includes(entry.name)) {
+    } else if (entry.name.endsWith('.ts')) {
       out.push(full);
     }
   }
