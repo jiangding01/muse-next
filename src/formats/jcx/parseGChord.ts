@@ -2,6 +2,10 @@ import type { GuitarChord, GuitarStringPosition } from '../../domain/music';
 
 const FINGERED_FRET = /^(\d+)(?:\(([1-5])\))?$/;
 
+/**
+ * @deprecated early scaffold; scheduled for removal after the M1.6 parser
+ * migration. The new format pipeline is built on lexer + lossless AST.
+ */
 export function parseGChordDirective(line: string): GuitarChord | null {
   const match = line.trim().match(/^%%gchord\s+([^=]+)=([^;]+);(.+)$/i);
   if (!match) return null;

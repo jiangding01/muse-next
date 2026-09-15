@@ -1528,7 +1528,9 @@ src/
 
 # 26. 当前项目中已讨论/建立的 JCX 文件
 
-目前已经存在或应存在：
+**M1.4 / M1.5 更新（本节此前的清单已过时，按下方为准）：**
+
+Scanner（M1.1，不变）：
 
 ```text
 scripts/jcx/scan-corpus.ts
@@ -1537,12 +1539,28 @@ scripts/jcx/lib/classifyLine.ts
 scripts/jcx/lib/types.ts
 ```
 
-另外 scaffold 曾建立：
+语料回归 + 共享校验逻辑（M1.4 / M1.5 T6 新增）：
 
 ```text
-src/formats/jcx/parseJcx.ts
-src/formats/jcx/parseGChord.ts
-src/domain/music.ts
+scripts/jcx/corpus-lex-test.ts     # npm run jcx:corpus-test；Lexer + AST 两级断言
+scripts/jcx/lib/astInvariants.ts    # AST 不变量校验，测试与脚本共用，避免两份实现漂移
+```
+
+正式的 JCX 格式层实现（M1.4 Lexer + M1.5 AST，详见 §30.1 的文件结构清单）：
+
+```text
+src/formats/jcx/encoding/   # 编码检测 + 解码
+src/formats/jcx/lexer/       # M1.4：source → token 流
+src/formats/jcx/ast/          # M1.5：token 流 → Lossless AST
+```
+
+早期 scaffold（M0 时期，**已标 `@deprecated`**，M1.6 Parser 落地后删除；不要
+把它们当作当前格式层实现，也不要在其之上继续开发）：
+
+```text
+src/formats/jcx/parseJcx.ts     # @deprecated，见文件内 JSDoc
+src/formats/jcx/parseGChord.ts   # @deprecated，见文件内 JSDoc
+src/domain/music.ts               # legacy scaffold model，M1.6 将重构/替换（非被 AST 替代）
 src/notation/chord/ChordDiagram.tsx
 ```
 
@@ -1715,13 +1733,13 @@ Corpus Scanner v0.2
 ✅ M1.2
 Corpus Discovery / first analysis
 
-→ M1.3
+✅ M1.3
 JCX_SPEC.md v0.1
 
-→ M1.4
+✅ M1.4
 Lexer / Tokenizer
 
-→ M1.5
+✅ M1.5
 Lossless JCX AST
 
 → M1.6
@@ -1748,6 +1766,123 @@ Import / Export / Print
 → M6
 Compatibility hardening / Packaging
 ```
+
+## 30.1 M1.4 / M1.5 实际状态
+
+M1.4（Lexer）与 M1.5（Lossless AST）已完成并通过 §56 / §57 的 DoD（逐条证据见
+本节末尾）。给下一位接手 Agent 的现状快照：
+
+**文件结构**（`src/formats/jcx/{encoding,lexer,ast}/`）：
+
+```text
+src/formats/jcx/
+  encoding/
+    decodeJcx.ts        编码检测 + 解码（BOM → ASCII → UTF-8 → GB18030 兜底）
+    types.ts
+  lexer/
+    index.ts             对外入口 lexJcx()
+    lexDocument.ts        逐行分类主循环（含 text block 状态机）
+    lexLineKinds.ts        行级 token 化：field / directive / inline field / magic header 等
+    lexModes.ts             §13.2 pitch/tab 模式状态机
+    lexBody.ts / lexBodyCommon.ts / lexBodyPitch.ts / lexBodyTab.ts
+                             正文 token 化（含 M1.5 T4 前置的 N/ 修复，见下）
+    lineSplit.ts             CRLF/LF 行切分，行尾 eol token
+    lineVocabulary.ts        行级正则 / 关键字表
+    sourceSpan.ts            SourceSpan 工具
+    token.ts                 token 类型总表 + flattenTokens/rawOf
+    tokenBuilder.ts           行内 token 累积器
+    diagnostics.ts            JcxDiagnostic 类型 + 构造
+  ast/
+    index.ts               对外入口 buildAst() + 类型重导出
+    nodes.ts                 AST 节点总表（T1）
+    astPath.ts                AstPath 构造/解析（行级 Lx.y、文档级 D.bom）
+    buildLines.ts              行级 builder：9 种行 kind → JcxLineNode
+    buildBodyLine.ts            inlineFieldLine / bodyLine 外壳装箱
+    buildBodyItems.ts            正文 token 流 → note/rest/chord/grace/tabNote/tabGroup 分组主循环
+    groupPitch.ts / groupTab.ts / groupBrackets.ts
+                                 note/tabNote 组合规则、chord/grace/tabGroup 括号组合（参数化，防导入环）
+    tokenCursor.ts                token 流游标（分组阶段用）
+    leaf.ts                        token → 叶子节点构造
+    printAst.ts                    AST → 原文还原（printNode/printLine/printAst）
+```
+
+**核心不变量**：
+
+- Lexer 层：`flattenTokens(lines)` 的 `raw` 拼接 `=== decodeJcx(bytes).text`；
+  逐行同理（§29.5）。
+- AST 层：`printAst(buildAst(lexJcx(bytes))) === decodeJcx(bytes).text`。
+- 两层都**零归一化、零自产 diagnostic**——AST 的 `diagnostics` 字段与
+  `lexJcx` 的 `diagnostics` 是同一个数组引用（不复制、不新增）。
+
+**AST 边界**（M1.5 已拍板，不在 M1.6 之前重新讨论）：
+
+- A–F 六条组合规则：note = `accidental* pitchLetter octaveMark* duration?`；
+  rest = `(rest|hiddenRest) (duration? | tabDurSep duration?)`；chord/grace/
+  tabGroup 是括号组合，未闭合时省略 `close` 而不是拒绝构造；tabNote =
+  `strokePrefix? stringLetter fret? tabDurSep? duration?`；brokenRhythm /
+  tie / slur / tupletStart / tabRelation 永远是 note 的兄弟节点，不并入 note；
+  `V:` 等字段行不切属性，只保留整段 `fieldValue`。
+- 分组是 **mode-free** 的：分组器不读 `line.mode`，只读 token kind（lexer 已经
+  在词法层用不同 token kind 区分了 pitch 与 tab，如 `pitchLetter` vs
+  `stringLetter`、`chordOpen` vs `tabGroupOpen`）。
+- 通用叶子（`kind: 'token'`）是**永久合法**的 fallback，不是待补全的占位——
+  无法安全组合的 token（孤立 duration、多余的 `]`、悬空 strokePrefix……）原样
+  落地为通用叶子，语料回归里的「残留通用叶子」清单是现状快照，不是缺陷清单
+  （见下方语料回归结果）。
+- `AstPath` 只承诺「同一次快照内唯一且确定」，不承诺跨编辑稳定；行级用
+  `Lx[.y...]`，文档级（目前只有 BOM）用 `D.bom`；textBlock 内部子节点复用
+  begin 行的 `Lx` 作为 path 基座（`Lx.0` 是 begin，`Lx.1..n` 是内容行，
+  `Lx.(n+1)` 是 end），避免与 begin 行自身的物理行号 path 碰撞。
+
+**测试与语料回归命令**：
+
+```bash
+npm run typecheck
+npx vitest run
+npm run jcx:corpus-test   # 语料不进 git，本地跑；CI 上目录缺失会打印 skip 并 exit 0
+npm run jcx:scan
+```
+
+**语料回归结果**（11 个本地文件，`npm run jcx:corpus-test` 实际输出，两级）：
+
+- Lexer 级：11/11 OK（0 个 error 级 diagnostic；1 个 warning；29 个 info；
+  1 个 raw token，即 §26.4 U34a 那个孤立 `.`）。
+- AST 级（M1.5 T6 新增）：`printAst` 全文不变量 + 逐行不变量 + path 唯一性
+  递归检查（含 BOM、textBlock 的 begin/lines/end、body 组合节点及全部叶子）
+  ——11/11 OK。
+- **残留通用叶子**（**item 位置**口径，只统计 `bodyLine.items` /
+  `inlineFieldLine.trailing` / chord-grace-tabGroup 的 `items`（含嵌套）里的
+  `kind === 'token'` 节点，不算 note/rest/tabNote 内部 children、括号组
+  open/close、字段行外壳 children——那些要么已被组合节点消费，要么是专用叶子，
+  不是「没被组合」；`scripts/jcx/lib/astInvariants.ts` 的
+  `collectResidualItemLeaves` 与 `tests/unit/jcx/ast/preservation.test.ts`
+  里的两个固定用例——`"C2 |"` 残留 0、`"|2 |"` 残留 1——钉住这个口径；只是观测
+  指标，不是失败条件）：全语料共 **1 个**，即 `corpus#10.jcx` 第 101 行
+  `|||2` 之后那个裸露的 `duration` 叶子（`2`）——它前面没有 pitchLetter 可
+  依附，不能组成 note，落在 bodyLine.items 里原样保留。这正是**真实语料中
+  未解释的 syntax residual**：JCX_SPEC §19.2 / Appendix A U26 已经调查过它，
+  结论是更像笔误而非跳房子记号，证据不足以实现任何语义，Lossless AST 按设计
+  原样保留，不猜测语义，留给 M1.6 或后续更多证据出现时再处理。
+- Lexer `N/` 修复（`53d97d3`）：ABC 2.1 §4.3 的 `N/` 简写（等价 `N/2`）此前被
+  切成两个 duration token，`D3/` 这种写法因此不能被 note 完整吸收；修复后
+  `DURATION_RE` 按 `N/N` → `N/` → `N` 的顺序尝试最长匹配，语料里唯一一处
+  `D3/`（`corpus#08.jcx`）不再产生孤立 duration 叶子。
+
+**DoD 证据**（对应 §56 / §57，逐条见文件/测试/命令而非重新誊写清单本身）：
+
+- §56（M1.4 DoD）：不依赖 Electron / pure TypeScript —— `src/formats/jcx/{encoding,lexer}/`
+  下 `grep -rn "electron"` 无命中；source spans —— `lexer/sourceSpan.ts` +
+  每个 token 的 `span`；raw lexeme —— `token.raw`；no uncaught error on 11-file
+  corpus / self-authored fixtures / strict TypeScript passes —— 均见上方语料
+  回归结果与 `npm run typecheck`。
+- §57（M1.5 DoD）：lossless / comments preserved / text blocks preserved /
+  directive raw value preserved / duplicate fields preserved / order
+  preserved / inline fields preserved —— `tests/unit/jcx/ast/lossless.test.ts`
+  对全部 fixture 的断言①（`printAst === decodedText`）与本轮新增的
+  `tests/unit/jcx/ast/preservation.test.ts`（`duplicate-fields.jcx` 等）；
+  unknown/future syntax representation —— 通用叶子机制（`nodes.ts`）；source
+  span —— 每个节点的 `span`；no renderer dependency —— `src/formats/jcx/ast/`
+  下无任何渲染层 import。
 
 ---
 
@@ -2686,23 +2821,24 @@ git commit -m "docs(jcx): add initial JCX format specification"
 
 # 55. M1.3 Definition of Done
 
-`JCX_SPEC.md v0.1` 完成标准：
+`JCX_SPEC.md v0.1` 完成标准（**全部完成**；逐条证据同步维护在
+`docs/JCX_SPEC.md` 的 Appendix C，本节不重复誊写，只给指针）：
 
-- [ ] Encoding
-- [ ] `%MUSE2`
-- [ ] 10 Headers
-- [ ] `[V:...]`
-- [ ] 6 Directives
-- [ ] text block
-- [ ] Voice attributes
-- [ ] attribute alias
-- [ ] Voice style
-- [ ] body feature inventory
-- [ ] gchord syntax
-- [ ] evidence level
-- [ ] known unknowns
-- [ ] serialization constraints
-- [ ] test matrix
+- [x] Encoding —— JCX_SPEC §4
+- [x] `%MUSE2` —— JCX_SPEC §7
+- [x] 10 Headers —— JCX_SPEC §8.1–§8.11
+- [x] `[V:...]` —— JCX_SPEC §9.1–§9.5
+- [x] 6 Directives —— JCX_SPEC §10.1–§10.6
+- [x] text block —— JCX_SPEC §11
+- [x] Voice attributes —— JCX_SPEC §12.2
+- [x] attribute alias —— JCX_SPEC §12.3
+- [x] Voice style —— JCX_SPEC §12.6
+- [x] body feature inventory —— JCX_SPEC §13–§26
+- [x] gchord syntax —— JCX_SPEC §10.1
+- [x] evidence level —— JCX_SPEC §2.1 + 全文标注
+- [x] known unknowns —— JCX_SPEC Appendix A
+- [x] serialization constraints —— JCX_SPEC §5.11 / §27 / §29.5
+- [x] test matrix —— JCX_SPEC §30
 
 不要为了“完整”虚构没见过的语法。
 
@@ -2710,35 +2846,47 @@ git commit -m "docs(jcx): add initial JCX format specification"
 
 # 56. M1.4 Definition of Done
 
-Lexer 应做到：
+Lexer 应做到（**全部完成**；命令见 §30.1）：
 
-- [ ] 不依赖 Electron
-- [ ] pure TypeScript
-- [ ] source spans
-- [ ] raw lexeme
-- [ ] top-level line grammar
-- [ ] body tokens
-- [ ] no uncaught error on 11-file corpus
-- [ ] clear diagnostics
-- [ ] self-authored fixtures
-- [ ] strict TypeScript passes
+- [x] 不依赖 Electron —— `src/formats/jcx/{encoding,lexer}/` 下无 `electron` import
+- [x] pure TypeScript —— 同上，纯函数 + 类型，无 Node 专有 API 依赖
+- [x] source spans —— `lexer/sourceSpan.ts`，每个 token 带 `span`
+- [x] raw lexeme —— `token.raw`，`flattenTokens`/`rawOf`（`lexer/token.ts`）
+- [x] top-level line grammar —— `lexer/lexLineKinds.ts` + `lexDocument.ts`
+- [x] body tokens —— `lexer/lexBody.ts` / `lexBodyPitch.ts` / `lexBodyTab.ts`
+- [x] no uncaught error on 11-file corpus —— `npm run jcx:corpus-test`，11/11 OK（§30.1）
+- [x] clear diagnostics —— `lexer/diagnostics.ts`，`npm run jcx:corpus-test` 输出的
+      err/warn/info 分级统计（§30.1：0 error / 1 warning / 29 info）
+- [x] self-authored fixtures —— `tests/fixtures/jcx/*.jcx`，全部自构、不含语料原文
+- [x] strict TypeScript passes —— `npm run typecheck`
 
 ---
 
 # 57. M1.5 Definition of Done
 
-AST：
+AST（**全部完成**；命令见 §30.1）：
 
-- [ ] lossless
-- [ ] comments preserved
-- [ ] text blocks preserved
-- [ ] directive raw value preserved
-- [ ] duplicate fields preserved
-- [ ] order preserved
-- [ ] inline fields preserved
-- [ ] unknown/future syntax representation
-- [ ] source span
-- [ ] no renderer dependency
+- [x] lossless —— `printAst(buildAst(lexJcx(bytes))) === decodeJcx(bytes).text`，
+      `tests/unit/jcx/ast/lossless.test.ts` 断言①，全部 fixture 通过
+- [x] comments preserved —— `commentLine` 节点（`ast/nodes.ts`），
+      `tests/fixtures/jcx/comment-lines.jcx` / `inline-percent.jcx`
+- [x] text blocks preserved —— `JcxTextBlockNode`（begin/lines/end），
+      `tests/fixtures/jcx/text-block.jcx`
+- [x] directive raw value preserved —— `directiveLine.children` 保留整段
+      `directiveValue` token，`tests/fixtures/jcx/unknown-directive.jcx`
+- [x] duplicate fields preserved —— `tests/fixtures/jcx/duplicate-fields.jcx` +
+      `tests/unit/jcx/ast/preservation.test.ts`（T5 新增）
+- [x] order preserved —— AST 行顺序即原文行顺序（`buildLines.ts` 单趟顺序处理）
+- [x] inline fields preserved —— `JcxInlineFieldLineNode`，
+      `tests/fixtures/jcx/inline-voice.jcx` / `inline-voice-spaced.jcx` /
+      `inline-voice-alternating.jcx`
+- [x] unknown/future syntax representation —— 通用 token 叶子机制
+      （`ast/nodes.ts` 的 `JcxTokenLeaf` 作为 `JcxBodyNode` 永久成员），
+      语料回归的残留叶子清单见 §30.1
+- [x] source span —— 每个节点的 `AstPath` + `span`（`ast/nodes.ts` /
+      `ast/astPath.ts`）
+- [x] no renderer dependency —— `src/formats/jcx/ast/` 下无任何 `notation` /
+      渲染层 import
 
 ---
 
@@ -3154,11 +3302,16 @@ JCX
 
 # 69. 当前明确的下一任务
 
-接手后请直接做：
+M1.3 / M1.4 / M1.5 已完成（§30.1 有文件结构、不变量、语料回归结果的完整
+现状快照；§55–§57 DoD 已逐条打勾给证据）。接手后请直接做：
 
 ```text
-M1.3 — docs/JCX_SPEC.md v0.1
+M1.6 — Parser（docs/JCX_SPEC.md §58 DoD）
 ```
+
+从 §57 已完成的 Lossless AST 出发，把 AST 结构化为 Muse Domain Model：
+Voice 属性别名归一化（§12.3）、style 缺省语义、`V:` 重复定义合并、
+duplicate 字段的累加型/覆盖型分流（§8.12）等，都是这一步的工作范围。
 
 不要把第一步改成：
 
@@ -3168,6 +3321,7 @@ M1.3 — docs/JCX_SPEC.md v0.1
 重构 Electron
 换技术栈
 重写 Scanner
+重新讨论 M1.3–M1.5 已拍板的边界
 ```
 
 这些都不是当前 critical path。
@@ -3221,6 +3375,8 @@ git log --oneline -5
 npm install
 npm run typecheck
 npm run jcx:scan
+npx vitest run
+npm run jcx:corpus-test
 ```
 
 确认 Scanner 输出：
@@ -3230,10 +3386,7 @@ Unknown lines:    0
 Unknown patterns: 0
 ```
 
-然后：
+确认 `jcx:corpus-test` 输出两级 OK（Lexer 级 + AST 级，见 §30.1）。
 
-```text
-CREATE docs/JCX_SPEC.md
-```
-
-并开始 M1.3。
+然后阅读 §30.1（M1.4 / M1.5 实际状态）与 `docs/JCX_SPEC.md` §12 / §58，
+开始 M1.6 Parser。

@@ -7,6 +7,10 @@ const HEADER_FIELD = /^([A-Z]):\s*(.*)$/;
 const DIRECTIVE = /^%%([^\s]+)\s*(.*)$/;
 const TRACK_PROPERTY = /(\w+)=(?:"([^"]*)"|([^\s]+))/g;
 
+/**
+ * @deprecated early scaffold; scheduled for removal after the M1.6 parser
+ * migration. The new format pipeline is built on lexer + lossless AST.
+ */
 export function parseJcx(source: string): MuseScoreDocument {
   const normalized = source.replace(/\r\n?/g, '\n');
   const lines = normalized.split('\n');

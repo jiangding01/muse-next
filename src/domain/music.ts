@@ -1,3 +1,8 @@
+/**
+ * legacy scaffold model, M1.6 将重构/替换（不是被 AST 替代——正式架构是
+ * Lossless AST → M1.6 Parser/Normalization → Muse Domain，Domain 层仍然存在，
+ * 只是这批早期 scaffold 类型会被 M1.6 的正式 Domain Model 取代）。
+ */
 export type TrackStyle = 'staff' | 'jianpu' | 'tab' | string;
 
 export interface MuseTrack {
