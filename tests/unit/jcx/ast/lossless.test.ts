@@ -3,13 +3,8 @@ import { relative, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { lexJcx } from '../../../../src/formats/jcx/lexer';
 import { decodeJcx } from '../../../../src/formats/jcx/encoding/decodeJcx';
-import { buildAst, isTextBlock, parseAstPath, printAst, printNode } from '../../../../src/formats/jcx/ast';
-
-function lineIndexOf(path: string): number | undefined {
-  const parsed = parseAstPath(path);
-  return parsed?.kind === 'line' ? parsed.line : undefined;
-}
-import type { JcxAstDocument, JcxAstNode, JcxLineNode } from '../../../../src/formats/jcx/ast';
+import { buildAst, printAst } from '../../../../src/formats/jcx/ast';
+import { checkLineTextInvariant, collectAstPaths } from '../../../../scripts/jcx/lib/astInvariants';
 
 /**
  * M1.5 T2 DoD：对全部 fixture 校验 `printAst(buildAst(lexJcx(bytes))) === decodedText`，
@@ -48,55 +43,6 @@ it('至少存在 lossless 回归用的 fixture', () => {
   expect(fixtures.length).toBeGreaterThan(0);
 });
 
-/** 物理行 `beginIndex` 起、`beginIndex + span` 条连续行原文的拼接。 */
-function joinPhysicalLines(
-  decodedText: string,
-  physicalLines: ReturnType<typeof lexJcx>['lines'],
-  startIndex: number,
-  endIndexInclusive: number,
-  hasBom: boolean,
-): string {
-  const startOffset =
-    (physicalLines[startIndex]?.span.start.offset ?? 0) + (startIndex === 0 && hasBom ? 1 : 0);
-  const endOffset = physicalLines[endIndexInclusive]?.span.end.offset ?? startOffset;
-  return decodedText.slice(startOffset, endOffset);
-}
-
-/** 收集文档内每个节点的 path（含 `document.bom`、textBlock 内部子行），用于唯一性断言。 */
-function collectPaths(document: JcxAstDocument): string[] {
-  const out: string[] = [];
-  if (document.bom !== undefined) {
-    out.push(document.bom.path);
-  }
-  const visit = (node: JcxAstNode): void => {
-    out.push(node.path);
-    if (isTextBlock(node)) {
-      visit(node.begin);
-      for (const line of node.lines) {
-        visit(line);
-      }
-      if (node.end !== undefined) {
-        visit(node.end);
-      }
-      return;
-    }
-    if ('children' in node) {
-      for (const child of node.children) {
-        visit(child);
-      }
-    }
-    if ('trailing' in node) {
-      for (const child of node.trailing) {
-        visit(child);
-      }
-    }
-  };
-  for (const line of document.lines) {
-    visit(line);
-  }
-  return out;
-}
-
 describe.each(fixtures)('lossless AST invariant: %s', (name) => {
   const bytes = new Uint8Array(readFileSync(resolve(FIXTURES_DIR, name)));
   const decodedText = decodeJcx(bytes).text;
@@ -108,31 +54,12 @@ describe.each(fixtures)('lossless AST invariant: %s', (name) => {
   });
 
   it('② 逐行不变式：每个行节点的 printNode 等于其覆盖的物理行原文拼接', () => {
-    for (const line of ast.lines) {
-      if (isTextBlock(line)) {
-        const beginIndex = lineIndexOf(line.path);
-        expect(beginIndex).not.toBeUndefined();
-        const span = 1 + line.lines.length + (line.end !== undefined ? 1 : 0);
-        const endIndex = (beginIndex as number) + span - 1;
-        const expected = joinPhysicalLines(decodedText, lex.lines, beginIndex as number, endIndex, lex.hasBom);
-        expect(printNode(line)).toBe(expected);
-        continue;
-      }
-      const physicalIndex = lineIndexOf(line.path);
-      expect(physicalIndex).not.toBeUndefined();
-      const expected = joinPhysicalLines(
-        decodedText,
-        lex.lines,
-        physicalIndex as number,
-        physicalIndex as number,
-        lex.hasBom,
-      );
-      expect(printNode(line as JcxLineNode)).toBe(expected);
-    }
+    const mismatches = checkLineTextInvariant(ast.lines, decodedText, lex.lines, lex.hasBom);
+    expect(mismatches).toEqual([]);
   });
 
-  it('③ 所有 path（含 document.bom、textBlock 内部子行）互不相同', () => {
-    const paths = collectPaths(ast);
+  it('③ 所有 path（含 document.bom、textBlock 内部子行、body 组合节点）互不相同', () => {
+    const paths = collectAstPaths(ast);
     expect(new Set(paths).size).toBe(paths.length);
   });
 
