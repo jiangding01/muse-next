@@ -119,6 +119,29 @@ describe('cmp / equals', () => {
     expect(cmp(fromParts(2, 4), fromParts(1, 2))).toBe(0);
   });
 
+  /**
+   * T1 复审遗留：交叉乘积 `a.num * (b.den/g)` 越过 safe integer 时走浮点回退分支，
+   * 要求仍返回确定的 -1/0/1 且不抛。
+   */
+  it('交叉乘积超过 safe integer 时仍返回确定结果且不抛', () => {
+    const big = Number.MAX_SAFE_INTEGER; // 与 fromParts 的上界一致
+    const huge = fromParts(big, 3);
+    const hugeDen = fromParts(1, big);
+    const other = fromParts(big - 2, 7);
+
+    expect(() => cmp(huge, other)).not.toThrow();
+    expect([-1, 0, 1]).toContain(cmp(huge, other));
+    expect(cmp(huge, other)).toBe(1);
+    expect(cmp(other, huge)).toBe(-1);
+
+    expect(cmp(hugeDen, fromParts(-1, big))).toBe(1);
+    expect(cmp(hugeDen, hugeDen)).toBe(0);
+    expect(cmp(fromParts(big, 1), fromParts(big - 1, 1))).toBe(1);
+
+    // 浮点回退下同值仍判 0（两侧约分后完全相同）。
+    expect(cmp(fromParts(big, 3), fromParts(big, 3))).toBe(0);
+  });
+
   it('cmp===0 等价于 equals（规范化前提下）', () => {
     for (const a of SAMPLES) {
       for (const b of SAMPLES) {

@@ -9,9 +9,9 @@ import type { SourceSpan } from './sourceSpan';
 export type JcxSeverity = 'error' | 'warning' | 'info';
 
 /**
- * 已收录方案 §5 / §3 提到的 code；后续任务可按需追加成员。
+ * Lexer 阶段的 code：**封闭字面量联合**，新增必须改本文件（M1.4 方案 §5 / §3）。
  */
-export type JcxDiagnosticCode =
+export type JcxLexerDiagnosticCode =
   | 'jcx.voice.unknown-style'
   | 'jcx.directive.unknown'
   | 'jcx.field.unknown'
@@ -27,11 +27,24 @@ export type JcxDiagnosticCode =
   /** §26.4：TAB 拨弦前缀未紧跟音符 / 音符组，无法确证其前缀身份。 */
   | 'jcx.tab.dangling-stroke-prefix';
 
+/**
+ * Parse 阶段的 code：形态固定为 `jcx.parse.<area>.<problem>`（M1.6 方案 v1.1 §4）。
+ * 用模板字面量而非枚举，避免每个 parse 子任务都回头改 lexer 文件。
+ */
+export type JcxParseDiagnosticCode = `jcx.parse.${string}`;
+
+export type JcxDiagnosticCode = JcxLexerDiagnosticCode | JcxParseDiagnosticCode;
+
 export interface JcxDiagnostic {
   readonly code: JcxDiagnosticCode;
   readonly severity: JcxSeverity;
   readonly message: string;
   readonly span: SourceSpan;
+  /**
+   * 关联的 AST 节点路径（`AstPath` 的字符串形式），由 parse 层写入；lexer 阶段恒缺省。
+   * 故意声明为 `string` 而不 import `AstPath`：lexer 不得反向依赖 ast 层。
+   */
+  readonly path?: string;
 }
 
 export interface DiagnosticBag {
@@ -41,6 +54,7 @@ export interface DiagnosticBag {
     severity: JcxSeverity,
     message: string,
     span: SourceSpan,
+    path?: string,
   ): void;
   list(): readonly JcxDiagnostic[];
   hasSeverity(severity: JcxSeverity): boolean;
@@ -58,8 +72,9 @@ export function createDiagnosticBag(): DiagnosticBag {
     severity: JcxSeverity,
     message: string,
     span: SourceSpan,
+    path?: string,
   ): void => {
-    add({ code, severity, message, span });
+    add({ code, severity, message, span, ...(path === undefined ? {} : { path }) });
   };
 
   const list = (): readonly JcxDiagnostic[] => items.slice();

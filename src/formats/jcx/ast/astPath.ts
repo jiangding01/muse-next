@@ -4,7 +4,7 @@
  * 路径分两类：
  * - 行级 `L12`（第 12 行，0-based）、`L12.3`（该行第 3 个子节点）、`L12.3.1`（更深一层），
  *   全部 0-based，层级用 `.` 连接；
- * - 文档级 `D.<segment>`，用于不属于任何一行的节点，目前只有 `D.bom`。
+ * - 文档级 `D.<segment>`，用于不属于任何一行的节点，目前有 `D.bom` 与 `D.document`。
  * 任何合法 AstPath 都能被 `parseAstPath` 解析；两类路径天然不冲突。
  *
  * **稳定性承诺：仅在单次 AST 快照内唯一且确定。**
@@ -27,7 +27,7 @@ export interface ParsedLineAstPath {
 
 export interface ParsedDocumentAstPath {
   readonly kind: 'document';
-  /** 文档级段名，目前只有 `bom`。 */
+  /** 文档级段名，目前为 `bom` / `document`。 */
   readonly segment: string;
 }
 
@@ -88,4 +88,13 @@ function assertIndex(index: number, name: string): number {
 /** 文档级 BOM 叶子的 path：`D.bom`。它不属于任何一行，`parseAstPath` 解析为 document 类。 */
 export function bomPath(): AstPath {
   return 'D.bom';
+}
+
+/**
+ * 文档级根节点的 path：`D.document`。
+ * 用于不隶属于任何一行的整篇文档级引用（如 `Score.origin`）。
+ * `parseAstPath` 按 document 类解析，`segment` 为 `'document'`。
+ */
+export function documentPath(): AstPath {
+  return 'D.document';
 }
