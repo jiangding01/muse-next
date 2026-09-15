@@ -138,6 +138,24 @@ describe('§16.1 duration', () => {
       ['duration', '/2'],
     ]);
   });
+
+  it('N/ 裸斜杠 = N/2（ABC 2.1 §4.3；语料 corpus#05.jcx 第 21 行 `D3/`）', () => {
+    expect(pairs('D3/')).toEqual([
+      ['pitchLetter', 'D'],
+      ['duration', '3/'],
+    ]);
+    expect(pairs('E//')).toEqual([
+      ['pitchLetter', 'E'],
+      ['duration', '//'],
+    ]);
+  });
+
+  it('N/N 分数仍优先于 N/（不会被切成 N/ + N）', () => {
+    expect(pairs('A3/2')).toEqual([
+      ['pitchLetter', 'A'],
+      ['duration', '3/2'],
+    ]);
+  });
 });
 
 describe('§16.2 brokenRhythm', () => {

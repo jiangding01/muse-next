@@ -66,8 +66,11 @@ const BROKEN_RHYTHM_FORMS: readonly string[] = ['>>>', '>>', '<<<', '<<', '>', '
 const PITCH_LETTER_RE = /^[A-Ga-g]/;
 /** §14.2：连续的 `,` / `'` 串整体一个 token（不实现 ABC 的抵消逻辑）。 */
 const OCTAVE_MARK_RE = /^[,']+/;
-/** §16.1：`N/N` 必须先于 `N`，`//` 必须先于 `/N` 与 `/`。 */
-const DURATION_RE = /^(?:\d+\/\d+|\d+|\/\/|\/\d+|\/)/;
+/**
+ * §16.1：`N/N` 必须先于 `N/`，`N/` 必须先于 `N`（`3/` = `3/2`，ABC 2.1 §4.3）；
+ * `//` 必须先于 `/N` 与 `/`。
+ */
+const DURATION_RE = /^(?:\d+\/\d+|\d+\/|\d+|\/\/|\/\d+|\/)/;
 
 /** 模式 A 专有 token（§14–§22）。返回 0 表示本规则组未命中。 */
 function lexPitchSpecific(ctx: BodyLexContext, bag: DiagnosticBag): number {
