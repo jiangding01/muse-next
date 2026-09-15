@@ -1,0 +1,8 @@
+%MUSE2
+X:1
+T:Voice Unknown Attr Sample
+M:4/4
+L:1/4
+K:C
+V:1 foo=bar
+CDEF|GABc|
