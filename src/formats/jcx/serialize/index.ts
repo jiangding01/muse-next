@@ -43,7 +43,11 @@ export function serializeJcx(
     throw new Error('jcx serializeJcx: preserve mode 收到了非法输入（既非 AST 也非 LoadResult）');
   }
 
-  // canonical（Score → text）留给 T3-T5 实现；此处只是占位 stub，
-  // 保证 `serializeJcx` 的重载签名此刻即可编译、被其他模块引用。
-  throw new Error('canonical: not implemented (M1.7 T3-T5)');
+  // canonical（Score → text）：T3 只落地了 header / `%%` 指令 / text block /
+  // `V:` 声明骨架，body（事件、relation、歌词、body 区 `L:`）要到 T4/T5 才有。
+  // **公开 API 在此之前必须抛错，不能返回一个「合法但没有正文」的文件**——
+  // 那是静默丢内容。`serializeCanonical`（`./canonical`）可以被单测直接调用，
+  // 但不从本文件、也不从 `formats/jcx/index.ts` 导出。T5 完成 body + 歌词后，
+  // 把这里换成 `if ('voices' in input) return serializeCanonical(input, options);`。
+  throw new Error('canonical: unavailable until M1.7 T5 (body and lyrics not yet serialised)');
 }
