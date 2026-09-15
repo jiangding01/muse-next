@@ -1752,11 +1752,12 @@ Lossless JCX AST
 ✅ M1.6
 Parser / Domain Model
 
-→ M1.7
+✅ M1.7
 Serializer
 
 → M1.8
-Round-trip compatibility
+Round-trip compatibility（核心指标已由 M1.7 T7 语料四级回归覆盖，剩余范围见
+§60 后的说明）
 
 → M2
 Notation Rendering
@@ -2067,6 +2068,181 @@ npm run jcx:scan
 **已知工程限制**：沿用上方 T8 写的「orderly 模式下当前声部判定在两个模块里
 不一致」小节——M1.6 收口时仍未修复，影响面与修复方向不变（语料 11 个文件
 全部不受影响）。
+
+---
+
+### M1.7 实际状态（Serializer，T7 收口）
+
+M1.7 已完成并通过 §59 DoD（逐条证据见本小节末尾）。管线在 M1.6 的基础上补上
+出口：**preserve 模式基于 AST + `printAst`**（逐字节还原原文），**canonical
+模式基于 `src/domain/` 的 `Score`**（按规范形态重排版，允许丢弃纯排版细节，
+但不得输出任何 UNVERIFIED 语义）。
+
+**文件结构**：
+
+```text
+src/formats/jcx/serialize/
+  index.ts              对外唯一入口 serializeJcx（preserve/canonical 两个重载）+
+                         L2 投影再导出（projectScore / projectionEquals /
+                         firstProjectionDifference）
+  types.ts               PreserveOptions / CanonicalOptions / SerializeResult /
+                         JcxUnencodableStrategy
+  encodeJcx.ts            文本 → 字节（UTF-8 / GB18030，iconv-lite），架构守卫
+                         只许 import iconv-lite + encoding/* + 同目录 types
+  preserve.ts             `printAst(ast)` 的薄封装：AST → 原文文本 → 目标编码字节
+  canonical/
+    index.ts                组装：header → %% 指令/text block → 每声部 V: 声明
+                             → body；固定输出 UTF-8 / 无 BOM / LF / 末尾换行
+    header.ts                header 区（%MUSE2? / X / T* / C* / I* / M / L / Q /
+                             unknownFields* / K，固定 role order）
+    voice.ts                 V: 声明行（声部 id 按声明序号回写、属性拼写与固定顺序、
+                             引号规则）
+    body.ts                  声部 body 的断行规则（unitLengthChanges 强制断行 >
+                             LyricLine.bodyRange 独占一行 > 小节线后断行）+ L: 重放
+    bodyEvents.ts             单个 MusicEvent → 文本
+    bodyRelations.ts          Tie/Slur/Tuplet/TabRelation/BrokenRhythm → marker，
+                             落位与叠加顺序规则
+    bodyFields.ts             body 区 ignoredFields 重放（body 字段行 or inline 字段）
+    lyrics.ts                 w: 音节回写（分隔符由 offsetInLine 精确复原）+ 按
+                             bodyRange 分组插入
+    directives.ts             %% 指令 + text block 重放
+    diagnostic.ts             canonicalWarning 工厂
+  projection/
+    index.ts                 projectScore 主函数 + 类型/比较函数再导出
+    types.ts                  ProjectedScore 等纯数据形状
+    refs.ts                   EventId/NoteRef → (voiceIndex, eventIndex[, memberIndex])
+                             归一化 + Rational 归一化
+    voice.ts / events.ts      逐 voice / 逐 event 投影
+    compare.ts                firstProjectionDifference / projectionEquals（只报
+                             字段路径，不报值——版权边界）
+```
+
+**公开 API**：
+
+```ts
+import { serializeJcx } from 'src/formats/jcx/serialize';
+
+serializeJcx(astOrLoadResult, { mode: 'preserve', encoding?, onUnencodable? });
+serializeJcx(score, { mode: 'canonical', magicHeader? });
+// => { text, bytes, encoding, diagnostics }
+
+import { projectScore, projectionEquals, firstProjectionDifference } from 'src/formats/jcx/serialize';
+```
+
+**canonical 规则摘要**：
+
+- **行序**（拍板 B，固定 role order，覆盖 spec §27.3「保持原顺序」）：
+  `%MUSE2? → X: → T:* → C:* → I:* → M: → L: → Q: → unknownFields* → K:`；
+  Domain 不保存 header 字段的源行序，「原顺序」在 Domain → 文本方向不是可得事实。
+- **V: 属性拼写与顺序**（拍板 C）：固定顺序
+  `name sname style clef ins vol bracket brace staves space`，`ins=`/`vol=`
+  用 CONFIRMED 短别名，`name=`/`sname=`/`style=`/`clef=`/`bracket=`/`brace=`/
+  `staves=`/`space=` 用语料 CONFIRMED 的全称；`unknownAttributes`（含 `play=`
+  等 UNVERIFIED 属性）按原序、原拼写追加在后；不含空白的值不加引号（即使含
+  `"`），含空白的值加 `key="值"`，含空白且含 `"` 的值原样输出 + warning。
+- **时值只用 raw**（拍板 F）：`M:`/`Q:`/`K:` 一律写值对象的 `raw`，不从
+  `num`/`den` 或 Rational 重新拼；`L:` 是唯一由数值（`unitLength` 本身，不是
+  从某个事件 Rational 反算）重建的字段。
+- **relation 反写顺序**：`[tuplet.raw][slur '('...] 事件本体 [tie '-'][slur
+  ')'...][分隔符]`（分隔符 = brokenRhythm.raw | TAB `-S-`/`-H-`/`-P-` | 空格）；
+  组员级 tie 满足「覆盖全部成员各一次且状态一致」才折叠回事件级，否则逐成员写；
+  TAB 标记按端点是否同组、是否为组内末成员分三种落位规则。
+- **bodyRange/unitLengthChanges 断行**：`unitLengthChanges[].beforeEventId`
+  是强制断行点（优先级最高，`L:` 必须紧贴生效事件前另起一行，否则会连带改写
+  同一行前面事件的语义）；`LyricLine.bodyRange` 覆盖的事件区间独占一行（多
+  verse 共用同一 range，按 `first#last` 去重后只产生一条事件行）；其余区间在
+  小节线之后断行。两条规则冲突（`L:` 变化点落在一条正文中间）时只能牺牲歌词
+  行整体性，发 `jcx.serialize.lyric-line-split`——按 T0 不变量⑥，真实语料从
+  未触发这条冲突。
+- **ignoredFields 重放规则**：body 区非法 header 字段（key ∈ T/C/I/M/K/Q/X）
+  没有事件位置，统一写在 body 区开头（第一个 `[V:n]` 之前）；`name ∈
+  T/C/I/M/K/Q/X` 写成 body 区字段行 `N: value`，其余（尤其 `L`/`w`）写成
+  inline 字段 `[name:value]`（写成字段行会被提升为正式语义）；值含 `]`
+  时原样输出 + warning（inline 语法无 escape）；值含换行时整条字段丢弃 +
+  warning（两种写法都是单行语法）。
+- **歌词分隔规则**：`LyricSyllable.text` 已含 `~`/`*`；两个音节之间是否有
+  分隔符由 `offsetInLine` 精确复原（`syllables[i+1].offsetInLine ===
+  syllables[i].offsetInLine + syllables[i].text.length` 即原文紧邻、不写
+  分隔符，否则写回单个空格——拍板 D 规范化空白，不追究原文是几个空白）。
+
+**canonical 有损项**（方案 §4，DoD 已注明的确定性代价，不是缺陷）：注释行不
+输出（拍板 H，Domain 不建模注释）；空行、行尾空白、缩进不输出；冒号后空白
+规整为一个；`V:` 属性原拼写与原顺序丢失（改用上面的固定规则）；orderly/inline
+两种正文声部标注方式统一输出成 inline `[V:n]`；未闭合 text block 保持未闭合
+（决策 9，不自动补 `%%endtext`）。
+
+**diagnostics code 清单**（`jcx.serialize.*`，`grep -rn "jcx\.serialize\." src`
+实测全集，11 个）：
+
+```text
+jcx.serialize.ignored-field-dropped        jcx.serialize.ignored-field-unencodable
+jcx.serialize.lyric-line-split             jcx.serialize.lyric-line-unplaceable
+jcx.serialize.lyric-range-shadowed         jcx.serialize.lyric-range-unresolved
+jcx.serialize.tab-relation-member-position jcx.serialize.unencodable-replaced
+jcx.serialize.unit-length-unrecoverable    jcx.serialize.unit-length-unresolved
+jcx.serialize.voice-value-unencodable
+```
+
+**三条已知限制**（`canonical/body.ts` 文件头，M1.7 T4 实测）：
+
+1. 深度畸形输入不保留词法扫描上下文：未闭合 `[` 里的 `|` 原文是
+   `UnknownEvent`，canonical 原样写回后脱离非法上下文，重解析成正常
+   `barline`（文本一致，只是分类变）。fixture 级矩阵用 `unclosed-chord.jcx`
+   点名豁免 L2 断言，钉死差异恰好只有一处（`$.voices[0].events[3].tokenKind`）。
+2. `TabGroupEvent.stroke` parse 层从不填充，`V[ax/bx/]` 的 `V` 与悬空
+   strokePrefix 在 Domain 里没有事实，canonical 无从写回（spec §26.4）。
+3. 组级时值后缀 `[CEG]2` 的 `2` 被 parse 落成独立 `UnknownEvent`，canonical
+   因此输出 `[CEG] 2`（往返一致，但形态与源文本不同）。
+
+**`unclosed-chord.jcx` 的 L2 豁免**：见上方限制①；这是 fixture 级
+`roundtrip.test.ts` 矩阵里**唯一**的 L2 豁免项，用「点名 + 钉死差异位置」表达
+（差异恰好只有那一处），不放宽投影本身。该 fixture 的幂等是「从第二趟起稳定」
+而非「第一趟就稳定」，矩阵单独断言这一点。
+
+**语料四级回归结果**（`npm run jcx:corpus-test` 实际输出，11 个本地文件，
+不写文件名）：
+
+- Lexer 级 / AST 级 / parse 级：沿用 §30.1 M1.6 段落的数字，均 11/11 OK。
+- **round-trip 级（第四级，本次新增）**：byte-identical 11/11、
+  line-identical 11/11、semantic（L2 投影相等）11/11、canonical 幂等
+  11/11——真实语料**没有**命中已知限制①那类差异，四项全部 100%。
+
+**测试数**：`npx vitest run` 43 个测试文件 / 2608 个用例全部通过；
+`npm run typecheck` 无错误。
+
+**工程限制**：preserve 编辑约定——若替换 AST 中的节点，该节点及祖先的
+`span` 会失效（`printAst` 不读 `span`，打印结果仍正确，但 `span` 失效后不能
+再用它定位或查 `DomainIndex.byPath`），重建内部一致的快照唯一方式是
+`loadJcx(serializeJcx(...).text)`，不能就地修补旧快照的派生字段（见
+`preserve.ts` 文件头）。GB18030 默认 `onUnencodable: 'error'`（`encodeJcx.ts`），
+显式传 `'replace'` 才会静默替换不可编码字符并发 `jcx.serialize.
+unencodable-replaced` warning；canonical 恒 UTF-8，不受此限制。
+
+**§59 DoD 逐条证据**：
+
+- [x] *AST → JCX* —— `preserve.ts`（`printAst` 封装）+ `canonical/index.ts`
+  （`Score` → 文本）。
+- [x] *UTF-8* —— `encodeJcx.ts` 的 `'utf-8'` 分支；canonical 恒 UTF-8。
+- [x] *GB18030 compatibility* —— `encodeJcx.ts` 的 `iconv-lite` 分支；语料
+  10 个 gb18030 文件 preserve byte-identical 全部通过。
+- [x] *preserve mode* —— `preserve.ts` + fixture 级 `roundtrip.test.ts` L3
+  + 语料级 byte-identical 11/11。
+- [x] *canonical mode* —— `canonical/index.ts` 组装 + fixture 级 L2 矩阵
+  + 语料级 semantic 11/11。
+- [x] *field order* —— `header.ts`（固定 role order）+ `voice.ts`（固定属性
+  顺序）。
+- [x] *duplicate fields* —— preserve 直接照抄原文（AST 无归一化）；canonical
+  方向 `T:`/`C:`/`I:` 保序数组按拍板规则各占一行。
+- [x] *text blocks* —— `directives.ts` 的 `renderTrailingTextBlocks`（未闭合
+  保持未闭合，决策 9）。
+- [x] *inline fields* —— `bodyFields.ts` 的 inline `[name:value]` 分支。
+- [x] *Muse directives* —— `directives.ts` 的 `renderDirectives`（`%%` 指令
+  原样重放，注释除外——决策/拍板 H）。
+- [x] *Voice aliases* —— `voice.ts` 的固定拼写表（拍板 C）。
+
+11 条全部可打勾，均有对应实现文件与语料/fixture 证据；无 UNVERIFIED 项被
+虚勾——「Voice aliases」只回写 CONFIRMED 的短别名/全称，不包含 spec 标
+UNVERIFIED 的 `volume=`。
 
 ---
 
@@ -3095,17 +3271,19 @@ Parser（**已完成**，逐条证据见 §30.1「M1.6 实际状态」末尾的 
 
 Serializer：
 
-- [ ] AST → JCX
-- [ ] UTF-8
-- [ ] GB18030 compatibility
-- [ ] preserve mode
-- [ ] canonical mode
-- [ ] field order
-- [ ] duplicate fields
-- [ ] text blocks
-- [ ] inline fields
-- [ ] Muse directives
-- [ ] Voice aliases
+- [x] AST → JCX
+- [x] UTF-8
+- [x] GB18030 compatibility
+- [x] preserve mode
+- [x] canonical mode
+- [x] field order
+- [x] duplicate fields
+- [x] text blocks
+- [x] inline fields
+- [x] Muse directives
+- [x] Voice aliases
+
+逐条证据见 §30.1「M1.7 实际状态」末尾。
 
 ---
 
@@ -3130,6 +3308,34 @@ semantic round-trip rate
 ```
 
 这些可以变成未来项目的重要 regression metrics。
+
+**M1.7 T7 现状说明（不改写上面的 DoD 定义，仅记录已覆盖到什么程度）**：
+本节列出的核心指标——`11/11 corpus` 的 parse success / serialize success /
+reparse success / semantic equality，以及 byte-identical / line-identical /
+semantic round-trip 三项 rate——已经由 `npm run jcx:corpus-test` 第四级
+（`scripts/jcx/lib/roundtripInvariants.ts` + `printRoundtripSection`）在真实
+语料上持续统计并作为常驻 regression metrics 输出：实测 byte-identical
+11/11、line-identical 11/11、semantic 11/11、canonical 幂等 11/11（数字见
+§30.1「M1.7 实际状态」）。**建议 M1.8 剩余范围**收敛到这份 DoD 未覆盖、
+本次也未做的部分：
+
+1. 把这四个指标接入某种持续回归看板/CI 产物（当前只在本地手动跑
+   `npm run jcx:corpus-test`，CI 上语料目录缺失会跳过——见脚本文件头「语料
+   不进 git」）；
+2. `fixture` 级 `roundtrip.test.ts` 矩阵目前只有 11 个 legacy 语料对应的
+   `tests/fixtures/jcx/**`，**尚未系统性构造能触发 canonical 三条已知限制
+   （`canonical/body.ts` 文件头①②③）之外的边界场景**的最小 fixture，用于
+   长期守住这几条限制不扩大；
+3. round-trip 的「幂等」目前只在语料/fixture 上观测为真，尚未有单元级不变量
+   证明「除已知限制①外必然幂等」这个性质本身（目前是经验观测，不是被证明的
+   不变量）；
+4. 未覆盖：多编码往返（GB18030 preserve → 转码到 UTF-8 → 再转回 GB18030）的
+   语料级回归——当前 preserve byte-identical 只验证「原编码 → 原编码」，
+   `options.encoding` 显式转码路径只有 fixture 级 `preserve.test.ts` 的单元
+   用例，未接入语料脚本。
+
+这些都不是「往返正确性还没做好」，而是「往返正确性已经做好之后，测试基础设施
+和边界覆盖面还能再往前一步」的建议，留给下一位接手 Agent 判断优先级。
 
 ---
 
@@ -3486,21 +3692,20 @@ JCX
 
 # 69. 当前明确的下一任务
 
-M1.3 / M1.4 / M1.5 / M1.6 已完成（§30.1 有文件结构、Domain 边界、归一化规则、
-evidence 策略与语料回归结果的完整现状快照；§55–§58 DoD 已逐条打勾给证据）。
-接手后请直接做：
+M1.3 / M1.4 / M1.5 / M1.6 / M1.7 已完成（§30.1 有文件结构、Domain 边界、
+归一化规则、evidence 策略、Serializer 模块清单/canonical 规则摘要与语料四级
+回归结果的完整现状快照；§55–§59 DoD 已逐条打勾给证据）。接手后请直接做：
 
 ```text
-M1.7 — Serializer（§59 DoD）
+M1.8 — Round-trip compatibility（§60 DoD）
 ```
 
-衔接点：**preserve 模式基于 AST + `printAst`**（M1.5 已保证
-`printAst(buildAst(lexJcx(bytes))) === decodeJcx(bytes).text`，逐字节还原，
-原文里的重复字段、注释、text block、未知语法一律照抄）；**canonical 模式基于
-Domain**（M1.6 的 `Score`——归一化后的正名字段、有序数组、`Rational` 时值——
-按规范形态重新排版输出，允许丢弃纯排版层面的原文细节，但不得输出任何
-UNVERIFIED 语义所派生的内容）。两种模式共用编码层 `encoding/`（UTF-8 /
-GB18030），round-trip 三级定义见 §38。
+衔接点：§60 DoD 要求的「11/11 corpus 的 parse/serialize/reparse/semantic
+equality + byte/line/semantic round-trip rate」核心指标**已经**由 M1.7 T7 的
+`npm run jcx:corpus-test` 第四级覆盖并常驻输出（实测 11/11 全绿，见 §30.1
+「M1.7 实际状态」）。M1.8 剩余范围建议见 §60 DoD 之后新增的「M1.7 T7 现状
+说明」小节（接入持续回归看板/CI、边界 fixture 补齐、幂等性质的单元级证明、
+多编码往返的语料级回归），不要把 M1.8 当成「从零重做一遍 round-trip 测试」。
 
 不要把第一步改成：
 
@@ -3510,7 +3715,7 @@ GB18030），round-trip 三级定义见 §38。
 重构 Electron
 换技术栈
 重写 Scanner
-重新讨论 M1.3–M1.5 已拍板的边界
+重新讨论 M1.3–M1.7 已拍板的边界
 ```
 
 这些都不是当前 critical path。
@@ -3575,8 +3780,9 @@ Unknown lines:    0
 Unknown patterns: 0
 ```
 
-确认 `jcx:corpus-test` 输出三级 OK（Lexer 级 + AST 级 + parse 级，见 §30.1）。
+确认 `jcx:corpus-test` 输出四级 OK（Lexer 级 + AST 级 + parse 级 + round-trip
+级，见 §30.1「M1.7 实际状态」）。
 
-然后阅读 §30.1（M1.4 / M1.5 实际状态 + M1.6 实际状态）与 §37 / §38 / §59，
-开始 M1.7 Serializer：preserve 模式基于 AST + `printAst`，canonical 模式基于
-`src/domain/` 的 `Score`。
+然后阅读 §30.1（M1.4/M1.5 实际状态 + M1.6 实际状态 + M1.7 实际状态）与
+§37 / §38 / §59 / §60，开始 M1.8 Round-trip compatibility：核心指标已由
+M1.7 T7 覆盖，剩余范围见 §60 后的「M1.7 T7 现状说明」与 §69。
