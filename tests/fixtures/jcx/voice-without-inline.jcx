@@ -1,0 +1,14 @@
+%MUSE2
+X:1
+T:Voice Without Inline Sample
+M:4/4
+L:1/4
+V:1 style=staff
+V:2 style=staff
+V:3 style=staff
+K:C
+CDEF|
+V:2
+GABc|
+V:3
+cBAG|

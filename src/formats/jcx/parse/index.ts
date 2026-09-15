@@ -15,13 +15,15 @@ import type { JcxAstDocument } from '../ast';
 import { documentPath } from '../ast';
 import { createDiagnosticBag } from '../lexer/diagnostics';
 import type { JcxDiagnostic } from '../lexer/diagnostics';
-import type { DomainIndex, Score, Voice } from '../../../domain';
+import type { DomainIndex, IgnoredField, Score, Voice } from '../../../domain';
 import type { HeaderNormalization, ParseContext } from './header';
 import { buildDomainIndex } from './buildIndex';
 import { onceKeyed } from './diagnostics';
 import { parseHeader } from './header';
 import type { VoiceRegistry } from './voice';
 import { parseVoices } from './voice';
+import type { SegmentsResult, VoiceSegment } from './body/segments';
+import { assignSegments } from './body/segments';
 
 export type { HasAstPath } from './origin';
 export { originOf, originsOf } from './origin';
@@ -44,10 +46,13 @@ export type {
   VoiceRegistry,
 } from './voice';
 export { parseVoices, splitVoiceAttributes } from './voice';
+export type { SegmentsResult, SegmentUnit, VoiceSegment } from './body/segments';
+export { assignSegments } from './body/segments';
 
-/** `parseHeader` / `parseVoices` 共享的上下文，额外携带声部注册表供后续阶段（T5）复用。 */
+/** `parseHeader` / `parseVoices` 共享的上下文，额外携带声部注册表与 T5 段落归属结果供后续阶段（T6）复用。 */
 interface DocumentParseContext extends ParseContext {
   voiceRegistry: VoiceRegistry | undefined;
+  segments: readonly VoiceSegment[];
 }
 
 export interface ParseResult {
@@ -62,7 +67,11 @@ export interface ParseResult {
  * voices / chordShapes / directives / textBlocks 仍为空：分别是 T4–T8 与 T9 的产出，
  * 此处不放 stub，避免死代码。
  */
-function buildScore(header: HeaderNormalization, voices: readonly Voice[]): Score {
+function buildScore(
+  header: HeaderNormalization,
+  voices: readonly Voice[],
+  extraIgnoredFields: readonly IgnoredField[],
+): Score {
   return {
     titles: header.titles,
     credits: header.credits,
@@ -77,7 +86,7 @@ function buildScore(header: HeaderNormalization, voices: readonly Voice[]): Scor
     directives: [],
     textBlocks: [],
     unknownFields: header.unknownFields,
-    ignoredFields: header.ignoredFields,
+    ignoredFields: [...header.ignoredFields, ...extraIgnoredFields],
     origin: documentPath(),
   };
 }
@@ -85,19 +94,22 @@ function buildScore(header: HeaderNormalization, voices: readonly Voice[]): Scor
 /**
  * 把 Lossless AST 归一化为 Domain `Score`。
  *
- * 当前进度：T3 描述头、T4 声部属性已接入；事件 / 配对 / 歌词仍待 T5–T8。
+ * 当前进度：T3 描述头、T4 声部属性、T5 段落归属已接入；事件扫描 / 配对 / 歌词仍待 T6–T8。
  */
 export function parseJcxDocument(ast: JcxAstDocument): ParseResult {
   const bag = createDiagnosticBag();
   // 各阶段共享同一个 bag 与同一个「每文档一次」去重作用域。
-  const ctx: DocumentParseContext = { bag, once: onceKeyed(bag), voiceRegistry: undefined };
+  const ctx: DocumentParseContext = { bag, once: onceKeyed(bag), voiceRegistry: undefined, segments: [] };
 
   const header = parseHeader(ast, ctx);
-  const { voices, registry } = parseVoices(header.voiceFields, ctx);
-  // 供 T5（`[V:n]` 与 §9.4 段落归属）复用，避免重新扫描 header.voiceFields。
+  const { voices: declaredVoices, registry } = parseVoices(header.voiceFields, ctx);
+  // 供 T6（事件扫描）与后续阶段复用，避免重新扫描 header.voiceFields。
   ctx.voiceRegistry = registry;
+  const segmentsResult: SegmentsResult = assignSegments(ast, registry, declaredVoices, ctx);
+  // T5 可能因未声明 id / 无任何声明而隐式追加声部，Score.voices 必须反映最终列表。
+  ctx.segments = segmentsResult.segments;
   // T6 用 header.unitLengthScope；T8 用 header.lyricFields。此处刻意不放 stub 函数，避免死代码。
-  const score = buildScore(header, voices);
+  const score = buildScore(header, segmentsResult.voices, segmentsResult.ignoredFields);
 
   return {
     score,

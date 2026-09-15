@@ -54,8 +54,11 @@ describe('voice fixture（spec §12.1–§12.4，属性顺序 name style clef in
     expect(v3?.unknownAttributes).toEqual([]);
   });
 
-  it('play= 只发一条 unverified-attribute info', () => {
-    expect(parseCodes(diagnostics)).toEqual(['jcx.parse.voice.unverified-attribute']);
+  it('play= 只发一条 unverified-attribute info；无 [V:...] 且声明 3 个声部还发一条 T5 的 segment-by-order', () => {
+    expect(parseCodes(diagnostics)).toEqual([
+      'jcx.parse.voice.unverified-attribute',
+      'jcx.parse.voice.segment-by-order',
+    ]);
     const d = diagnostics.find((x) => x.code === 'jcx.parse.voice.unverified-attribute');
     expect(d?.severity).toBe('info');
   });
@@ -77,11 +80,11 @@ describe('voice-alias-old / voice-alias-new fixture（spec §12.3 别名归一�
 });
 
 describe('voice-no-style fixture（spec §12.6.1：style 可选）', () => {
-  it('两个声部均无 style，也无任何 parse 诊断', () => {
+  it('两个声部均无 style，也无 T4 诊断；无 [V:...] 且声明 2 个声部会触发 T5 的 segment-by-order', () => {
     const { score, diagnostics } = parsed('voice-no-style');
     expect(score.voices).toHaveLength(2);
     expect(score.voices.every((v) => v.style === undefined)).toBe(true);
-    expect(parseCodes(diagnostics)).toEqual([]);
+    expect(parseCodes(diagnostics)).toEqual(['jcx.parse.voice.segment-by-order']);
   });
 });
 
@@ -105,11 +108,11 @@ describe('voice-unknown-style fixture（spec §12.6.5：未知 style 不报错�
 });
 
 describe('voice-quoted-name fixture（spec §12.4：引号值含空格与中文）', () => {
-  it('带空格的引号值与中文名都正确切分', () => {
+  it('带空格的引号值与中文名都正确切分；无 [V:...] 且声明 2 个声部会触发 T5 的 segment-by-order', () => {
     const { score, diagnostics } = parsed('voice-quoted-name');
     expect(score.voices[0]?.name).toBe('a b');
     expect(score.voices[1]?.name).toBe('伴奏');
-    expect(parseCodes(diagnostics)).toEqual([]);
+    expect(parseCodes(diagnostics)).toEqual(['jcx.parse.voice.segment-by-order']);
   });
 });
 
