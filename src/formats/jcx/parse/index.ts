@@ -15,11 +15,13 @@ import type { JcxAstDocument } from '../ast';
 import { documentPath } from '../ast';
 import { createDiagnosticBag } from '../lexer/diagnostics';
 import type { JcxDiagnostic } from '../lexer/diagnostics';
-import type { DomainIndex, Score } from '../../../domain';
-import type { HeaderNormalization } from './header';
+import type { DomainIndex, Score, Voice } from '../../../domain';
+import type { HeaderNormalization, ParseContext } from './header';
 import { buildDomainIndex } from './buildIndex';
 import { onceKeyed } from './diagnostics';
 import { parseHeader } from './header';
+import type { VoiceRegistry } from './voice';
+import { parseVoices } from './voice';
 
 export type { HasAstPath } from './origin';
 export { originOf, originsOf } from './origin';
@@ -35,6 +37,18 @@ export {
   resolveDefaultUnitLength,
 } from './duration';
 export { buildDomainIndex } from './buildIndex';
+export type {
+  SplitVoiceAttributes,
+  VoiceAttributeToken,
+  VoiceParseResult,
+  VoiceRegistry,
+} from './voice';
+export { parseVoices, splitVoiceAttributes } from './voice';
+
+/** `parseHeader` / `parseVoices` 共享的上下文，额外携带声部注册表供后续阶段（T5）复用。 */
+interface DocumentParseContext extends ParseContext {
+  voiceRegistry: VoiceRegistry | undefined;
+}
 
 export interface ParseResult {
   readonly score: Score;
@@ -48,7 +62,7 @@ export interface ParseResult {
  * voices / chordShapes / directives / textBlocks 仍为空：分别是 T4–T8 与 T9 的产出，
  * 此处不放 stub，避免死代码。
  */
-function buildScore(header: HeaderNormalization): Score {
+function buildScore(header: HeaderNormalization, voices: readonly Voice[]): Score {
   return {
     titles: header.titles,
     credits: header.credits,
@@ -58,7 +72,7 @@ function buildScore(header: HeaderNormalization): Score {
     ...(header.unitLength === undefined ? {} : { unitLength: header.unitLength }),
     ...(header.tempo === undefined ? {} : { tempo: header.tempo }),
     ...(header.key === undefined ? {} : { key: header.key }),
-    voices: [],
+    voices,
     chordShapes: [],
     directives: [],
     textBlocks: [],
@@ -71,17 +85,19 @@ function buildScore(header: HeaderNormalization): Score {
 /**
  * 把 Lossless AST 归一化为 Domain `Score`。
  *
- * 当前进度：T3 描述头已接入；正文（声部 / 事件 / 配对 / 歌词）仍待 T4–T8。
+ * 当前进度：T3 描述头、T4 声部属性已接入；事件 / 配对 / 歌词仍待 T5–T8。
  */
 export function parseJcxDocument(ast: JcxAstDocument): ParseResult {
   const bag = createDiagnosticBag();
   // 各阶段共享同一个 bag 与同一个「每文档一次」去重作用域。
-  const ctx = { bag, once: onceKeyed(bag) };
+  const ctx: DocumentParseContext = { bag, once: onceKeyed(bag), voiceRegistry: undefined };
 
   const header = parseHeader(ast, ctx);
-  // T4/T5 声部属性与段落归属消费 header.voiceFields；T6 用 header.unitLengthScope；
-  // T8 用 header.lyricFields。此处刻意不放 stub 函数，避免死代码。
-  const score = buildScore(header);
+  const { voices, registry } = parseVoices(header.voiceFields, ctx);
+  // 供 T5（`[V:n]` 与 §9.4 段落归属）复用，避免重新扫描 header.voiceFields。
+  ctx.voiceRegistry = registry;
+  // T6 用 header.unitLengthScope；T8 用 header.lyricFields。此处刻意不放 stub 函数，避免死代码。
+  const score = buildScore(header, voices);
 
   return {
     score,

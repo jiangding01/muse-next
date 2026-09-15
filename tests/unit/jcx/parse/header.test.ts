@@ -7,6 +7,7 @@ import { lexJcx } from '../../../../src/formats/jcx/lexer';
 import { createDiagnosticBag } from '../../../../src/formats/jcx/lexer/diagnostics';
 import type { JcxDiagnostic } from '../../../../src/formats/jcx/lexer/diagnostics';
 import { onceKeyed, parseHeader, parseJcxDocument } from '../../../../src/formats/jcx/parse';
+import { voiceId } from '../../../../src/domain';
 
 /**
  * M1.6 T3：全部走 `lexJcx` → `buildAst` → `parseJcxDocument` 真实链路，
@@ -57,9 +58,10 @@ describe('minimal fixture', () => {
     expect(diagnostics.some((d) => d.severity === 'error')).toBe(false);
   });
 
-  it('V: 与 w: 不进 Score，只作为节点引用留给 T4 / T8', () => {
+  it('V: 经 T4 归一化进 Score；w: 仍只作为节点引用留给 T8', () => {
     const normalized = header('minimal');
-    expect(score.voices).toEqual([]);
+    expect(score.voices).toHaveLength(1);
+    expect(score.voices[0]?.id).toBe(voiceId(1));
     expect(normalized.voiceFields.map((n) => n.key)).toEqual(['V']);
     expect(normalized.voiceFields[0]?.path).toBe('L6');
     expect(normalized.lyricFields).toEqual([]);

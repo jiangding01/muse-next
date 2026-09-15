@@ -32,10 +32,11 @@ const SPAN: SourceSpan = {
   end: { offset: 1, line: 1, column: 1 },
 };
 
-describe('parseJcxDocument（T2 骨架 + T3 描述头）', () => {
-  it('minimal fixture 的正文聚合仍为空（T4–T9 未接入）', () => {
+describe('parseJcxDocument（T2 骨架 + T3 描述头 + T4 声部）', () => {
+  it('minimal fixture 只有一个 V:1 声部；其余正文聚合仍为空（T5–T9 未接入）', () => {
     const { score } = parseMinimal();
-    expect(score.voices).toEqual([]);
+    expect(score.voices).toHaveLength(1);
+    expect(score.voices[0]?.id).toBe(voiceId(1));
     expect(score.chordShapes).toEqual([]);
     expect(score.directives).toEqual([]);
     expect(score.textBlocks).toEqual([]);
@@ -46,13 +47,14 @@ describe('parseJcxDocument（T2 骨架 + T3 描述头）', () => {
     expect(score.titles).toEqual(['Test Piece One']);
   });
 
-  it('index 五张表全空', () => {
+  it('index：voiceById 有一条，其余四张表全空', () => {
     const { index } = parseMinimal();
-    expect(index.byPath.size).toBe(0);
     expect(index.eventById.size).toBe(0);
     expect(index.relationById.size).toBe(0);
     expect(index.relationsByNote.size).toBe(0);
-    expect(index.voiceById.size).toBe(0);
+    expect(index.voiceById.size).toBe(1);
+    expect(index.byPath.size).toBe(1);
+    expect(index.voiceById.has(voiceId(1))).toBe(true);
   });
 
   it('diagnostics 与 AST 的内容相等但不是同一引用', () => {
@@ -134,9 +136,15 @@ describe('reportParse / onceKeyed', () => {
   });
 });
 
+/** 字面量构造，不依赖 parseMinimal()：minimal fixture 自 T4 起已带一个 V:1 声部。 */
+const EMPTY_SCORE: Score = {
+  titles: [], credits: [], notes: [], voices: [], chordShapes: [], directives: [],
+  textBlocks: [], unknownFields: [], ignoredFields: [], origin: documentPath(),
+};
+
 describe('buildDomainIndex', () => {
   it('空 Score 产出五张空表', () => {
-    const index = buildDomainIndex(parseMinimal().score);
+    const index = buildDomainIndex(EMPTY_SCORE);
     expect(index.byPath.size + index.eventById.size + index.relationById.size).toBe(0);
     expect(index.relationsByNote.size + index.voiceById.size).toBe(0);
   });
