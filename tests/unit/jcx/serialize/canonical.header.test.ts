@@ -313,10 +313,10 @@ describe('canonical 骨架 —— 输出形态与幂等', () => {
     expect(result.diagnostics).toEqual([]);
   });
 
-  it('公开入口 serializeJcx 在 T5 接线前拒绝 canonical（不返回无 body 的文件）', () => {
+  it('公开入口 serializeJcx 在 T6 L2 验收前拒绝 canonical（不承诺未经验证的往返契约）', () => {
     const { score } = loadJcx(fixtureSource('minimal'));
     expect(() => serializeJcx(score, { mode: 'canonical' })).toThrow(
-      'canonical: unavailable until M1.7 T5 (body and lyrics not yet serialised)',
+      'canonical: unavailable until M1.7 T6 (L2 round-trip not yet verified)',
     );
   });
 

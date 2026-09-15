@@ -18,6 +18,16 @@
  *      `unitLengthChanges.beforeEventId`、`LyricLine.bodyRange.first/lastEventId`
  *      指向的 `EventId` 都必须存在于**本声部**的事件序列中，且 `bodyRange` 的首
  *      不晚于末。它们是「原位置引用」型事实，指向不存在的事件即为伪造。
+ *   ⑥ M1.7 T5 补充（2026-09-15 用户裁决②）：parse 自然产出的
+ *      `unitLengthChanges[].beforeEventId` 不落在任何 `LyricLine.bodyRange`
+ *      内部（首事件本身除外——那只是「换行正好也是换单位音长的地方」，不构成
+ *      冲突）。canonical 序列化要求「`w:` 覆盖的正文独占一行」与「`L:` 必须
+ *      紧贴生效事件前另起一行」这两条行边界规则同时成立；若某个 `L:`
+ *      变化点落在一条正文的中间，两条规则互斥，只能牺牲歌词行的整体性
+ *      （`jcx.serialize.lyric-line-split`，见 `canonical/body.ts` 裁决①）。
+ *      这条不变量断言**真实源文本从不产生这种冲突**——目前能看到它的唯一
+ *      办法是手工构造 Domain（`canonical.lyrics.test.ts` 的降级路径用例），
+ *      而不是从 parse 层自然得到。
  */
 
 import { parseAstPath } from '../../../src/formats/jcx/ast';
@@ -138,13 +148,53 @@ export function checkFactualEventRefs(score: Score): string[] {
   return failures;
 }
 
-/** 跑齐 ②–⑤（①由调用方 try/catch 负责），汇总成一份失败列表。 */
+/**
+ * 断言⑥：`unitLengthChanges[].beforeEventId` 不落在任何 `LyricLine.bodyRange`
+ * 内部（首事件除外）。用事件下标而不是 `EventId` 字符串比较——两者都已经是
+ * 「该声部事件流下标」的稳定编码（`domain/ids.ts`），但下标才能表达「介于
+ * 首尾之间」这个区间关系。
+ */
+export function checkUnitLengthChangeOutsideLyricRanges(score: Score): string[] {
+  const failures: string[] = [];
+  for (const voice of score.voices) {
+    const order = new Map(voice.events.map((event, index) => [event.id, index]));
+    const changeIndices = voice.unitLengthChanges
+      .map((change) => order.get(change.beforeEventId))
+      .filter((index): index is number => index !== undefined);
+    if (changeIndices.length === 0) {
+      continue;
+    }
+    for (const line of voice.lyricLines) {
+      const range = line.bodyRange;
+      if (range === null) {
+        continue;
+      }
+      const first = order.get(range.firstEventId);
+      const last = order.get(range.lastEventId);
+      if (first === undefined || last === undefined) {
+        continue;
+      }
+      for (const index of changeIndices) {
+        if (index > first && index <= last) {
+          failures.push(
+            `${voice.id}: unitLengthChange before event index ${String(index)} falls inside lyric bodyRange ` +
+              `[${String(first)}, ${String(last)}] (first event excluded)`,
+          );
+        }
+      }
+    }
+  }
+  return failures;
+}
+
+/** 跑齐 ②–⑥（①由调用方 try/catch 负责），汇总成一份失败列表。 */
 export function checkParseInvariants(score: Score, diagnostics: readonly JcxDiagnostic[], index: DomainIndex): string[] {
   return [
     ...checkNoErrorDiagnostics(diagnostics),
     ...checkIndexConsistency(score, index),
     ...checkEventKindsAllowed(score),
     ...checkFactualEventRefs(score),
+    ...checkUnitLengthChangeOutsideLyricRanges(score),
   ];
 }
 

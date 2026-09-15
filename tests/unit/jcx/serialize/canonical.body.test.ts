@@ -300,22 +300,26 @@ describe('canonical body —— 行边界（决策 2 / 裁决①④）', () => {
     expect(body).toEqual([
       '[V:1]',
       'C D E F |',
+      'w: la li lu la',
       '{G} A B z C |',
+      'w: la * lu',
       '[CEG] A |',
+      'w: la~li lu',
       'A B C |',
+      'w: la-li lu_x y|z',
     ]);
   });
 
-  it('多 verse 共用同一 bodyRange 时只产生一条事件行（裁决④）', () => {
+  it('多 verse 共用同一 bodyRange 时只产生一条事件行，各 verse 的 w: 按 verseIndex 顺序紧随其后（裁决④）', () => {
     const { body, score } = fixtureTrip('lyrics-multi-verse');
     const ranges = score.voices[0]?.lyricLines.map((line) => line.bodyRange);
     expect(ranges).toHaveLength(2);
     expect(ranges?.[0]).toEqual(ranges?.[1]);
-    expect(body).toEqual(['[V:1]', 'C D E F |']);
+    expect(body).toEqual(['[V:1]', 'C D E F |', 'w: la li lu la', 'w: ma mi mu ma']);
   });
 
-  it('inline 尾随正文的 bodyRange 同样成行', () => {
-    expect(fixtureTrip('lyrics-inline-trailing').body).toEqual(['[V:1]', 'C D']);
+  it('inline 尾随正文的 bodyRange 同样成行，w: 紧随其后', () => {
+    expect(fixtureTrip('lyrics-inline-trailing').body).toEqual(['[V:1]', 'C D', 'w: la li']);
   });
 
   it('body 行带出「行 → 事件区间」映射，供 T5 放置 w: 行', () => {
@@ -394,6 +398,16 @@ describe('canonical body —— unitLengthChanges 重放（决策 3 / 裁决①�
     const start = lines.findIndex((line) => line.startsWith('[V:'));
     expect(lines.slice(start, start + 4)).toEqual(['[V:1]', 'C D', 'L: 1/8', 'E F |']);
     expect(result.diagnostics.map((d) => d.code)).toContain('jcx.serialize.lyric-line-split');
+    // 该 verse 的 w: 行不会跟着断——`lyricRangeEnd` 只在被切开后仍完整保留、
+    // 抵达 barline 的那半段收尾，w: 紧随「E F |」之后（音节对齐已经漂移，
+    // 但不静默丢这条 w: 行）。
+    expect(lines.slice(start, start + 5)).toEqual([
+      '[V:1]',
+      'C D',
+      'L: 1/8',
+      'E F |',
+      'w: la li lu la',
+    ]);
   });
 });
 

@@ -8,6 +8,7 @@ import {
   checkEventKindsAllowed,
   checkIndexConsistency,
   checkNoErrorDiagnostics,
+  checkUnitLengthChangeOutsideLyricRanges,
 } from '../../../../scripts/jcx/lib/parseInvariants';
 
 /**
@@ -57,5 +58,9 @@ describe.each(fixtures)('parse invariants: %s', (name) => {
 
   it('④ 每个 voice 的 events 不含 marker kind（kind 集合 ⊆ 十种 MusicEvent）', () => {
     expect(checkEventKindsAllowed(score)).toEqual([]);
+  });
+
+  it('⑥（M1.7 T5 补充）unitLengthChanges 不落在任何 LyricLine.bodyRange 内部（首事件除外）', () => {
+    expect(checkUnitLengthChangeOutsideLyricRanges(score)).toEqual([]);
   });
 });
