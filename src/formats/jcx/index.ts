@@ -21,6 +21,14 @@ export type { ParseResult } from './parse';
 export { parseJcxDocument } from './parse';
 
 export type {
+  JcxUnencodableStrategy,
+  PreserveOptions,
+  CanonicalOptions,
+  SerializeResult,
+} from './serialize';
+export { serializeJcx } from './serialize';
+
+export type {
   JcxSeverity,
   JcxDiagnosticCode,
   JcxDiagnostic,
