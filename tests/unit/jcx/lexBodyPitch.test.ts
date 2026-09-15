@@ -139,7 +139,7 @@ describe('§16.1 duration', () => {
     ]);
   });
 
-  it('N/ 裸斜杠 = N/2（ABC 2.1 §4.3；语料 corpus#05.jcx 第 21 行 `D3/`）', () => {
+  it('N/ 裸斜杠 = N/2（ABC 2.1 §4.3；语料 corpus#05 第 21 行 `D3/`）', () => {
     expect(pairs('D3/')).toEqual([
       ['pitchLetter', 'D'],
       ['duration', '3/'],

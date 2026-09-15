@@ -179,7 +179,7 @@ function ensureOrderlyCurrent(
  * `header.voiceFields` 时已经把全部 `V:` 行（不分 header / body、也不管是否重复
  * 声明）都注册进了 `VoiceRegistry.idIndex`，所以**总是**按字面 id 查表既更简单，
  * 也不存在「声明数 < body 区 `V:` 行数」导致的越界分叉——这条 id 查找路径一定命中。
- * 两种实现在语料上给出相同结果（11 个文件里唯一触发本规则的 `corpus#08.jcx`，9 个
+ * 两种实现在语料上给出相同结果（11 个文件里唯一触发本规则的 `corpus#08`，9 个
  * 声部的 id 与声明顺序完全一致，位置法与 id 法算出同一答案）。
  *
  * `id === undefined` 分支理论上不可达（上段已论证），保留只是恪守「永不抛异常」的

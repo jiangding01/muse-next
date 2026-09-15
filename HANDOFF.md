@@ -414,7 +414,7 @@ midi2abc version 2.2
 %MUSE2
 
 X: 1
-T: corpus#08
+T: <song title>
 M: 4/4
 L: 1/8
 Q:1/4=66
@@ -1030,7 +1030,7 @@ type MuseVoiceStyle =
 
 ## 16.4 Style 不是必需字段
 
-`corpus#08.jcx` 有：
+`corpus#08` 有：
 
 ```text
 9 voices
@@ -1065,7 +1065,7 @@ style: 'staff' | 'jianpu' | 'tab';
 
 ---
 
-# 17. corpus#08.jcx 是特殊样本
+# 17. corpus#08 是特殊样本
 
 这个文件建议后续单独作为 compatibility case。
 
@@ -1865,7 +1865,7 @@ npm run jcx:scan
   不是「没被组合」；`scripts/jcx/lib/astInvariants.ts` 的
   `collectResidualItemLeaves` 与 `tests/unit/jcx/ast/preservation.test.ts`
   里的两个固定用例——`"C2 |"` 残留 0、`"|2 |"` 残留 1——钉住这个口径；只是观测
-  指标，不是失败条件）：全语料共 **1 个**，即 `corpus#10.jcx` 第 101 行
+  指标，不是失败条件）：全语料共 **1 个**，即 `corpus#10` 第 101 行
   `|||2` 之后那个裸露的 `duration` 叶子（`2`）——它前面没有 pitchLetter 可
   依附，不能组成 note，落在 bodyLine.items 里原样保留。这正是**真实语料中
   未解释的 syntax residual**：JCX_SPEC §19.2 / Appendix A U26 已经调查过它，
@@ -1874,7 +1874,7 @@ npm run jcx:scan
 - Lexer `N/` 修复（`53d97d3`）：ABC 2.1 §4.3 的 `N/` 简写（等价 `N/2`）此前被
   切成两个 duration token，`D3/` 这种写法因此不能被 note 完整吸收；修复后
   `DURATION_RE` 按 `N/N` → `N/` → `N` 的顺序尝试最长匹配，语料里唯一一处
-  `D3/`（`corpus#08.jcx`）不再产生孤立 duration 叶子。
+  `D3/`（`corpus#08`）不再产生孤立 duration 叶子。
 
 **DoD 证据**（对应 §56 / §57，逐条见文件/测试/命令而非重新誊写清单本身）：
 
@@ -2001,7 +2001,7 @@ src/domain/
 | `Z` 多小节休止 (§15.2) | `Rest { variant: 'Z', duration? }` | 不赋多小节语义 |
 | `@` 隐藏休止 (§15.3) | `Rest { variant: '@' }` | 不赋隐藏行为，正常占时 |
 | tuplet `q === 0` (U25) | `Tuplet { q: undefined }` + info | 不派生任何时值缩放 |
-| `corpus#10.jcx` 的 `\|\|\|2` 残留裸 `2` (U26) | `UnknownEvent { raw: '2', tokenKind: 'duration' }` | 不实现通用 `\|N` 记号 |
+| `corpus#10` 的 `\|\|\|2` 残留裸 `2` (U26) | `UnknownEvent { raw: '2', tokenKind: 'duration' }` | 不实现通用 `\|N` 记号 |
 | 临时记号跨音符延续 (§14.3) | 只存 `Note.accidental` 原值 | 不做小节内延续推断 |
 | 横按记法 (§10.1) | `GuitarChord.barres` 恒为 `[]` | 不从指法反推横按 |
 | repeat 形态的 barline (§18) | `BarlineEvent.raw` | 不解析反复语义，留 M2/M4 |
@@ -2034,7 +2034,7 @@ npm run jcx:scan
 - 27 个 voice、9288 个 event。
 - tie：1161 resolved / 12 unresolved；slur：333 closed / 0 unclosed；
   tuplet：16 complete / 0 incomplete；TAB relation 24；lyric 音节对齐 94。
-- gchord 6 个（`corpus#07.jcx`），`%%` 指令 13 条。
+- gchord 6 个（`corpus#07`），`%%` 指令 13 条。
 - parse 级 diagnostic 直方图（观测指标，非失败条件）：14 个 distinct code，
   最高的是 `jcx.rest.uppercase-z` 20、`jcx.parse.lyrics.overflow` 16、
   `jcx.parse.tie.unresolved` 12、`jcx.voice.segment-by-order` 9。
