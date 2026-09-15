@@ -102,9 +102,17 @@ export interface JcxNoteNode extends JcxCompositeBase<'note'> {
   >[];
 }
 
-/** §15：`z` / `Z` / `@` + 可选时值。 */
+/**
+ * §15：`z` / `Z` / `@` + 可选时值，两种时值形态：
+ * - pitch 形态 `z2` / `z/` —— `rest` 直接跟 `duration`；
+ * - tab 形态 `z*2` / `z//` —— `rest` `tabDurSep` `duration?`（§26.5 的时值必须由
+ *   `*` / `/` 引出，语料见 §26.9 的 TAB 声部休止符）。
+ *
+ * 因此 `tabDurSep` 在 children 的类型内：把它甩成兄弟叶子会让「这个分隔符属于
+ * 哪个休止符」这条结构信息丢失。
+ */
 export interface JcxRestNode extends JcxCompositeBase<'rest'> {
-  readonly children: readonly JcxTokenLeafOf<'rest' | 'hiddenRest' | 'duration'>[];
+  readonly children: readonly JcxTokenLeafOf<'rest' | 'hiddenRest' | 'duration' | 'tabDurSep'>[];
 }
 
 /** §14.4：`[...]` 和弦块；`close` 缺失表示未闭合（原样保留，不补）。 */
@@ -143,9 +151,15 @@ export interface JcxTabGroupNode extends JcxCompositeBase<'tabGroup'> {
  * accidental / pitchLetter / octaveMark / duration / rest / hiddenRest /
  * chordOpen / chordClose / graceOpen / graceClose / stringLetter / fret /
  * tabDurSep / tabGroupOpen / tabGroupClose 这些尚未组合的原料 token；
- * M1.6 之后的组合阶段（T4 及以后）遇到**不完整或无法安全组合**的语法（如未闭合的
- * `[` 缺 `]`、无法配对的装饰）时同样会退回通用叶子，而不是伪造一个语义不成立的
- * 组合节点——这正是 Lossless AST「不重扫、不臆测」的边界在正文层的体现。
+ * T4 的组合阶段遇到**无法安全组合**的 token（孤立的 `duration`、`accidental` 后
+ * 没有音名、多余的 `]` / `}`、作用于弦组因而不被吸收的 `strokePrefix` ……）时
+ * 同样退回通用叶子，而不是伪造一个语义不成立的组合节点——这正是 Lossless AST
+ * 「不重扫、不臆测」的边界在正文层的体现。
+ *
+ * **未闭合的括号组是例外，不走这条退路**：`[CEG`、`{G` 仍然构造 chord / grace
+ * 节点，只是省略 `close`（`close?` 已建模）。理由是「这里确实开了一个组」本身
+ * 就是可靠的结构信息，退回叶子反而会丢掉它；原文保真由 `printAst` 的拼接保证，
+ * 不依赖节点形态。
  */
 export type JcxBodyNode =
   | JcxNoteNode

@@ -1,0 +1,8 @@
+%MUSE2
+X:1
+T:Rest Tab Duration
+M:4/4
+L:1/8
+K:C
+V:1 name="Guitar" style=tab clef=standardtab
+[V:1]z*2 z/ z// a1*2 | zzz Z4 |

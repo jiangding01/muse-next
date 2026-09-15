@@ -1,0 +1,8 @@
+%MUSE2
+X:1
+T:Grace Tab Nested
+M:4/4
+L:1/8
+K:C
+V:1 name="Guitar" style=tab clef=standardtab
+[V:1]{[a]}b2 V[ax/bx/] Va1 | S | {[a1}b2 |
