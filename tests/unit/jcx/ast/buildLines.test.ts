@@ -41,13 +41,13 @@ describe('buildLineNodes —— magicHeaderLine / commentLine / blankLine', () =
     }
   });
 
-  it('body 行本任务降级为 rawLine，children 数等于该行全部 token 数', () => {
+  it('body 行映射为 bodyLine，items 数等于该行全部 token 数（eol 不进 items）', () => {
     const line = lines[3] as JcxLineNode;
-    expect(line.kind).toBe('rawLine');
+    expect(line.kind).toBe('bodyLine');
     const bodyLine = lex.lines[3];
-    if (line.kind === 'rawLine' && bodyLine) {
-      // 该行有 eol，故 rawLine.children 数 = 原始 tokens 数 - 1（eol 不进 children）。
-      expect(line.children.length).toBe(bodyLine.tokens.length - 1);
+    if (line.kind === 'bodyLine' && bodyLine) {
+      expect(line.items.length).toBe(bodyLine.tokens.length - 1);
+      expect(line.mode).toBe('pitch');
     }
   });
 
@@ -113,13 +113,15 @@ describe('buildLineNodes —— rawLine 兜底', () => {
     expect(lines[0]?.kind).toBe('rawLine');
   });
 
-  it('inlineFieldLine 本任务暂降级为 rawLine', () => {
+  it('inlineFieldLine 映射为 inlineFieldLine，trailing 承载同行正文', () => {
     const source = '[V:1] CDE\n';
     const lex = lexJcx(source);
     const lines = buildLineNodes(lex);
     const line = lines[0];
-    expect(line?.kind).toBe('rawLine');
-    if (line?.kind === 'rawLine') {
+    expect(line?.kind).toBe('inlineFieldLine');
+    if (line?.kind === 'inlineFieldLine') {
+      expect(line.key).toBe('V');
+      expect(line.trailing.length).toBeGreaterThan(0);
       expect(printNode(line)).toBe(source);
     }
   });

@@ -135,6 +135,18 @@ export interface JcxTabGroupNode extends JcxCompositeBase<'tabGroup'> {
   readonly close?: JcxTokenLeaf;
 }
 
+/**
+ * §14–§26 正文的合法节点集合。
+ *
+ * `JcxTokenLeaf`（通用 token 叶子）是**永久**成员，不是过渡态：Lossless AST 允许
+ * 「没有专用叶子 kind、也暂不组合」的 token 原样以通用叶子落地——M1.5 T3 用它承载
+ * accidental / pitchLetter / octaveMark / duration / rest / hiddenRest /
+ * chordOpen / chordClose / graceOpen / graceClose / stringLetter / fret /
+ * tabDurSep / tabGroupOpen / tabGroupClose 这些尚未组合的原料 token；
+ * M1.6 之后的组合阶段（T4 及以后）遇到**不完整或无法安全组合**的语法（如未闭合的
+ * `[` 缺 `]`、无法配对的装饰）时同样会退回通用叶子，而不是伪造一个语义不成立的
+ * 组合节点——这正是 Lossless AST「不重扫、不臆测」的边界在正文层的体现。
+ */
 export type JcxBodyNode =
   | JcxNoteNode
   | JcxRestNode
@@ -142,7 +154,8 @@ export type JcxBodyNode =
   | JcxGraceNode
   | JcxTabNoteNode
   | JcxTabGroupNode
-  | JcxBodyLeafNode;
+  | JcxBodyLeafNode
+  | JcxTokenLeaf;
 
 /** 行节点共同形态。`eol` 为 `''` 表示该行没有换行符（文件末行，§5.2）。 */
 interface JcxLineBase<K extends string> extends JcxAstNodeBase {

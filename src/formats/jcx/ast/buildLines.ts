@@ -5,12 +5,15 @@
  * `JcxLineNode[]`。**只分组、不重扫**：本文件不解析任何字符，只读
  * `JcxLexLine.kind` / `.tokens` 并按顺序装箱。
  *
- * 本任务范围（HANDOFF §53 / 需求边界）：只处理非正文行 ——
- * magicHeaderLine / fieldLine / directiveLine / commentLine / blankLine /
- * rawLine / textBlock（textBlockBoundaryLine + textLine）。`inlineFieldLine`
- * 与 `bodyLine` 的正式结构化留给 T3 / T4：本文件把它们**降级为 `rawLine`**
- * （children 是该行全部 token 的通用叶子），只求满足
- * `printAst(buildAst(lex)) === source` 不变量，不做任何语义拆分。
+ * M1.5 T3 范围：magicHeaderLine / fieldLine / directiveLine / commentLine /
+ * blankLine / rawLine / textBlock（textBlockBoundaryLine + textLine）以及
+ * inlineFieldLine / bodyLine 的行级骨架，都在本文件组装；inlineFieldLine /
+ * bodyLine 内部「正文 token → 节点」的规则在 `buildBodyLine.ts`（T3 把正文
+ * token 扁平映射为叶子，note/chord/grace/tabNote/tabGroup 的组合留给 T4）。
+ *
+ * `raw`（lexer 行类别，§29.4 全角冒号等未知语法）**永久**映射为 `rawLine`——
+ * 这不是待补全的占位，是该行本身就无法被结构化解析，见下方 `case 'raw'` 的
+ * 独立分支与注释。
  */
 
 import type { SourceSpan } from '../lexer/sourceSpan';
@@ -18,6 +21,7 @@ import type { JcxDirectiveNameToken, JcxFieldKeyToken, JcxLexLine, JcxToken } fr
 import type { JcxLexResult } from '../lexer';
 import { childPath, linePath } from './astPath';
 import { tokenLeaf } from './leaf';
+import { buildBodyLineNode, buildInlineFieldLine } from './buildBodyLine';
 import type {
   AstPath,
   JcxLineNode,
@@ -242,15 +246,25 @@ export function buildLineNodes(lex: JcxLexResult): JcxLineNode[] {
         break;
       }
 
-      case 'raw':
-      case 'inlineField':
-      case 'body': {
-        // T2 边界：inlineFieldLine / bodyLine 的正式结构化留给 T3 / T4，
-        // 这里统一降级为 rawLine（children = 该行全部 token 的通用叶子），
-        // 只保证 printAst 不变量成立。
+      case 'raw': {
+        // §29.4：lexer 判定为「无法归类的整行」（如全角冒号字段行）。这是永久兜底，
+        // 不是待补全的占位——该行本身就不构成任何已知语法，结构化解析没有意义，
+        // 因此独立一个 case，且形态与 T4 之后都保持 rawLine 不变。
         const path = linePath(line.index);
         const children = buildChildren(tokens, path);
         result.push({ kind: 'rawLine', path, span: contentSpan(children, line), eol, children });
+        break;
+      }
+
+      case 'inlineField': {
+        const path = linePath(line.index);
+        result.push(buildInlineFieldLine(line, tokens, eol, path));
+        break;
+      }
+
+      case 'body': {
+        const path = linePath(line.index);
+        result.push(buildBodyLineNode(line, tokens, eol, path));
         break;
       }
 
