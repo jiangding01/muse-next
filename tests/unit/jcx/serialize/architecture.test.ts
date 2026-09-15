@@ -1,0 +1,84 @@
+/**
+ * serialize 模块边界架构守卫（M1.7 方案 v1.1 §1）。
+ *
+ * `encodeJcx.ts` 已存在，钉死其 import 白名单；`preserve.ts`（T2）与
+ * `canonical/**`（T3/T4/T5）尚未落地，规则先写好，文件/目录不存在时跳过
+ * （不是「测试作废」，是「等它出现再生效」）。
+ */
+
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
+
+import { describe, expect, it } from 'vitest';
+
+const SERIALIZE_DIR = join(import.meta.dirname, '../../../../src/formats/jcx/serialize');
+
+/** 覆盖 `import x from 'm'`、`import type {...} from 'm'`、`export ... from 'm'`、`import('m')`。 */
+function collectSpecifiers(source: string): string[] {
+  const specs: string[] = [];
+  const statik = /\b(?:import|export)\b[\s\S]*?\bfrom\s*['"]([^'"]+)['"]/g;
+  const bare = /\bimport\s*['"]([^'"]+)['"]/g;
+  const dynamic = /\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
+  for (const re of [statik, bare, dynamic]) {
+    let m = re.exec(source);
+    while (m !== null) {
+      if (m[1] !== undefined) specs.push(m[1]);
+      m = re.exec(source);
+    }
+  }
+  return specs;
+}
+
+function collectTsFiles(dir: string): string[] {
+  if (!existsSync(dir)) {
+    return [];
+  }
+  const out: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      out.push(...collectTsFiles(full));
+    } else if (entry.name.endsWith('.ts') && !entry.name.endsWith('.test.ts')) {
+      out.push(full);
+    }
+  }
+  return out;
+}
+
+describe('serialize 架构守卫（方案 §1 模块边界表）', () => {
+  it('encodeJcx.ts 只 import iconv-lite、../encoding/* 与同目录 ./types', () => {
+    const file = join(SERIALIZE_DIR, 'encodeJcx.ts');
+    expect(existsSync(file)).toBe(true);
+
+    const specs = collectSpecifiers(readFileSync(file, 'utf8'));
+    const bad = specs.filter(
+      (spec) =>
+        spec !== 'iconv-lite' && !spec.startsWith('../encoding/') && spec !== './types',
+    );
+    expect(bad).toEqual([]);
+  });
+
+  it('preserve.ts 不 import domain（T2 落地前跳过）', () => {
+    const file = join(SERIALIZE_DIR, 'preserve.ts');
+    if (!existsSync(file)) {
+      return;
+    }
+    const specs = collectSpecifiers(readFileSync(file, 'utf8'));
+    const bad = specs.filter((spec) => /(^|\/)domain(\/|$)/.test(spec));
+    expect(bad).toEqual([]);
+  });
+
+  it('canonical/** 不 import ast/lexer（T3-T5 落地前跳过）', () => {
+    const files = collectTsFiles(join(SERIALIZE_DIR, 'canonical'));
+    if (files.length === 0) {
+      return;
+    }
+    for (const file of files) {
+      const specs = collectSpecifiers(readFileSync(file, 'utf8'));
+      const bad = specs.filter(
+        (spec) => /(^|\/)ast(\/|$)/.test(spec) || /(^|\/)lexer(\/|$)/.test(spec),
+      );
+      expect(bad).toEqual([]);
+    }
+  });
+});

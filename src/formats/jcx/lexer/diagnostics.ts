@@ -33,7 +33,16 @@ export type JcxLexerDiagnosticCode =
  */
 export type JcxParseDiagnosticCode = `jcx.parse.${string}`;
 
-export type JcxDiagnosticCode = JcxLexerDiagnosticCode | JcxParseDiagnosticCode;
+/**
+ * Serialize 阶段的 code：形态固定为 `jcx.serialize.<area>.<problem>`
+ * （M1.7 方案 v1.1 §2，如 `jcx.serialize.unencodable-replaced`）。
+ */
+export type JcxSerializeDiagnosticCode = `jcx.serialize.${string}`;
+
+export type JcxDiagnosticCode =
+  | JcxLexerDiagnosticCode
+  | JcxParseDiagnosticCode
+  | JcxSerializeDiagnosticCode;
 
 export interface JcxDiagnostic {
   readonly code: JcxDiagnosticCode;
