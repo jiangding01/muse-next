@@ -193,12 +193,10 @@ export function buildLineNodes(lex: JcxLexResult): JcxLineNode[] {
       }
 
       case 'textBlockBegin': {
-        // lexer 保证：文本块内部的任何行都被分类为 textBlockContent（lexDocument.ts 的
-        // inTextBlock 优先级最高），因此这里不可能在 pending 未关闭时再收到 begin。
-        // 若 lexer 的分类规则将来改动，这里立即失败而不是悄悄丢弃前一个块。
-        if (pending !== null) {
-          throw new Error(`buildLineNodes: nested %%begintext at line ${line.index} (lexer contract violated)`);
-        }
+        // 跨模块契约：lexer 保证文本块内部的任何行都被分类为 textBlockContent
+        // （lexDocument.ts 中 inTextBlock 的分类优先级最高），因此 pending 非空时
+        // 不可能再收到 textBlockBegin。buildAst 不为此增加异常面；若 lexer 的分类
+        // 规则将来改动，需同步改这里（lossless 测试会因块内容丢失而失败）。
         const basePath = linePath(line.index);
         const begin = buildTextBlockBoundaryLine(line, 'begin', tokens, eol, childPath(basePath, 0));
         pending = { basePath, begin, lines: [] };

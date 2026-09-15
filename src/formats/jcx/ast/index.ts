@@ -36,7 +36,7 @@ export type {
 } from './nodes';
 export { isLeaf, isTokenLeaf, isTextBlock } from './nodes';
 
-export type { ParsedAstPath } from './astPath';
+export type { ParsedAstPath, ParsedLineAstPath, ParsedDocumentAstPath } from './astPath';
 export { linePath, childPath, parseAstPath, isDescendantPath, bomPath } from './astPath';
 import { bomPath } from './astPath';
 

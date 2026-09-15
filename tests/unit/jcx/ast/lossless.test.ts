@@ -4,6 +4,11 @@ import { describe, expect, it } from 'vitest';
 import { lexJcx } from '../../../../src/formats/jcx/lexer';
 import { decodeJcx } from '../../../../src/formats/jcx/encoding/decodeJcx';
 import { buildAst, isTextBlock, parseAstPath, printAst, printNode } from '../../../../src/formats/jcx/ast';
+
+function lineIndexOf(path: string): number | undefined {
+  const parsed = parseAstPath(path);
+  return parsed?.kind === 'line' ? parsed.line : undefined;
+}
 import type { JcxAstDocument, JcxAstNode, JcxLineNode } from '../../../../src/formats/jcx/ast';
 
 /**
@@ -105,7 +110,7 @@ describe.each(fixtures)('lossless AST invariant: %s', (name) => {
   it('② 逐行不变式：每个行节点的 printNode 等于其覆盖的物理行原文拼接', () => {
     for (const line of ast.lines) {
       if (isTextBlock(line)) {
-        const beginIndex = parseAstPath(line.path)?.line;
+        const beginIndex = lineIndexOf(line.path);
         expect(beginIndex).not.toBeUndefined();
         const span = 1 + line.lines.length + (line.end !== undefined ? 1 : 0);
         const endIndex = (beginIndex as number) + span - 1;
@@ -113,7 +118,7 @@ describe.each(fixtures)('lossless AST invariant: %s', (name) => {
         expect(printNode(line)).toBe(expected);
         continue;
       }
-      const physicalIndex = parseAstPath(line.path)?.line;
+      const physicalIndex = lineIndexOf(line.path);
       expect(physicalIndex).not.toBeUndefined();
       const expected = joinPhysicalLines(
         decodedText,

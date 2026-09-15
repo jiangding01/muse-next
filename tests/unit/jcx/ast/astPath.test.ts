@@ -11,14 +11,18 @@ describe('astPath —— 构造与解析', () => {
     expect(linePath(12)).toBe('L12');
     expect(childPath(linePath(12), 3)).toBe('L12.3');
     expect(childPath(childPath(linePath(12), 3), 1)).toBe('L12.3.1');
-    expect(parseAstPath('L12')).toEqual({ line: 12, indices: [] });
-    expect(parseAstPath('L12.3')).toEqual({ line: 12, indices: [3] });
-    expect(parseAstPath('L12.3.1')).toEqual({ line: 12, indices: [3, 1] });
+    expect(parseAstPath('L12')).toEqual({ kind: 'line', line: 12, indices: [] });
+    expect(parseAstPath('L12.3')).toEqual({ kind: 'line', line: 12, indices: [3] });
+    expect(parseAstPath('L12.3.1')).toEqual({ kind: 'line', line: 12, indices: [3, 1] });
+    expect(parseAstPath('D.bom')).toEqual({ kind: 'document', segment: 'bom' });
+    expect(parseAstPath('Lbom')).toBeNull();
+    expect(parseAstPath('D.')).toBeNull();
   });
 
   it('下标 0 与多层深路径', () => {
     expect(linePath(0)).toBe('L0');
     expect(parseAstPath(childPath(childPath(childPath(linePath(0), 0), 0), 0))).toEqual({
+      kind: 'line',
       line: 0,
       indices: [0, 0, 0],
     });

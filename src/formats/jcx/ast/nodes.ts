@@ -35,7 +35,7 @@ import type { JcxEncoding } from '../encoding/types';
  * 因此禁止把 AstPath 持久化到文件、undo 栈或跨文档引用里。需要跨编辑稳定的 identity，
  * 由 M1.6 之后的 Domain 层另行分配。
  */
-export type AstPath = `L${string}`;
+export type AstPath = `L${string}` | `D.${string}`;
 
 export interface JcxAstNodeBase {
   readonly path: AstPath;
