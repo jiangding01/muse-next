@@ -7,8 +7,9 @@
  */
 
 import type { MusicEvent } from './event';
-import type { NoteRef, VoiceId } from './ids';
-import type { Slur, TabRelation, Tie, Tuplet } from './relation';
+import type { EventId, NoteRef, VoiceId } from './ids';
+import type { Rational } from './rational';
+import type { BrokenRhythm, Slur, TabRelation, Tie, Tuplet } from './relation';
 import type { SourceRef } from './sourceRef';
 
 /** spec §12.6：`style` 必须可选，未知值原样保留，缺省值由渲染层决定。 */
@@ -33,9 +34,47 @@ export interface LyricSyllable {
   readonly offsetInLine: number;
 }
 
+/**
+ * 该 `w:` 行所绑定的那条正文（独立 bodyLine 或 `[V:x] CDE` 的同行尾随正文）
+ * **产生的全部事件**的首尾 id —— 含 grace / rest / barline 等不可唱事件，
+ * 与 `LyricSyllable.target` 的可唱事件子序列无关。
+ *
+ * 它是「行边界」这一文本事实的 Domain 表达：Domain 不建模源文本的行，
+ * 这一对引用是恢复行边界的唯一依据。同一条正文被多条 `w:` 绑定（多段歌词）时，
+ * 各 `LyricLine` 共用同一个范围。
+ */
+export interface LyricBodyRange {
+  readonly firstEventId: EventId;
+  readonly lastEventId: EventId;
+}
+
 export interface LyricLine {
   readonly verseIndex: number;
   readonly syllables: readonly LyricSyllable[];
+  /**
+   * 绑定目标产生的事件范围；**该 `w:` 行没有绑定目标、或目标行一个事件都没有产生时
+   * 为 `null`**（显式的「无范围」，绝不伪造一个不存在的 `EventId` 去凑首尾）。
+   */
+  readonly bodyRange: LyricBodyRange | null;
+}
+
+/**
+ * 声部事件序列上「生效单位音长发生变化」的位置（spec §8.5 的 body 区 `L:`）。
+ *
+ * 记录的是**事实的位置映射**，不是语义：`L:` 在源文本里是文档级的一行，而 Domain
+ * 里没有「行」，只有各声部的事件序列——所以这里把它落到「变化后第一个事件」上。
+ * `beforeEventId` 指的就是那个事件（该声部内，从它起 `unitLength` 生效）。
+ *
+ * 口径是**逐声部的生效值变化**而不是「原文里的 `L:` 行清单」：一条全局 `L:` 若影响
+ * 多个声部就产生多条 change（各自的 `beforeEventId` 不同，`raw` / `origin` 同源），
+ * 影响不到任何事件就不产生 change。因此 `beforeEventId` 恒存在，没有 `null` 分支。
+ */
+export interface UnitLengthChange {
+  readonly beforeEventId: EventId;
+  readonly unitLength: Rational;
+  /** 引发这次变化的 `L:` 行的值原文（如 `1/8`）。 */
+  readonly raw: string;
+  readonly origin: SourceRef;
 }
 
 export interface Voice {
@@ -59,6 +98,10 @@ export interface Voice {
   readonly slurs: readonly Slur[];
   readonly tuplets: readonly Tuplet[];
   readonly tabRelations: readonly TabRelation[];
+  /** spec §16.2 的 `>` / `<`：时值已改写进事件，marker 本身作为事实存于此。 */
+  readonly brokenRhythms: readonly BrokenRhythm[];
+  /** body 区 `L:` 在本声部事件序列上的生效位置（文档顺序）。 */
+  readonly unitLengthChanges: readonly UnitLengthChange[];
   readonly lyricLines: readonly LyricLine[];
   /** 同 id `V:` 重复时累加（spec §8.12 INFERRED）。 */
   readonly origins: readonly SourceRef[];

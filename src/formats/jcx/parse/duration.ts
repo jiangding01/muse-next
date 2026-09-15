@@ -84,6 +84,8 @@ export function resolveDefaultUnitLength(
 export interface UnitLengthEntry {
   readonly lineIndex: number;
   readonly unitLength: Rational;
+  /** `L:` 的值原文（如 `1/8`）：事实字段，序列化时直接写回，不由 `unitLength` 反拼。 */
+  readonly raw: string;
   readonly origin: SourceRef;
 }
 
@@ -99,6 +101,8 @@ export interface UnitLengthScope {
   readonly entries: readonly UnitLengthEntry[];
   /** 查询某个 AST 行下标处生效的单位音长。 */
   unitLengthAtLine(lineIndex: number): Rational | undefined;
+  /** 查询某个 AST 行下标处生效的 body 区 `L:` 条目；该处仍由描述头的 `L:` 生效时为 `undefined`。 */
+  entryAtLine(lineIndex: number): UnitLengthEntry | undefined;
   /** 查询某个 `SourceRef`（AstPath 字符串）处生效的单位音长；非行路径时退回 header 值。 */
   unitLengthAt(origin: SourceRef): Rational | undefined;
 }
@@ -121,6 +125,17 @@ export function createUnitLengthScope(
     return current;
   };
 
+  const entryAtLine = (lineIndex: number): UnitLengthEntry | undefined => {
+    let current: UnitLengthEntry | undefined;
+    for (const entry of ordered) {
+      if (entry.lineIndex > lineIndex) {
+        break;
+      }
+      current = entry;
+    }
+    return current;
+  };
+
   const unitLengthAt = (origin: SourceRef): Rational | undefined => {
     const parsed = parseAstPath(origin);
     if (parsed === null || parsed.kind !== 'line') {
@@ -129,7 +144,7 @@ export function createUnitLengthScope(
     return unitLengthAtLine(parsed.line);
   };
 
-  return { header, entries: ordered, unitLengthAtLine, unitLengthAt };
+  return { header, entries: ordered, unitLengthAtLine, entryAtLine, unitLengthAt };
 }
 
 // ---------------------------------------------------------------------------
@@ -155,6 +170,33 @@ function safeRational(num: number, den: number): Rational | undefined {
     return undefined;
   }
   return fromParts(num, den);
+}
+
+/** `safeMul` 的交叉约分用；与 `domain/rational.ts` 内部的同名函数同实现，不跨层复用私有函数。 */
+function gcd(a: number, b: number): number {
+  let x = Math.abs(a);
+  let y = Math.abs(b);
+  while (y !== 0) {
+    const t = x % y;
+    x = y;
+    y = t;
+  }
+  return x;
+}
+
+/**
+ * `domain.mul` 的吞异常版本：越界返回 `undefined` 而不是抛 `RangeError`。
+ *
+ * 约分步骤与 `domain/rational.ts` 的 `mul` 完全一致（交叉约分后再构造），因此
+ * **不会**把 `mul` 本能算出的结果误判为越界；只是把 `mul` 会抛异常的那些输入
+ * 降级成 `undefined`，交由调用方发 diagnostic——parse 层「永不抛异常」的契约。
+ */
+export function safeMul(a: Rational, b: Rational): Rational | undefined {
+  const g1 = gcd(a.num, b.den);
+  const g2 = gcd(b.num, a.den);
+  const safeG1 = g1 === 0 ? 1 : g1;
+  const safeG2 = g2 === 0 ? 1 : g2;
+  return safeRational((a.num / safeG1) * (b.num / safeG2), (a.den / safeG2) * (b.den / safeG1));
 }
 
 /**

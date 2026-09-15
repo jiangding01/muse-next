@@ -1,0 +1,8 @@
+%MUSE2
+X:1
+T:Tab Relation Cross String
+M:4/4
+L:1/8
+K:C
+V:1 style=tab clef=standardtab
+[V:1]a1-S-b3 c5-H-c7 {d8-P-}e10 |

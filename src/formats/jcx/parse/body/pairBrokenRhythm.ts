@@ -8,12 +8,28 @@
  * `durationRaw` 是事实，改写后的 `duration` 是 §1.7 允许进 Domain 的派生值）。
  * 任一侧缺失、不是 note/rest/chord、或没有 `duration`（`L:` 未知，方案 §7 E1）→
  * warning 且**不改时值**。
+ *
+ * 改写**确实发生**时同时登记一条 `BrokenRhythm` 关系（M1.7 T0）：`durationRaw` 记的是
+ * 原文倍数，改写后的 `duration` 与它不再对应，若不记下 marker 本身，「这里写过 `>`」
+ * 这条文本事实就无从恢复。未改写的情形不登记——Domain 里不存在「没有发生的改写」。
+ *
+ * 诊断补充：
+ * | `jcx.parse.broken-rhythm.overflow` | warning | 改写后的时值超出安全整数范围，不改写也不登记 |
  */
 
-import type { MusicEvent, Rational } from '../../../../domain';
-import { fromParts, mul } from '../../../../domain';
+import type { BrokenRhythmRaw, MusicEvent, Rational } from '../../../../domain';
+import { fromParts } from '../../../../domain';
+import { safeMul } from '../duration';
 import type { PairState } from './pairShared';
-import { consume, isBrokenTarget, markerEventIndex, report, reportOnce } from './pairShared';
+import {
+  consume,
+  isBrokenTarget,
+  markerEventIndex,
+  nextRelationId,
+  originsOfPair,
+  report,
+  reportOnce,
+} from './pairShared';
 import type { ScanMarker } from './scanLeaf';
 
 interface Factors {
@@ -37,6 +53,21 @@ export function brokenFactors(raw: string): Factors | undefined {
   return first === '>' ? { left: dotted, right: halved } : { left: halved, right: dotted };
 }
 
+/** 把 marker 原文收窄到 `BrokenRhythmRaw`；表外形态返回 `undefined`（不用 `as` 伪造）。 */
+export function brokenRhythmRawOf(raw: string): BrokenRhythmRaw | undefined {
+  switch (raw) {
+    case '>':
+    case '>>':
+    case '>>>':
+    case '<':
+    case '<<':
+    case '<<<':
+      return raw;
+    default:
+      return undefined;
+  }
+}
+
 function durationOf(event: MusicEvent): Rational | undefined {
   switch (event.kind) {
     case 'note':
@@ -57,7 +88,11 @@ function durationOf(event: MusicEvent): Rational | undefined {
  * broken rhythm 作用于「这个事件占多久」，不改写成员事实（§14.4 的取首音规则只在扫描期生效）。
  */
 function scale(event: MusicEvent, factor: Rational, duration: Rational): MusicEvent | undefined {
-  const next = mul(duration, factor);
+  // `mul` 越界会抛 RangeError；parse 层永不抛异常，改走吞异常的 `safeMul`。
+  const next = safeMul(duration, factor);
+  if (next === undefined) {
+    return undefined;
+  }
   switch (event.kind) {
     case 'note':
       return { ...event, note: { ...event.note, duration: next } };
@@ -112,12 +147,32 @@ export function applyBrokenRhythm(state: PairState, marker: ScanMarker): void {
     reportUnresolved(state, marker, '有一侧没有时值（单位音长未知）');
     return;
   }
+  const raw = brokenRhythmRawOf(marker.raw);
+  if (raw === undefined) {
+    // `brokenFactors` 已经放行的原文必然在这六种之内；保留分支只为不用 `as` 收窄。
+    reportUnresolved(state, marker, '形态不符合 spec §16.2');
+    return;
+  }
   const scaledPrev = scale(prev, factors.left, prevDuration);
   const scaledNext = scale(next, factors.right, nextDuration);
   if (scaledPrev === undefined || scaledNext === undefined) {
-    reportUnresolved(state, marker, '两侧事件无法承载改写后的时值');
+    report(
+      state,
+      'jcx.parse.broken-rhythm.overflow',
+      'warning',
+      `broken rhythm ${JSON.stringify(marker.raw)} 改写后的时值超出安全整数范围，不改写任何时值，也不登记关系`,
+      marker,
+    );
     return;
   }
   state.events[index - 1] = scaledPrev;
   state.events[index] = scaledNext;
+  state.brokenRhythms.push({
+    kind: 'brokenRhythm',
+    id: nextRelationId(state, 'brokenRhythm'),
+    origins: originsOfPair(marker, prev, next),
+    raw,
+    from: prev.id,
+    to: next.id,
+  });
 }

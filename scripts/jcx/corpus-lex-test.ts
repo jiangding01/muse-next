@@ -33,8 +33,11 @@
  *   ⑨  `parseJcxDocument` 对 `buildAst` 产出的 AST 不抛异常
  *   ⑩  `diagnostics` 中无 `error` 级
  *   ⑪  `index` 自洽：`eventById` 数 = 全部 voice events 总数；`relationById`
- *      数 = 四类 relation 总数；`byPath` 的每个 key 都能被 `parseAstPath` 解析
+ *      数 = 五类 relation 总数（含 brokenRhythm）；`byPath` 的每个 key 都能被 `parseAstPath` 解析
  *   ⑫  每个 voice 的 `events` kind 集合 ⊆ 十种 `MusicEvent`（不含 marker）
+ *   ⑬  M1.7 T0 事实字段的 `EventId` 引用自洽：`brokenRhythms.from/to`、
+ *      `unitLengthChanges.beforeEventId`、`LyricLine.bodyRange` 的首尾都落在本
+ *      声部的事件序列内，且 `bodyRange` 首不晚于末
  *
  * parse 级汇总（voices/events/relations/lyricLines/chordShapes/directives 计数、
  * diagnostics 按 severity 计数）逐文件打印；结尾追加 parse 级 diagnostic code
@@ -86,7 +89,7 @@ interface FileReport {
   readonly astOk: boolean;
   /** 本文件在 item 位置残留的通用叶子 token kind（未去重，供全局汇总）。 */
   readonly residualItemLeafKinds: readonly string[];
-  /** parse 级断言（⑨–⑫）是否全部通过。 */
+  /** parse 级断言（⑨–⑬）是否全部通过。 */
   readonly parseOk: boolean;
   /** `undefined` 仅当 `parseJcxDocument` 抛出异常（⑨ 失败）。 */
   readonly parseSummary: ParseSummary | undefined;
@@ -199,7 +202,7 @@ function checkFile(name: string, rawSamples: Map<string, number>): FileReport {
   // ⑧ item 位置残留的通用叶子 token kind（仅观测，不影响 astOk / failures）。
   const residualItemLeafKinds = collectResidualItemLeaves(ast);
 
-  // ⑨–⑫ parse 级断言（M1.6 T10a）：⑨ try/catch + ⑩–⑫ + 汇总，逻辑见
+  // ⑨–⑬ parse 级断言（M1.6 T10a + M1.7 T0）：⑨ try/catch + ⑩–⑬ + 汇总，逻辑见
   // `lib/parseInvariants.ts` 的 `runParseChecks`（与 fixture 级测试共用）。
   const parseRun = runParseChecks(ast);
   failures.push(...parseRun.failures);

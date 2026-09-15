@@ -53,6 +53,8 @@ export type {
   UnknownEvent,
 } from './event';
 export type {
+  BrokenRhythm,
+  BrokenRhythmRaw,
   ClosedSlur,
   Relation,
   RelationBase,
@@ -66,8 +68,10 @@ export type {
 } from './relation';
 export type {
   KnownVoiceStyle,
+  LyricBodyRange,
   LyricLine,
   LyricSyllable,
+  UnitLengthChange,
   Voice,
   VoiceAttribute,
 } from './voice';

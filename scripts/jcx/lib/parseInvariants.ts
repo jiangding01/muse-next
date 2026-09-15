@@ -10,17 +10,21 @@
  *   ① `parseJcxDocument` 无异常 —— 由调用方的 try/catch 负责，本文件不做。
  *   ② `diagnostics` 中无 `error` 级。
  *   ③ `index` 自洽：`eventById` 数 === 全部 voice events 总数；
- *      `relationById` 数 === 四类 relation 总数；`byPath` 每个 key 都能被
+ *      `relationById` 数 === 五类 relation 总数（含 M1.7 T0 的 brokenRhythm）；`byPath` 每个 key 都能被
  *      `parseAstPath` 成功解析。
  *   ④ 每个 voice 的 `events` 不含 marker kind —— 即 kind 集合 ⊆ 十种
  *      `MusicEvent`（方案 §0-5）。
+ *   ⑤ M1.7 T0 的三个事实字段引用自洽：`brokenRhythms.from/to`、
+ *      `unitLengthChanges.beforeEventId`、`LyricLine.bodyRange.first/lastEventId`
+ *      指向的 `EventId` 都必须存在于**本声部**的事件序列中，且 `bodyRange` 的首
+ *      不晚于末。它们是「原位置引用」型事实，指向不存在的事件即为伪造。
  */
 
 import { parseAstPath } from '../../../src/formats/jcx/ast';
 import type { JcxAstDocument } from '../../../src/formats/jcx/ast';
 import type { JcxDiagnostic, JcxSeverity } from '../../../src/formats/jcx/lexer/diagnostics';
 import { parseJcxDocument } from '../../../src/formats/jcx/parse';
-import type { DomainIndex, MusicEvent, Score } from '../../../src/domain';
+import type { DomainIndex, EventId, MusicEvent, Score } from '../../../src/domain';
 
 /** `MusicEvent` 判别联合的全部合法 kind（方案 §1.2）。 */
 export const MUSIC_EVENT_KINDS: ReadonlySet<MusicEvent['kind']> = new Set([
@@ -58,7 +62,13 @@ export function checkIndexConsistency(score: Score, index: DomainIndex): string[
   }
 
   const totalRelations = score.voices.reduce(
-    (sum, voice) => sum + voice.ties.length + voice.slurs.length + voice.tuplets.length + voice.tabRelations.length,
+    (sum, voice) =>
+      sum +
+      voice.ties.length +
+      voice.slurs.length +
+      voice.tuplets.length +
+      voice.tabRelations.length +
+      voice.brokenRhythms.length,
     0,
   );
   if (index.relationById.size !== totalRelations) {
@@ -90,12 +100,51 @@ export function checkEventKindsAllowed(score: Score): string[] {
     : [`${offenders.length} event(s) with disallowed/marker kind, e.g. ${offenders[0]}`];
 }
 
-/** 跑齐 ②–④（①由调用方 try/catch 负责），汇总成一份失败列表。 */
+/**
+ * 断言⑤：M1.7 T0 三个事实字段的 `EventId` 引用都落在本声部事件序列内。
+ *
+ * `bodyRange === null`（目标行零事件 / 无绑定目标）是合法的显式取值，跳过。
+ */
+export function checkFactualEventRefs(score: Score): string[] {
+  const failures: string[] = [];
+  for (const voice of score.voices) {
+    const order = new Map(voice.events.map((event, index) => [event.id, index]));
+    const require = (id: EventId, where: string): number | undefined => {
+      const index = order.get(id);
+      if (index === undefined) {
+        failures.push(`${voice.id}: ${where} references unknown event ${id}`);
+      }
+      return index;
+    };
+    for (const broken of voice.brokenRhythms) {
+      require(broken.from, `brokenRhythms[${broken.id}].from`);
+      require(broken.to, `brokenRhythms[${broken.id}].to`);
+    }
+    for (const change of voice.unitLengthChanges) {
+      require(change.beforeEventId, `unitLengthChanges(${change.raw}).beforeEventId`);
+    }
+    voice.lyricLines.forEach((line, lineIndex) => {
+      const range = line.bodyRange;
+      if (range === null) {
+        return;
+      }
+      const first = require(range.firstEventId, `lyricLines[${lineIndex}].bodyRange.firstEventId`);
+      const last = require(range.lastEventId, `lyricLines[${lineIndex}].bodyRange.lastEventId`);
+      if (first !== undefined && last !== undefined && first > last) {
+        failures.push(`${voice.id}: lyricLines[${lineIndex}].bodyRange is inverted (${range.firstEventId} > ${range.lastEventId})`);
+      }
+    });
+  }
+  return failures;
+}
+
+/** 跑齐 ②–⑤（①由调用方 try/catch 负责），汇总成一份失败列表。 */
 export function checkParseInvariants(score: Score, diagnostics: readonly JcxDiagnostic[], index: DomainIndex): string[] {
   return [
     ...checkNoErrorDiagnostics(diagnostics),
     ...checkIndexConsistency(score, index),
     ...checkEventKindsAllowed(score),
+    ...checkFactualEventRefs(score),
   ];
 }
 
@@ -113,7 +162,11 @@ export interface ParseSummary {
   readonly tupletComplete: number;
   readonly tupletIncomplete: number;
   readonly tabRelations: number;
+  readonly brokenRhythms: number;
+  readonly unitLengthChanges: number;
   readonly lyricLines: number;
+  /** 有 `bodyRange` 的歌词行数（用于「除非目标行零事件，否则都应有范围」的观测）。 */
+  readonly lyricLinesWithBodyRange: number;
   readonly chordShapes: number;
   readonly directives: number;
   readonly diagnosticsBySeverity: Readonly<Record<JcxSeverity, number>>;
@@ -129,12 +182,18 @@ export function summarizeParse(score: Score, diagnostics: readonly JcxDiagnostic
   let tupletComplete = 0;
   let tupletIncomplete = 0;
   let tabRelations = 0;
+  let brokenRhythms = 0;
+  let unitLengthChanges = 0;
   let lyricLines = 0;
+  let lyricLinesWithBodyRange = 0;
 
   for (const voice of score.voices) {
     events += voice.events.length;
     lyricLines += voice.lyricLines.length;
+    lyricLinesWithBodyRange += voice.lyricLines.filter((line) => line.bodyRange !== null).length;
     tabRelations += voice.tabRelations.length;
+    brokenRhythms += voice.brokenRhythms.length;
+    unitLengthChanges += voice.unitLengthChanges.length;
     for (const tie of voice.ties) {
       if (tie.status === 'resolved') tieResolved += 1;
       else tieUnresolved += 1;
@@ -164,7 +223,10 @@ export function summarizeParse(score: Score, diagnostics: readonly JcxDiagnostic
     tupletComplete,
     tupletIncomplete,
     tabRelations,
+    brokenRhythms,
+    unitLengthChanges,
     lyricLines,
+    lyricLinesWithBodyRange,
     chordShapes: score.chordShapes.length,
     directives: score.directives.length,
     diagnosticsBySeverity,

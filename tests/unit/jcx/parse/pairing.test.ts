@@ -109,6 +109,11 @@ function tuplets(voice: Voice): string[] {
   );
 }
 
+/** M1.7 T0：broken rhythm 事实关系的投影 `raw from→to`。 */
+function brokenRhythms(voice: Voice): string[] {
+  return voice.brokenRhythms.map((relation) => `${relation.raw} ${relation.from}→${relation.to}`);
+}
+
 function durationOf(event: MusicEvent): Rational | undefined {
   switch (event.kind) {
     case 'note':
@@ -455,6 +460,110 @@ describe('TAB 连接标记的语料主形态（`{d8-S-}d10`；tab-relation-grace
   });
 });
 
+describe('M1.7 T0：broken rhythm 登记为事实关系（spec §16.2）', () => {
+  it('broken-rhythm-pairs：改写成功的六种形态各登记一条，未改写的不登记', () => {
+    const voice = voiceOf(parseFixture('broken-rhythm-pairs').score, voiceId(1));
+    expect(brokenRhythms(voice)).toEqual([
+      '> v1:e0→v1:e1',
+      '>> v1:e2→v1:e3',
+      '>>> v1:e4→v1:e5',
+      '< v1:e7→v1:e8',
+      '<< v1:e9→v1:e10',
+      '<<< v1:e11→v1:e12',
+      '> v1:e17→v1:e18',
+    ]);
+    // 行尾 `B2>|` 与末尾 `D2>` 两处缺对端：只有 warning，不登记关系。
+    expect(parseCodes(parseFixture('broken-rhythm-pairs').diagnostics)).toContain(
+      'jcx.parse.broken-rhythm.unresolved',
+    );
+  });
+
+  it('broken-rhythm-left：`<` 与 `>` 混排时逐个登记原拼写', () => {
+    const voice = voiceOf(parseFixture('broken-rhythm-left').score, voiceId(1));
+    expect(brokenRhythms(voice)).toEqual([
+      '< v1:e0→v1:e1',
+      '<< v1:e2→v1:e3',
+      '> v1:e5→v1:e6',
+      '>> v1:e7→v1:e8',
+      '<<< v1:e10→v1:e11',
+      '>>> v1:e12→v1:e13',
+    ]);
+  });
+
+  it('单位音长未知（E1）时不改写也不登记', () => {
+    const voice = voiceOf(parseFixture('broken-rhythm-no-unit-length').score, voiceId(1));
+    expect(brokenRhythms(voice)).toEqual([]);
+  });
+
+  it('brokenRhythms 进 DomainIndex：两端都能反查到同一个 relation id', () => {
+    const result = parseJcxDocument(buildAst(lexJcx(fixtureSource('broken-rhythm-left'))));
+    const ids = result.index.relationsByNote.get('v1:e0#') ?? [];
+    expect(ids).toContain('v1:brokenRhythm0');
+    expect(result.index.relationsByNote.get('v1:e1#')).toContain('v1:brokenRhythm0');
+    const first = ids[0];
+    expect(first === undefined ? undefined : result.index.relationById.get(first)?.kind).toBe('brokenRhythm');
+  });
+});
+
+describe('M1.7 T0：broken rhythm 改写越界（M1.6 debt）', () => {
+  const { score, diagnostics } = parseFixture('broken-rhythm-overflow');
+  const voice = voiceOf(score, voiceId(1));
+
+  it('越界不抛异常，只发 warning 且不改写、不登记；同行其余 marker 照常', () => {
+    expect(parseCodes(diagnostics)).toContain('jcx.parse.broken-rhythm.overflow');
+    expect(diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+    expect(brokenRhythms(voice)).toEqual(['> v1:e2→v1:e3']);
+  });
+
+  it('越界的两侧事件保持原时值（不改写）', () => {
+    const first = voice.events[0];
+    expect(first?.kind === 'note' ? first.note.durationRaw : undefined).toBe('9007199254740991');
+    expect(first?.kind === 'note' ? first.note.duration : undefined).toEqual({
+      num: 9007199254740991,
+      den: 8,
+    });
+  });
+});
+
+describe('M1.7 T0：tuplet 保留原拼写（spec §20）', () => {
+  it('`(3` 与 `(3:2:3` 的 raw 各按原文保留', () => {
+    const voice = voiceOf(parseFixture('tuplet').score, voiceId(1));
+    expect(voice.tuplets.map((t) => t.raw)).toEqual(['(3', '(3:2:3', '(3']);
+  });
+
+  it('`(3:0:3` 的 raw 保留 `0`，而 q 仍按「未给出」记录（U25 不解释）', () => {
+    const voice = voiceOf(parseFixture('tuplet-incomplete').score, voiceId(1));
+    expect(voice.tuplets.map((t) => `${t.raw}|q=${t.q === undefined ? 'undefined' : String(t.q)}`)).toEqual([
+      '(3|q=undefined',
+      '(3:2:3|q=2',
+      '(3:0:3|q=undefined',
+      '(3|q=undefined',
+    ]);
+  });
+});
+
+describe('M1.7 T0：TAB 连接标记的同弦校验（spec §26.6 CONFIRMED）', () => {
+  const { score, diagnostics } = parseFixture('tab-relation-cross-string');
+  const voice = voiceOf(score, voiceId(1));
+
+  it('跨弦的 -S- / -P- 发 warning 且不建关系，同弦的 -H- 照常建立', () => {
+    expect(relations(voice)).toEqual([
+      { kind: 'hammer', status: 'paired', from: 'v1:e2', to: 'v1:e3' },
+    ]);
+    expect(parseCodes(diagnostics).filter((c) => c === 'jcx.parse.tab-relation.cross-string')).toHaveLength(2);
+    expect(diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+  });
+
+  it('同弦的既有 fixture 不受影响，不产生 cross-string', () => {
+    expect(parseCodes(parseFixture('tab-relations').diagnostics)).not.toContain(
+      'jcx.parse.tab-relation.cross-string',
+    );
+    expect(parseCodes(parseFixture('tab-relation-grace-exit').diagnostics)).not.toContain(
+      'jcx.parse.tab-relation.cross-string',
+    );
+  });
+});
+
 describe('DomainIndex 自动登记 relationsByNote', () => {
   it('relation 两端都能反查到 relation id', () => {
     const result = parseJcxDocument(buildAst(lexJcx(fixtureSource('tie-chord-members'))));
@@ -474,6 +583,8 @@ describe('DomainIndex 自动登记 relationsByNote', () => {
       'tab-relation-grace-exit',
       'broken-rhythm-pairs',
       'broken-rhythm-no-unit-length',
+      'broken-rhythm-overflow',
+      'tab-relation-cross-string',
     ]) {
       const { diagnostics } = parseFixture(name);
       expect(diagnostics.filter((d) => d.severity === 'error')).toEqual([]);

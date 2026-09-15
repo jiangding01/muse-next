@@ -39,11 +39,20 @@ function relationNoteKeys(relation: Relation): readonly string[] {
     }
     case 'tuplet':
       return relation.members.map((eventId) => noteRefKey({ eventId }));
+    // broken rhythm 两端恒为整个事件（§16.2 只作用于 note/rest/chord，不落到和弦成员）。
+    case 'brokenRhythm':
+      return [noteRefKey({ eventId: relation.from }), noteRefKey({ eventId: relation.to })];
   }
 }
 
 function allRelations(voice: Voice): readonly Relation[] {
-  return [...voice.ties, ...voice.slurs, ...voice.tuplets, ...voice.tabRelations];
+  return [
+    ...voice.ties,
+    ...voice.slurs,
+    ...voice.tuplets,
+    ...voice.tabRelations,
+    ...voice.brokenRhythms,
+  ];
 }
 
 function pushNoteKey(

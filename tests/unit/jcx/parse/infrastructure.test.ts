@@ -163,6 +163,8 @@ describe('buildDomainIndex', () => {
     const voice: Voice = {
       id: v,
       unknownAttributes: [],
+      brokenRhythms: [],
+      unitLengthChanges: [],
       events: [
         { id: e0, origin: 'L7.0', kind: 'rest', rest },
         { id: e1, origin: 'L7.1', kind: 'barline', raw: '|' },

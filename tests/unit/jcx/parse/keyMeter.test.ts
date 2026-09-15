@@ -135,12 +135,19 @@ describe('resolveDefaultUnitLength（spec §8.5 CONFIRMED BY DOCUMENTATION）', 
 
 describe('UnitLengthScope（spec §8.5 U06）', () => {
   const scope = createUnitLengthScope({ num: 1, den: 8 }, [
-    { lineIndex: 12, unitLength: { num: 1, den: 4 }, origin: 'L12' },
-    { lineIndex: 6, unitLength: { num: 1, den: 2 }, origin: 'L6' },
+    { lineIndex: 12, unitLength: { num: 1, den: 4 }, raw: '1/4', origin: 'L12' },
+    { lineIndex: 6, unitLength: { num: 1, den: 2 }, raw: '1/2', origin: 'L6' },
   ]);
 
   it('entries 按文档位置序排列', () => {
     expect(scope.entries.map((e) => e.lineIndex)).toEqual([6, 12]);
+  });
+
+  it('entryAtLine 给出该行生效的 body L: 条目（header 生效时为 undefined）', () => {
+    expect(scope.entryAtLine(5)).toBeUndefined();
+    expect(scope.entryAtLine(6)?.raw).toBe('1/2');
+    expect(scope.entryAtLine(11)?.raw).toBe('1/2');
+    expect(scope.entryAtLine(99)?.raw).toBe('1/4');
   });
 
   it('行号在首条 body L: 之前时用 header 值', () => {

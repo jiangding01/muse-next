@@ -124,6 +124,8 @@ function createImplicitVoice(state: WalkState, node: JcxAstNodeBase, ctx: ParseC
     slurs: [],
     tuplets: [],
     tabRelations: [],
+    brokenRhythms: [],
+    unitLengthChanges: [],
     lyricLines: [],
     origins: [originOf(node)],
   });

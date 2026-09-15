@@ -91,6 +91,8 @@ export function pairTuplet(state: PairState, marker: ScanMarker): void {
     status: complete ? 'complete' : 'incomplete',
     id: nextRelationId(state, 'tuplet'),
     origins: [marker.origin],
+    // 原拼写是事实：`(3` 与 `(3:0:3` 在 p/q/r 上等价，但文本形态不同，不得由数值反拼。
+    raw: marker.raw,
     p: spec.p,
     ...(spec.q === undefined ? {} : { q: spec.q }),
     r: spec.r,

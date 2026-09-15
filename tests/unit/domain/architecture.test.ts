@@ -100,7 +100,9 @@ describe('联合类型可穷尽 narrow', () => {
       case 'slur':
         return relation.from;
       case 'tuplet':
-        return `${String(relation.p)}:${relation.status}`;
+        return `${relation.raw}:${String(relation.p)}:${relation.status}`;
+      case 'brokenRhythm':
+        return `${relation.raw}:${relation.from}`;
       case 'slide':
       case 'hammer':
       case 'pull':

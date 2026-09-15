@@ -65,6 +65,8 @@ export type Slur = ClosedSlur | UnclosedSlur;
 export interface Tuplet extends RelationBase {
   readonly kind: 'tuplet';
   readonly status: 'complete' | 'incomplete';
+  /** `(3` / `(3:0:3` 的原拼写；序列化直接写回它，不由 `p`/`q`/`r` 反拼。 */
+  readonly raw: string;
   readonly p: number;
   readonly q?: number;
   readonly r: number;
@@ -81,4 +83,25 @@ export interface TabRelation extends RelationBase {
   readonly to: NoteRef;
 }
 
-export type Relation = Tie | Slur | Tuplet | TabRelation;
+/** spec §16.2 的六种 marker 形态；lexer 只产出这六种。 */
+export type BrokenRhythmRaw = '>' | '>>' | '>>>' | '<' | '<<' | '<<<';
+
+/**
+ * spec §16.2 的 `>` / `<` 时值改写标记。
+ *
+ * **是 parse-recovery fact，不是语义推断**：parse 层消费 marker 时把相邻两事件的
+ * `duration` 改写成了倍率后的值，而 `durationRaw` 仍是原文——若不记录 marker 本身，
+ * 「这里写过一个 `>`」这条文本事实就彻底丢失。本关系只存原拼写与两端事件引用，
+ * 不重复存倍率（倍率由 `raw` 唯一决定）。
+ *
+ * 只在**改写确实发生**时登记：任一侧缺失、缺时值或越界而未改写时不建关系，
+ * 只留 warning（见 `pairBrokenRhythm.ts`）。形态上恒有两端，故不带 `status`。
+ */
+export interface BrokenRhythm extends RelationBase {
+  readonly kind: 'brokenRhythm';
+  readonly raw: BrokenRhythmRaw;
+  readonly from: EventId;
+  readonly to: EventId;
+}
+
+export type Relation = Tie | Slur | Tuplet | TabRelation | BrokenRhythm;

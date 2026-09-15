@@ -12,6 +12,7 @@
  */
 
 import type {
+  BrokenRhythm,
   MusicEvent,
   Note,
   NoteRef,
@@ -46,6 +47,7 @@ export interface PairState {
   readonly slurs: Slur[];
   readonly tuplets: Tuplet[];
   readonly tabRelations: TabRelation[];
+  readonly brokenRhythms: BrokenRhythm[];
 }
 
 /** 每种 kind 一条独立计数序列（`v1:tie0`、`v1:slur0`、`v1:slide0`…）。 */

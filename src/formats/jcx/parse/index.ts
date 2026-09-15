@@ -30,6 +30,7 @@ import type { ScanByVoice, ScanResult } from './body/scan';
 import { scanSegments } from './body/scan';
 import { pairMarkers } from './body/pairing';
 import { alignLyrics } from './body/lyrics';
+import { collectUnitLengthChanges } from './body/unitLength';
 
 export type { HasAstPath } from './origin';
 export { originOf, originsOf } from './origin';
@@ -62,6 +63,7 @@ export { scanSegments } from './body/scan';
 export type { PairingResult } from './body/pairing';
 export { pairMarkers } from './body/pairing';
 export { alignLyrics } from './body/lyrics';
+export { collectUnitLengthChanges } from './body/unitLength';
 export { parseDurationRaw, parseTabDurationRaw, resolveDuration, scaleByUnitLength } from './duration';
 
 /** `parseHeader` / `parseVoices` 共享的上下文，额外携带声部注册表与 T5 段落归属结果供后续阶段（T6）复用。 */
@@ -148,6 +150,9 @@ export function parseJcxDocument(ast: JcxAstDocument): ParseResult {
       slurs: paired.slurs,
       tuplets: paired.tuplets,
       tabRelations: paired.tabRelations,
+      brokenRhythms: paired.brokenRhythms,
+      // body 区 `L:` 落到本声部事件序列上的生效位置（M1.7 T0，纯事实映射）。
+      unitLengthChanges: collectUnitLengthChanges(paired.events, header.unitLengthScope),
     };
   });
   // T9：`%%` 指令、gchord 和弦图与 text block（与正文扫描互不依赖）。

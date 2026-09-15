@@ -29,11 +29,16 @@
  * | `jcx.parse.lyrics.unverified-separator` | info | 每文档首次音节文本含 `-`/`_`/`\|`（§24.3 UNVERIFIED） |
  * | `jcx.parse.lyrics.overflow` | warning | 每条 `w:` 行首次音节数超过可唱事件数时（§24.2） |
  * | `jcx.parse.lyrics.rest-excluded` | info | 每文档首次遇到目标行里含 rest 时（§24.2 INFERRED，非 spec 明文） |
+ *
+ * `bodyRange`（M1.7 T0）记的是**绑定目标产生的全部事件**的首尾 id——含 grace / rest /
+ * barline 等不可唱事件，与音节 target 的可唱子序列无关；它是「`w:` 覆盖到哪一段正文」
+ * 这条行边界事实的唯一 Domain 表达。目标缺失或目标零事件时为 `null`（显式的「无范围」，
+ * 绝不伪造 `EventId` 去凑首尾）。
  */
 
 import type { JcxFieldLineNode } from '../../ast';
 import { parseAstPath } from '../../ast';
-import type { LyricLine, LyricSyllable, MusicEvent, NoteRef, VoiceId } from '../../../../domain';
+import type { LyricBodyRange, LyricLine, LyricSyllable, MusicEvent, NoteRef, VoiceId } from '../../../../domain';
 import type { ParseContext } from '../header';
 import { reportParse } from '../diagnostics';
 import { originOf } from '../origin';
@@ -228,6 +233,15 @@ function reportSeparatorDiagnostics(
   }
 }
 
+/** 目标行事件的首尾 id；零事件时为 `null`（不伪造 id）。 */
+function bodyRangeOf(events: readonly MusicEvent[]): LyricBodyRange | null {
+  const first = events[0];
+  const last = events[events.length - 1];
+  return first === undefined || last === undefined
+    ? null
+    : { firstEventId: first.id, lastEventId: last.id };
+}
+
 /** 把一条 `w:` 行折成 `LyricSyllable[]`，并按需要对齐到 `singable` 中的可唱事件。 */
 function buildSyllables(
   node: JcxFieldLineNode,
@@ -324,7 +338,11 @@ export function alignLyrics(
 
     const lines = byVoice.get(segment.voiceId) ?? [];
     byVoice.set(segment.voiceId, lines);
-    lines.push({ verseIndex, syllables: buildSyllables(unit.node, singable, ctx) });
+    lines.push({
+      verseIndex,
+      syllables: buildSyllables(unit.node, singable, ctx),
+      bodyRange: bodyRangeOf(targetEvents),
+    });
   }
 
   return byVoice;

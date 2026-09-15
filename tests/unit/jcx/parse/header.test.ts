@@ -112,7 +112,7 @@ describe('body-field-l fixture（spec §8.5 U06）', () => {
   it('header 的 L: 仍是 Score.unitLength，body 的那条进作用域', () => {
     expect(normalized.unitLength).toEqual({ num: 1, den: 4 });
     expect(normalized.unitLengthScope.entries).toEqual([
-      { lineIndex: 8, unitLength: { num: 1, den: 8 }, origin: 'L8' },
+      { lineIndex: 8, unitLength: { num: 1, den: 8 }, raw: '1/8', origin: 'L8' },
     ]);
   });
 

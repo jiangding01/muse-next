@@ -203,3 +203,63 @@ describe('minimal fixture（无 w: 行）', () => {
     expect(parseCodes(diagnostics)).toEqual([]);
   });
 });
+
+/**
+ * M1.7 T0：`LyricLine.bodyRange` —— 该 `w:` 行绑定目标产生的**全部**事件的首尾 id
+ * （含 grace / rest / barline），与音节 target 的可唱子序列无关。
+ */
+function bodyRangeOf(voice: Voice, index: number): string | null {
+  const range = voice.lyricLines[index]?.bodyRange;
+  if (range === undefined) {
+    throw new Error(`fixture 里找不到第 ${index} 条歌词行`);
+  }
+  return range === null ? null : `${range.firstEventId}..${range.lastEventId}`;
+}
+
+describe('M1.7 T0：LyricLine.bodyRange（行边界事实）', () => {
+  it('lyrics fixture：四条 w: 行各自覆盖一整条正文行，含 grace / rest / barline', () => {
+    const voice = voiceOf(parseFixture('lyrics').score, voiceId(1));
+    expect([0, 1, 2, 3].map((i) => bodyRangeOf(voice, i))).toEqual([
+      // `CDEF|`：四个音 + 小节线。
+      'v1:e0..v1:e4',
+      // `{G}A B z C|`：首事件是 grace、末事件是 barline，两者都不可唱但都在范围内。
+      'v1:e5..v1:e10',
+      'v1:e11..v1:e13',
+      'v1:e14..v1:e17',
+    ]);
+    // 范围首尾确实是不可唱事件，证明它不是「可唱事件范围」。
+    expect(voice.events[5]?.kind).toBe('grace');
+    expect(voice.events[10]?.kind).toBe('barline');
+  });
+
+  it('lyrics-multi-verse fixture：同一条正文行的多段歌词共用同一个范围', () => {
+    const voice = voiceOf(parseFixture('lyrics-multi-verse').score, voiceId(1));
+    expect(bodyRangeOf(voice, 0)).toBe('v1:e0..v1:e4');
+    expect(bodyRangeOf(voice, 1)).toBe('v1:e0..v1:e4');
+    expect(voice.lyricLines.map((line) => line.verseIndex)).toEqual([0, 1]);
+  });
+
+  it('lyrics-inline-trailing fixture：绑定 `[V:1] C D` 的同行尾随正文', () => {
+    const voice = voiceOf(parseFixture('lyrics-inline-trailing').score, voiceId(1));
+    expect(bodyRangeOf(voice, 0)).toBe('v1:e0..v1:e1');
+  });
+
+  it('lyrics-no-target fixture：没有绑定目标时 bodyRange 显式为 null，不伪造 EventId', () => {
+    const voice = voiceOf(parseFixture('lyrics-no-target').score, voiceId(1));
+    expect(bodyRangeOf(voice, 0)).toBeNull();
+    expect(voice.lyricLines[0]?.syllables.map((s) => s.target)).toEqual([undefined, undefined]);
+  });
+
+  it('lyrics-tab fixture：TAB 声部的范围同样落在本声部的事件序列内', () => {
+    const score = parseFixture('lyrics-tab').score;
+    for (const voice of score.voices) {
+      const ids = new Set(voice.events.map((event) => event.id));
+      for (const line of voice.lyricLines) {
+        expect(line.bodyRange).not.toBeNull();
+        const range = line.bodyRange;
+        expect(range === null ? null : ids.has(range.firstEventId)).toBe(true);
+        expect(range === null ? null : ids.has(range.lastEventId)).toBe(true);
+      }
+    }
+  });
+});

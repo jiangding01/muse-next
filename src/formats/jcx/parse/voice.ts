@@ -199,7 +199,8 @@ function finalize(state: VoiceBuilderState): Voice {
     ...(state.space === undefined ? {} : { space: state.space }),
     ...(state.clef === undefined ? {} : { clef: state.clef }),
     unknownAttributes: Array.from(state.unknownAttributes, ([key, value]) => ({ key, value })),
-    events: [], ties: [], slurs: [], tuplets: [], tabRelations: [], lyricLines: [],
+    events: [], ties: [], slurs: [], tuplets: [], tabRelations: [],
+    brokenRhythms: [], unitLengthChanges: [], lyricLines: [],
     origins: state.origins,
   };
 }

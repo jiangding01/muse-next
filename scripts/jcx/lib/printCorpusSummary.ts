@@ -55,7 +55,7 @@ export function printResidualLeafSection(reports: readonly { readonly residualIt
 export function printParseSection(reports: readonly ParseSectionReport[], nameWidth: number): void {
   console.log('');
   const parseOkFiles = reports.filter((r) => r.parseOk).length;
-  console.log(`parse level (⑨–⑫) — ${parseOkFiles}/${reports.length} file(s) OK`);
+  console.log(`parse level (⑨–⑬) — ${parseOkFiles}/${reports.length} file(s) OK`);
   console.log('');
   console.log(
     `${pad('file', nameWidth)}  ${pad('voices', 6, true)}  ${pad('events', 6, true)}  ${pad('tie(r/u)', 9, true)}  ${pad('slur(c/u)', 9, true)}  ${pad('tuplet(c/i)', 11, true)}  ${pad('tab', 4, true)}  ${pad('lyric', 5, true)}  ${pad('gchord', 6, true)}  ${pad('dir', 4, true)}  ${pad('err', 4, true)}  ${pad('warn', 5, true)}  ${pad('info', 5, true)}`,
@@ -70,6 +70,28 @@ export function printParseSection(reports: readonly ParseSectionReport[], nameWi
       `${pad(report.name, nameWidth)}  ${pad(s.voices, 6, true)}  ${pad(s.events, 6, true)}  ${pad(`${s.tieResolved}/${s.tieUnresolved}`, 9, true)}  ${pad(`${s.slurClosed}/${s.slurUnclosed}`, 9, true)}  ${pad(`${s.tupletComplete}/${s.tupletIncomplete}`, 11, true)}  ${pad(s.tabRelations, 4, true)}  ${pad(s.lyricLines, 5, true)}  ${pad(s.chordShapes, 6, true)}  ${pad(s.directives, 4, true)}  ${pad(s.diagnosticsBySeverity.error, 4, true)}  ${pad(s.diagnosticsBySeverity.warning, 5, true)}  ${pad(s.diagnosticsBySeverity.info, 5, true)}`,
     );
   }
+
+  // M1.7 T0 的事实字段计数（观测）。当前语料实测：brokenRhythms 35（全为 `>`）、
+  // unitLengthChanges 10（5 行 body `L:` × 各自影响到的 2 个声部）、
+  // lyric bodyRange 94/94（每条 `w:` 行的绑定目标都产生了事件）。
+  let brokenRhythms = 0;
+  let unitLengthChanges = 0;
+  let lyricWithRange = 0;
+  let lyricTotal = 0;
+  for (const report of reports) {
+    const summary = report.parseSummary;
+    if (summary === undefined) {
+      continue;
+    }
+    brokenRhythms += summary.brokenRhythms;
+    unitLengthChanges += summary.unitLengthChanges;
+    lyricWithRange += summary.lyricLinesWithBodyRange;
+    lyricTotal += summary.lyricLines;
+  }
+  console.log('');
+  console.log(
+    `factual fields (M1.7 T0): brokenRhythms=${brokenRhythms}, unitLengthChanges=${unitLengthChanges}, lyric bodyRange=${lyricWithRange}/${lyricTotal} — observational; their structural refs are asserted as ⑬`,
+  );
 
   const codeCounts = new Map<string, number>();
   const unknownKindCounts = new Map<string, number>();

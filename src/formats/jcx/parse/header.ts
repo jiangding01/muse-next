@@ -271,6 +271,7 @@ function applyBodyField(state: HeaderState, node: JcxFieldLineNode, bag: Diagnos
   state.bodyUnitLengths.push({
     lineIndex: lineIndexOf(node),
     unitLength: parsed,
+    raw,
     origin: originOf(node),
   });
   reportParse(

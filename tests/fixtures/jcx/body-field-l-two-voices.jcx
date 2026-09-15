@@ -1,0 +1,13 @@
+%MUSE2
+X:1
+T:Body Field L Two Voices
+M:4/4
+L:1/4
+K:C
+V:1
+V:2
+[V:1]CDEF|
+[V:2]GABc|
+L:1/8
+[V:1]cdef|
+[V:2]gabc'|
