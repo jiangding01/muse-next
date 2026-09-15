@@ -9,12 +9,28 @@ import type { Rational } from './rational';
 import type { SourceRef } from './sourceRef';
 import type { Voice } from './voice';
 
-/** spec §8.4：`M:C` / `M:C|` 不换算为 4/4，只保留 raw，故 num/den 可缺省。 */
-export interface Meter {
-  readonly num?: number;
-  readonly den?: number;
+/** spec §8.4 语料形态：`<整数>/<整数>`。 */
+export interface FractionMeter {
+  readonly kind: 'fraction';
+  readonly num: number;
+  readonly den: number;
   readonly raw: string;
 }
+
+/**
+ * spec §8.4：`M:C` / `M:C|`（DOC-ONLY）与 `M:none` / 复合拍号（UNVERIFIED）
+ * **不换算**，只保留 raw。
+ */
+export interface RawMeter {
+  readonly kind: 'raw';
+  readonly raw: string;
+}
+
+/**
+ * 判别联合而非「num/den 可选」：后者允许 `{ num: 4, den: undefined }` 这种
+ * 半解析状态存在，调用方必须逐字段判空；`kind` 一次判别即可收窄。
+ */
+export type Meter = FractionMeter | RawMeter;
 
 /** spec §8.6：解析不出 `beat=bpm` 形态时只留 raw，不臆造数值。 */
 export interface Tempo {
@@ -73,7 +89,16 @@ export interface GuitarChord {
   readonly origin: SourceRef;
 }
 
-/** `%%` 指令原样保留（spec §10.8）。 */
+/**
+ * `%%` 指令原样保留（spec §10.8）。
+ *
+ * 与 `chordShapes` 的分工（方案 v1.1 §1.7，T9 实现时遵守）：
+ * `Score.directives` **永久保留全部指令**，包括每一条 `%%gchord` 的原文——
+ * 它是「事实」层，序列化回写只认它；`chordShapes` 是「派生」层，只对能成功
+ * 解析的 gchord 额外生成结构化对象。形态不合法（如项数 ≠ 6，§10.1 INFERRED）
+ * 的 gchord 不构造 `GuitarChord`，只留在 `directives` 里并发 warning，
+ * 于是「解析失败」永远不等于「原文丢失」。
+ */
 export interface RawDirective {
   readonly name: string;
   readonly rawValue: string;
@@ -113,7 +138,9 @@ export interface Score {
   readonly tempo?: Tempo;
   readonly key?: KeySignature;
   readonly voices: readonly Voice[];
+  /** 派生层：只含解析成功的 gchord；malformed 的只留在 `directives`（见 `RawDirective` 注释）。 */
   readonly chordShapes: readonly GuitarChord[];
+  /** 事实层：全部 `%%` 指令原文，含已进入 `chordShapes` 的那些。 */
   readonly directives: readonly RawDirective[];
   readonly showFinger?: boolean;
   readonly textBlocks: readonly TextBlock[];

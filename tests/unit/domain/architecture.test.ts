@@ -98,11 +98,12 @@ describe('联合类型可穷尽 narrow', () => {
   function relationKind(relation: Relation): string {
     switch (relation.kind) {
       case 'tie':
-        return relation.to.eventId;
+        // status 判别联合：未解析的 tie 没有 `to`，类型层即禁止误访问。
+        return relation.status === 'resolved' ? relation.to.eventId : relation.from.eventId;
       case 'slur':
         return relation.from;
       case 'tuplet':
-        return String(relation.p);
+        return `${String(relation.p)}:${relation.status}`;
       case 'slide':
       case 'hammer':
       case 'pull':
@@ -129,6 +130,7 @@ describe('联合类型可穷尽 narrow', () => {
         id: relationId(voiceId(1), 'slur', 0),
         origins: [],
         kind: 'slur',
+        status: 'unclosed',
         from: eventId(voiceId(1), 0),
       }),
     ).toBe('v1:e0');

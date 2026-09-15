@@ -21,16 +21,20 @@ import { noteRefKey } from '../../../domain';
 
 function relationNoteKeys(relation: Relation): readonly string[] {
   switch (relation.kind) {
-    case 'tie':
     case 'slide':
     case 'hammer':
     case 'pull':
       return [noteRefKey(relation.from), noteRefKey(relation.to)];
+    // 未解析 / 未闭合的关系只落它确实存在的那一端，不为缺失的对端造 key。
+    case 'tie':
+      return relation.status === 'resolved'
+        ? [noteRefKey(relation.from), noteRefKey(relation.to)]
+        : [noteRefKey(relation.from)];
     case 'slur': {
-      const ends: NoteRef[] = [{ eventId: relation.from }];
-      if (relation.to !== undefined) {
-        ends.push({ eventId: relation.to });
-      }
+      const ends: NoteRef[] =
+        relation.status === 'closed'
+          ? [{ eventId: relation.from }, { eventId: relation.to }]
+          : [{ eventId: relation.from }];
       return ends.map(noteRefKey);
     }
     case 'tuplet':

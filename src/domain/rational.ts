@@ -75,17 +75,21 @@ export function mul(a: Rational, b: Rational): Rational {
   return fromParts(num, den);
 }
 
-/** 全序比较；中间积越界时退化为浮点比较，保证任何输入都有确定结果。 */
+/**
+ * 全序比较，**恒精确**。
+ *
+ * 交叉乘 `a.num * b.den` 与 `b.num * a.den` 可能越过 `Number.MAX_SAFE_INTEGER`
+ * （两个合法 Rational 相比即可触发），此时 number 乘法会静默丢精度，浮点回退也
+ * 只是把不精确换个形式。故改用 BigInt 做交叉乘：Rational 的**表示**仍是 number，
+ * BigInt 只活在本函数内部，不出现在任何类型签名里。
+ *
+ * 代价是每次比较多两次 BigInt 转换；`cmp` 不在热路径上（时值排序、等值判断），
+ * 用精确性换这点开销是划算的。
+ */
 export function cmp(a: Rational, b: Rational): -1 | 0 | 1 {
-  const g = gcd(a.den, b.den);
-  const left = a.num * (b.den / g);
-  const right = b.num * (a.den / g);
-  if (Number.isSafeInteger(left) && Number.isSafeInteger(right)) {
-    return left < right ? -1 : left > right ? 1 : 0;
-  }
-  const fa = a.num / a.den;
-  const fb = b.num / b.den;
-  return fa < fb ? -1 : fa > fb ? 1 : 0;
+  const left = BigInt(a.num) * BigInt(b.den);
+  const right = BigInt(b.num) * BigInt(a.den);
+  return left < right ? -1 : left > right ? 1 : 0;
 }
 
 /** 规范化保证下，相等即字段逐一相等。 */

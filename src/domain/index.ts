@@ -52,7 +52,18 @@ export type {
   TabNoteEvent,
   UnknownEvent,
 } from './event';
-export type { Relation, RelationBase, Slur, TabRelation, Tie, Tuplet } from './relation';
+export type {
+  ClosedSlur,
+  Relation,
+  RelationBase,
+  ResolvedTie,
+  Slur,
+  TabRelation,
+  Tie,
+  Tuplet,
+  UnclosedSlur,
+  UnresolvedTie,
+} from './relation';
 export type {
   KnownVoiceStyle,
   LyricLine,
@@ -67,10 +78,12 @@ export type {
   GuitarFinger,
   GuitarString,
   GuitarStringState,
+  FractionMeter,
   IgnoredField,
   KeySignature,
   Meter,
   RawDirective,
+  RawMeter,
   Score,
   Tempo,
   TextBlock,
