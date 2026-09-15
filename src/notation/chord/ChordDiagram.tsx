@@ -1,4 +1,13 @@
-import type { GuitarChord } from '../../domain/music';
+/**
+ * 和弦图（`%%gchord`）。M1.6 T10b 迁移到正式 Domain 的 `GuitarChord`：
+ * - `baseFret` → `capoFret`（legacy 误名，见 `src/domain/score.ts`）；
+ * - `strings` 是定长 6 项元组（第六弦 → 第一弦），弦序改由数组下标给出，
+ *   不再是每项自带的 `stringIndex`，SVG 几何与迁移前完全一致；
+ * - `barres` 在 M1.6 恒为空数组（spec §10.1 横按记法 UNVERIFIED），因此
+ *   本组件不渲染横按。
+ */
+
+import type { GuitarChord } from '../../domain';
 
 interface ChordDiagramProps {
   chord: GuitarChord;
@@ -30,9 +39,9 @@ export function ChordDiagram({ chord, width = 124 }: ChordDiagramProps) {
         {chord.name}
       </text>
 
-      {chord.baseFret > 1 && (
+      {chord.capoFret > 1 && (
         <text x={2} y={top + fretGap * 0.72} className="base-fret-label">
-          {chord.baseFret}fr
+          {chord.capoFret}fr
         </text>
       )}
 
@@ -52,42 +61,34 @@ export function ChordDiagram({ chord, width = 124 }: ChordDiagramProps) {
             y1={y}
             x2={left + gridWidth}
             y2={y}
-            className={index === 0 && chord.baseFret === 1 ? 'nut-line' : undefined}
+            className={index === 0 && chord.capoFret === 1 ? 'nut-line' : undefined}
           />
         );
       })}
 
-      {chord.strings.map((string) => {
-        const x = left + string.stringIndex * stringGap;
+      {chord.strings.map((string, stringIndex) => {
+        const x = left + stringIndex * stringGap;
 
         if (string.state === 'muted') {
           return (
-            <text key={string.stringIndex} x={x} y={top - 8} textAnchor="middle" className="string-state">
+            <text key={stringIndex} x={x} y={top - 8} textAnchor="middle" className="string-state">
               ×
             </text>
           );
         }
 
         if (string.state === 'open') {
-          return (
-            <circle
-              key={string.stringIndex}
-              cx={x}
-              cy={top - 11}
-              r={4}
-              className="open-string"
-            />
-          );
+          return <circle key={stringIndex} cx={x} cy={top - 11} r={4} className="open-string" />;
         }
 
-        const absoluteFret = string.fret ?? chord.baseFret;
-        const visibleFret = absoluteFret - chord.baseFret + 1;
+        const absoluteFret = string.fret ?? chord.capoFret;
+        const visibleFret = absoluteFret - chord.capoFret + 1;
         const y = top + (Math.max(1, visibleFret) - 0.5) * fretGap;
 
         return (
-          <g key={string.stringIndex}>
+          <g key={stringIndex}>
             <circle cx={x} cy={y} r={7} className="finger-dot" />
-            {string.finger && (
+            {string.finger !== undefined && (
               <text x={x} y={y + 3.5} textAnchor="middle" className="finger-number">
                 {string.finger}
               </text>
