@@ -27,6 +27,19 @@
  *      的现状快照，Lossless AST 允许通用叶子永久存在（T4 已拍板），不是待
  *      修复的缺陷。
  *
+ * 在此之上追加 parse 级断言（M1.6 T10a，逻辑在 `scripts/jcx/lib/parseInvariants.ts`，
+ * 供本脚本与 `tests/unit/jcx/parse/invariants.test.ts` 共用）：
+ *
+ *   ⑨  `parseJcxDocument` 对 `buildAst` 产出的 AST 不抛异常
+ *   ⑩  `diagnostics` 中无 `error` 级
+ *   ⑪  `index` 自洽：`eventById` 数 = 全部 voice events 总数；`relationById`
+ *      数 = 四类 relation 总数；`byPath` 的每个 key 都能被 `parseAstPath` 解析
+ *   ⑫  每个 voice 的 `events` kind 集合 ⊆ 十种 `MusicEvent`（不含 marker）
+ *
+ * parse 级汇总（voices/events/relations/lyricLines/chordShapes/directives 计数、
+ * diagnostics 按 severity 计数）逐文件打印；结尾追加 parse 级 diagnostic code
+ * 直方图与 `UnknownEvent.tokenKind` 去重清单——两者都是观测指标，不影响退出码。
+ *
  * 语料**不进 git**（HANDOFF §39.1 / §51），因此 CI 上目录必然缺失：
  * 目录不存在或没有 `.jcx` 时打印跳过并 `exit 0`，只有真正的断言失败才 `exit 1`。
  *
@@ -49,6 +62,8 @@ import {
   collectResidualItemLeaves,
   findDuplicatePaths,
 } from './lib/astInvariants';
+import { runParseChecks, type ParseSummary } from './lib/parseInvariants';
+import { printParseSection, printResidualLeafSection } from './lib/printCorpusSummary';
 
 const PROJECT_ROOT = resolve(fileURLToPath(new URL('.', import.meta.url)), '../..');
 const CORPUS_DIR = resolve(PROJECT_ROOT, 'legacy-corpus/jcx');
@@ -71,6 +86,14 @@ interface FileReport {
   readonly astOk: boolean;
   /** 本文件在 item 位置残留的通用叶子 token kind（未去重，供全局汇总）。 */
   readonly residualItemLeafKinds: readonly string[];
+  /** parse 级断言（⑨–⑫）是否全部通过。 */
+  readonly parseOk: boolean;
+  /** `undefined` 仅当 `parseJcxDocument` 抛出异常（⑨ 失败）。 */
+  readonly parseSummary: ParseSummary | undefined;
+  /** 本文件全部 `UnknownEvent.tokenKind`（未去重，供全局汇总）。 */
+  readonly unknownEventTokenKinds: readonly string[];
+  /** 本文件全部 parse-level diagnostic 的 `code`（未去重，供全局汇总）。 */
+  readonly diagnosticCodes: readonly string[];
 }
 
 function listCorpusFiles(): string[] {
@@ -176,6 +199,15 @@ function checkFile(name: string, rawSamples: Map<string, number>): FileReport {
   // ⑧ item 位置残留的通用叶子 token kind（仅观测，不影响 astOk / failures）。
   const residualItemLeafKinds = collectResidualItemLeaves(ast);
 
+  // ⑨–⑫ parse 级断言（M1.6 T10a）：⑨ try/catch + ⑩–⑫ + 汇总，逻辑见
+  // `lib/parseInvariants.ts` 的 `runParseChecks`（与 fixture 级测试共用）。
+  const parseRun = runParseChecks(ast);
+  failures.push(...parseRun.failures);
+  const parseOk = parseRun.failures.length === 0;
+  const parseSummary = parseRun.summary;
+  const unknownEventTokenKinds = parseRun.unknownEventTokenKinds;
+  const diagnosticCodes = parseRun.diagnosticCodes;
+
   return {
     name,
     encoding: result.encoding,
@@ -187,6 +219,10 @@ function checkFile(name: string, rawSamples: Map<string, number>): FileReport {
     failures,
     astOk,
     residualItemLeafKinds,
+    parseOk,
+    parseSummary,
+    unknownEventTokenKinds,
+    diagnosticCodes,
   };
 }
 
@@ -223,6 +259,10 @@ function main(): void {
         failures: [`uncaught ${message}`],
         astOk: false,
         residualItemLeafKinds: [],
+        parseOk: false,
+        parseSummary: undefined,
+        unknownEventTokenKinds: [],
+        diagnosticCodes: [],
       });
     }
   }
@@ -282,27 +322,8 @@ function main(): void {
     `AST level: printAst full-text + line-text + path-uniqueness — ${astOkFiles}/${reports.length} file(s) OK`,
   );
 
-  // ⑧ item 位置残留的通用叶子清单（观测，不影响退出码）。见
-  // scripts/jcx/lib/astInvariants.ts 的 collectResidualItemLeaves 口径注释：
-  // 只统计 bodyLine.items / inlineFieldLine.trailing / chord-grace-tabGroup
-  // 的 items（含嵌套），不算 note/rest/tabNote 内部 children、括号组
-  // open/close、字段行外壳 children。
-  const residualLeafCounts = new Map<string, number>();
-  for (const report of reports) {
-    for (const kind of report.residualItemLeafKinds) {
-      residualLeafCounts.set(kind, (residualLeafCounts.get(kind) ?? 0) + 1);
-    }
-  }
-  const residualLeafTotal = [...residualLeafCounts.values()].reduce((a, b) => a + b, 0);
-  const residualLeafDistinct = [...residualLeafCounts.entries()].sort(
-    (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
-  );
-  console.log(
-    `residual item-position leaves (kind === 'token' inside items/trailing): ${residualLeafTotal} total, ${residualLeafDistinct.length} distinct token kind(s) — observational only, not a failure condition`,
-  );
-  for (const [kind, count] of residualLeafDistinct) {
-    console.log(`  ${pad(count, 4, true)} x  ${kind}`);
-  }
+  printResidualLeafSection(reports);
+  printParseSection(reports, nameWidth);
 
   if (failedFiles > 0 || crashed > 0) {
     console.log('');
@@ -312,7 +333,7 @@ function main(): void {
 
   console.log('');
   console.log(
-    `PASSED: ${reports.length}/${reports.length} file(s), all lexer-level and AST-level assertions hold.`,
+    `PASSED: ${reports.length}/${reports.length} file(s), all lexer-level, AST-level and parse-level assertions hold.`,
   );
 }
 
