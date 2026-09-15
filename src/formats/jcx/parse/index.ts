@@ -16,12 +16,24 @@ import { documentPath } from '../ast';
 import { createDiagnosticBag } from '../lexer/diagnostics';
 import type { JcxDiagnostic } from '../lexer/diagnostics';
 import type { DomainIndex, Score } from '../../../domain';
+import type { HeaderNormalization } from './header';
 import { buildDomainIndex } from './buildIndex';
+import { onceKeyed } from './diagnostics';
+import { parseHeader } from './header';
 
 export type { HasAstPath } from './origin';
 export { originOf, originsOf } from './origin';
 export type { OnceKeyedReporter } from './diagnostics';
 export { onceKeyed, reportParse } from './diagnostics';
+export type { HeaderNormalization, ParseContext } from './header';
+export { parseHeader } from './header';
+export { meterRatio, parseKey, parseMeter, parseTempo } from './keyMeter';
+export type { UnitLengthEntry, UnitLengthScope } from './duration';
+export {
+  createUnitLengthScope,
+  parseUnitLength,
+  resolveDefaultUnitLength,
+} from './duration';
 export { buildDomainIndex } from './buildIndex';
 
 export interface ParseResult {
@@ -30,18 +42,28 @@ export interface ParseResult {
   readonly index: DomainIndex;
 }
 
-/** 「空但合法」的 Score：各数组为空，可选字段一律缺省，origin 指向文档根。 */
-function emptyScore(): Score {
+/**
+ * 由已归一化的描述头拼出 Score。
+ *
+ * voices / chordShapes / directives / textBlocks 仍为空：分别是 T4–T8 与 T9 的产出，
+ * 此处不放 stub，避免死代码。
+ */
+function buildScore(header: HeaderNormalization): Score {
   return {
-    titles: [],
-    credits: [],
-    notes: [],
+    titles: header.titles,
+    credits: header.credits,
+    notes: header.notes,
+    ...(header.refNumber === undefined ? {} : { refNumber: header.refNumber }),
+    ...(header.meter === undefined ? {} : { meter: header.meter }),
+    ...(header.unitLength === undefined ? {} : { unitLength: header.unitLength }),
+    ...(header.tempo === undefined ? {} : { tempo: header.tempo }),
+    ...(header.key === undefined ? {} : { key: header.key }),
     voices: [],
     chordShapes: [],
     directives: [],
     textBlocks: [],
-    unknownFields: [],
-    ignoredFields: [],
+    unknownFields: header.unknownFields,
+    ignoredFields: header.ignoredFields,
     origin: documentPath(),
   };
 }
@@ -49,16 +71,17 @@ function emptyScore(): Score {
 /**
  * 把 Lossless AST 归一化为 Domain `Score`。
  *
- * 当前为 T2 骨架：只产出空 Score + 空 index，并把 AST 诊断原样带出。
+ * 当前进度：T3 描述头已接入；正文（声部 / 事件 / 配对 / 歌词）仍待 T4–T8。
  */
 export function parseJcxDocument(ast: JcxAstDocument): ParseResult {
   const bag = createDiagnosticBag();
+  // 各阶段共享同一个 bag 与同一个「每文档一次」去重作用域。
+  const ctx = { bag, once: onceKeyed(bag) };
 
-  // T3 header normalization 在此消费 ast.lines 的 field / directive 行：parseHeader(ast, bag, once)
-  // T4/T5 voice 属性与段落归属：parseVoices(...)
-  // T6–T8 事件扫描、配对、歌词：parseBody(...)
-  // 三个阶段共享同一个 bag 与一个 onceKeyed(bag) 作用域；此处刻意不放 stub 函数，避免死代码。
-  const score = emptyScore();
+  const header = parseHeader(ast, ctx);
+  // T4/T5 声部属性与段落归属消费 header.voiceFields；T6 用 header.unitLengthScope；
+  // T8 用 header.lyricFields。此处刻意不放 stub 函数，避免死代码。
+  const score = buildScore(header);
 
   return {
     score,

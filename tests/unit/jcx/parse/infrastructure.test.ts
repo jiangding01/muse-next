@@ -32,12 +32,9 @@ const SPAN: SourceSpan = {
   end: { offset: 1, line: 1, column: 1 },
 };
 
-describe('parseJcxDocument（T2 骨架）', () => {
-  it('minimal fixture 产出空但合法的 Score', () => {
+describe('parseJcxDocument（T2 骨架 + T3 描述头）', () => {
+  it('minimal fixture 的正文聚合仍为空（T4–T9 未接入）', () => {
     const { score } = parseMinimal();
-    expect(score.titles).toEqual([]);
-    expect(score.credits).toEqual([]);
-    expect(score.notes).toEqual([]);
     expect(score.voices).toEqual([]);
     expect(score.chordShapes).toEqual([]);
     expect(score.directives).toEqual([]);
@@ -45,8 +42,8 @@ describe('parseJcxDocument（T2 骨架）', () => {
     expect(score.unknownFields).toEqual([]);
     expect(score.ignoredFields).toEqual([]);
     expect(score.origin).toBe(documentPath());
-    expect(score.meter).toBeUndefined();
-    expect(score.unitLength).toBeUndefined();
+    // 描述头字段的断言在 header.test.ts；这里只锁「T3 确已接入」。
+    expect(score.titles).toEqual(['Test Piece One']);
   });
 
   it('index 五张表全空', () => {
@@ -65,7 +62,7 @@ describe('parseJcxDocument（T2 骨架）', () => {
     expect(result.diagnostics).not.toBe(ast.diagnostics);
   });
 
-  it('T2 阶段不产生 error 级诊断', () => {
+  it('不产生 error 级诊断', () => {
     expect(parseMinimal().diagnostics.some((d) => d.severity === 'error')).toBe(false);
   });
 
