@@ -1,0 +1,11 @@
+%MUSE2
+%%showfinger 1
+%%showfinger maybe
+%%showfinger 0
+X:1
+T:Showfinger Malformed Then Valid Sample
+M:4/4
+L:1/4
+K:C
+V:1
+CDEF|GABc|

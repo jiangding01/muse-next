@@ -18,6 +18,8 @@ import type { JcxDiagnostic } from '../lexer/diagnostics';
 import type { DomainIndex, IgnoredField, Score, Voice } from '../../../domain';
 import type { HeaderNormalization, ParseContext } from './header';
 import { buildDomainIndex } from './buildIndex';
+import type { DirectivesNormalization } from './directives';
+import { collectDirectives } from './directives';
 import { onceKeyed } from './diagnostics';
 import { parseHeader } from './header';
 import type { VoiceRegistry } from './voice';
@@ -42,6 +44,9 @@ export {
   resolveDefaultUnitLength,
 } from './duration';
 export { buildDomainIndex } from './buildIndex';
+export type { DirectivesNormalization } from './directives';
+export { collectDirectives } from './directives';
+export { parseGChordValue } from './gchord';
 export type {
   SplitVoiceAttributes,
   VoiceAttributeToken,
@@ -74,13 +79,14 @@ export interface ParseResult {
 /**
  * 由已归一化的描述头拼出 Score。
  *
- * voices / chordShapes / directives / textBlocks 仍为空：分别是 T4–T8 与 T9 的产出，
- * 此处不放 stub，避免死代码。
+ * lyricLines 仍为空（T8 的产出）；其余字段已由 T3–T7（描述头 / 声部 / 正文）与
+ * T9（`%%` 指令、gchord、text block）填满。
  */
 function buildScore(
   header: HeaderNormalization,
   voices: readonly Voice[],
   extraIgnoredFields: readonly IgnoredField[],
+  directives: DirectivesNormalization,
 ): Score {
   return {
     titles: header.titles,
@@ -92,9 +98,10 @@ function buildScore(
     ...(header.tempo === undefined ? {} : { tempo: header.tempo }),
     ...(header.key === undefined ? {} : { key: header.key }),
     voices,
-    chordShapes: [],
-    directives: [],
-    textBlocks: [],
+    chordShapes: directives.chordShapes,
+    directives: directives.directives,
+    ...(directives.showFinger === undefined ? {} : { showFinger: directives.showFinger }),
+    textBlocks: directives.textBlocks,
     unknownFields: header.unknownFields,
     ignoredFields: [...header.ignoredFields, ...extraIgnoredFields],
     origin: documentPath(),
@@ -104,7 +111,8 @@ function buildScore(
 /**
  * 把 Lossless AST 归一化为 Domain `Score`。
  *
- * 当前进度：T3 描述头、T4 声部属性、T5 段落归属、T6 事件扫描、T7 marker 配对已接入；歌词仍待 T8。
+ * 当前进度：T3 描述头、T4 声部属性、T5 段落归属、T6 事件扫描、T7 marker 配对、
+ * T9 指令 / gchord / text block 已接入；歌词仍待 T8。
  */
 export function parseJcxDocument(ast: JcxAstDocument): ParseResult {
   const bag = createDiagnosticBag();
@@ -140,8 +148,10 @@ export function parseJcxDocument(ast: JcxAstDocument): ParseResult {
       tabRelations: paired.tabRelations,
     };
   });
+  // T9：`%%` 指令、gchord 和弦图与 text block（与正文扫描互不依赖）。
+  const directives = collectDirectives(ast, ctx);
   // T8 用 header.lyricFields。此处刻意不放 stub 函数，避免死代码。
-  const score = buildScore(header, voices, segmentsResult.ignoredFields);
+  const score = buildScore(header, voices, segmentsResult.ignoredFields, directives);
 
   return {
     score,
