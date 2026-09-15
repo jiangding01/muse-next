@@ -69,21 +69,37 @@ export interface JcxLexResult {
 }
 
 export interface JcxLexOptions {
-  /** 字节输入时的解码结果覆盖；文本输入时用于声明来源编码（缺省 `utf-8`）。 */
-  readonly encoding?: JcxEncoding;
+  /**
+   * 字符串输入的来源编码标注（缺省 `utf-8`）。仅用于标注 `JcxLexResult.encoding`
+   * 字段，不影响词法分析本身（字符串输入不经过解码）。
+   *
+   * 字节输入没有这个选项：编码必须始终来自 `decodeJcx()` 的检测结果，
+   * 不接受调用方覆盖——见下方重载签名。
+   */
+  readonly sourceEncoding?: JcxEncoding;
 }
 
 /** §5.5：BOM 不剥离，文本首字符即 U+FEFF。 */
 const BOM = '\uFEFF';
 
 /**
- * 词法分析一个 JCX 文档。
+ * 词法分析一个 JCX 文档（字符串输入）。
  *
- * - `Uint8Array` 输入：先经 `decodeJcx` 做 §4.3 编码检测（BOM 不剥离）。
- * - `string` 输入：直接词法分析；`encoding` 仅作为来源标注，缺省 `utf-8`。
+ * `sourceEncoding` 仅作为来源标注，缺省 `utf-8`；字符串输入不经过解码，
+ * 因此绝无异常。
  *
  * 返回的 `diagnostics` 在 M1.4 阶段不含 `error` 级（方案 §5）。
  */
+export function lexJcx(source: string, options?: JcxLexOptions): JcxLexResult;
+/**
+ * 词法分析一个 JCX 文档（字节输入）。
+ *
+ * 先经 `decodeJcx` 做 §4.3 编码检测（BOM 不剥离）；编码必须始终采用
+ * `decodeJcx()` 的检测结果，不接受 `options`——因此本重载不暴露该参数。
+ *
+ * 返回的 `diagnostics` 在 M1.4 阶段不含 `error` 级（方案 §5）。
+ */
+export function lexJcx(source: Uint8Array): JcxLexResult;
 export function lexJcx(source: string | Uint8Array, options?: JcxLexOptions): JcxLexResult {
   let text: string;
   let encoding: JcxEncoding;
@@ -91,12 +107,14 @@ export function lexJcx(source: string | Uint8Array, options?: JcxLexOptions): Jc
 
   if (typeof source === 'string') {
     text = source;
-    encoding = options?.encoding ?? 'utf-8';
+    encoding = options?.sourceEncoding ?? 'utf-8';
     hasBom = text.startsWith(BOM);
   } else {
+    // 字节输入：忽略任何传入的 options（类型层已禁止调用方传入），
+    // 始终采用 decodeJcx() 的检测结果。
     const decoded = decodeJcx(source);
     text = decoded.text;
-    encoding = options?.encoding ?? decoded.encoding;
+    encoding = decoded.encoding;
     hasBom = decoded.hasBom;
   }
 

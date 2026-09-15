@@ -332,11 +332,11 @@ describe('lexJcx —— 对外入口（方案 §1 / §5）', () => {
     expect(rawOf(flattenTokens([...result.lines]))).toBe(text);
   });
 
-  it('字符串输入：opts.encoding 覆盖来源标注', () => {
-    expect(lexJcx('K:C\n', { encoding: 'gb18030' }).encoding).toBe('gb18030');
+  it('字符串输入：opts.sourceEncoding 覆盖来源标注', () => {
+    expect(lexJcx('K:C\n', { sourceEncoding: 'gb18030' }).encoding).toBe('gb18030');
   });
 
-  it('字节输入：走 decodeJcx 检测编码', () => {
+  it('字节输入：encoding 始终等于 decodeJcx 的检测值（无 options 可覆盖）', () => {
     const bytes = new TextEncoder().encode('X:1\nK:C\nCDEF|');
     const result = lexJcx(bytes);
     expect(result.encoding).toBe('utf-8');

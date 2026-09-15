@@ -2,7 +2,7 @@
  * JCX 编码检测结果类型（M1.4 T2，§4 Encoding）。
  */
 
-export type JcxEncoding = 'utf-8' | 'gb18030' | 'utf-16le' | 'utf-16be';
+export type JcxEncoding = 'utf-8' | 'gb18030';
 
 export interface DecodedJcx {
   /**
