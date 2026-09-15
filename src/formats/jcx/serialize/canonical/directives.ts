@@ -26,6 +26,12 @@
  * 信息，禁止 trim）+ `closed ? '%%endtext' : 什么都不写`——决策 9/拍板 M：
  * 未闭合是事实，canonical 不补 `%%endtext`。
  *
+ * **未闭合的 text block 必须排在整个文档最后**（M1.7 T4 补充）：没有
+ * `%%endtext` 的块会把其后的所有行都吃进块内容里，写在 body 之前就等于让
+ * 重新解析时整个正文消失——那不是「不补 endtext」，是丢正文。因此
+ * `renderDirectives` 只输出**已闭合**的块，未闭合的由
+ * `renderTrailingTextBlocks` 在组装末尾输出（两者各自保持数组内顺序）。
+ *
  * **directives 与 textBlocks 的相对顺序**：Domain 把两者分别存进两个数组，
  * **没有保存它们交错的文档顺序**，从 Domain 无法还原。canonical 规则固定为
  * 「先全部 directives，再全部 textBlocks」，各自保持数组内顺序（拍板 F：
@@ -44,12 +50,26 @@ export function renderDirectives(score: Score): string[] {
   }
 
   for (const block of score.textBlocks) {
+    if (!block.closed) {
+      continue;
+    }
     lines.push('%%begintext');
     lines.push(...block.lines);
-    if (block.closed) {
-      lines.push('%%endtext');
-    }
+    lines.push('%%endtext');
   }
 
+  return lines;
+}
+
+/** 未闭合 text block（见文件头）：由 `canonical/index.ts` 放在全文最后。 */
+export function renderTrailingTextBlocks(score: Score): string[] {
+  const lines: string[] = [];
+  for (const block of score.textBlocks) {
+    if (block.closed) {
+      continue;
+    }
+    lines.push('%%begintext');
+    lines.push(...block.lines);
+  }
   return lines;
 }

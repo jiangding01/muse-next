@@ -52,9 +52,26 @@ function canonicalLines(name: string, magicHeader?: boolean): string[] {
   return linesOf(canonicalOf(fixtureSource(name), magicHeader));
 }
 
+/**
+ * body 之前的部分（header + `%%` + text block + `V:` 声明 + body 区开头的
+ * `ignoredFields` 重放）。T4 落地 body 后，全文不再止于 `V:` 行，本文件的
+ * 断言只关心 body 之前这一段——body 的断言在 `canonical.body.test.ts`。
+ */
+function headerPart(name: string, magicHeader?: boolean): string[] {
+  const lines = canonicalLines(name, magicHeader);
+  const start = lines.findIndex((line) => line.startsWith('[V:'));
+  return start === -1 ? lines : lines.slice(0, start);
+}
+
+function headerPartOf(text: string): string[] {
+  const lines = linesOf(text);
+  const start = lines.findIndex((line) => line.startsWith('[V:'));
+  return start === -1 ? lines : lines.slice(0, start);
+}
+
 describe('canonical 骨架 —— header 行序与字段格式（方案 §3）', () => {
   it('minimal：%MUSE2 → X → T → M → L → K → V，冒号后恒一个空格', () => {
-    expect(canonicalLines('minimal')).toEqual([
+    expect(headerPart('minimal')).toEqual([
       '%MUSE2',
       'X: 1',
       'T: Test Piece One',
@@ -87,7 +104,7 @@ describe('canonical 骨架 —— header 行序与字段格式（方案 §3）',
   });
 
   it('重复 T:/C: 按数组顺序各占一行，不拼接（spec §8.12）', () => {
-    expect(canonicalLines('duplicate-fields')).toEqual([
+    expect(headerPart('duplicate-fields')).toEqual([
       '%MUSE2',
       'X: 1',
       'T: First Title',
@@ -115,7 +132,7 @@ describe('canonical 骨架 —— header 行序与字段格式（方案 §3）',
     // 该 fixture 的第二条 K:G 落在 body 区，属 ignoredFields（spec §8.13）。
     expect(score.ignoredFields.map((field) => `${field.name}:${field.rawValue}`)).toEqual(['K:G']);
 
-    const lines = linesOf(serializeCanonical(score, { mode: 'canonical' }).text);
+    const lines = headerPartOf(serializeCanonical(score, { mode: 'canonical' }).text);
     expect(lines).toEqual([
       '%MUSE2',
       'X: 1',
@@ -125,14 +142,20 @@ describe('canonical 骨架 —— header 行序与字段格式（方案 §3）',
       'Q: 1/4=96',
       'K: C',
       'V:1',
+      // body 区开头由 T4 重放 ignoredFields（`K: G`），它在 `K: C` 之后、
+      // 第一条 `[V:n]` 之前，re-parse 仍是 IgnoredField。
+      'K: G',
     ]);
     // ignoredFields 写在 header 区会被 re-parse 当成正式字段并改写语义，
     // 因此 T3 完全不输出它们，交由 T4 在 body 区重放。
-    expect(lines.filter((line) => line.startsWith('K:'))).toEqual(['K: C']);
+    // header 区（`V:` 声明之前）只有描述头那一条 `K:`。
+    expect(lines.slice(0, lines.indexOf('V:1')).filter((line) => line.startsWith('K:'))).toEqual([
+      'K: C',
+    ]);
   });
 
   it('unknownFields 按数组顺序写在 header 区尾、K: 之前（拍板 G）', () => {
-    expect(canonicalLines('unknown-field')).toEqual([
+    expect(headerPart('unknown-field')).toEqual([
       '%MUSE2',
       'X: 1',
       'T: Unknown Field Sample',
@@ -153,7 +176,7 @@ describe('canonical 骨架 —— header 行序与字段格式（方案 §3）',
 
 describe('canonical 骨架 —— %% 指令与 text block（决策 9、10）', () => {
   it('%% 后空白被规范化：`%% continueall` / `%%\\tindent` → `%%name value`', () => {
-    const lines = canonicalLines('directive-spaced');
+    const lines = headerPart('directive-spaced');
     expect(lines.slice(-3)).toEqual(['%%continueall yes', '%%indent 2.5cm', 'V:1']);
   });
 
@@ -162,7 +185,7 @@ describe('canonical 骨架 —— %% 指令与 text block（决策 9、10）', (
     const { score } = loadJcx(source);
     expect(score.showFinger).toBe(false);
 
-    const lines = linesOf(serializeCanonical(score, { mode: 'canonical' }).text);
+    const lines = headerPartOf(serializeCanonical(score, { mode: 'canonical' }).text);
     expect(lines.filter((line) => line.startsWith('%%'))).toEqual([
       '%%showfinger 1',
       '%%showfinger yes',
@@ -175,7 +198,7 @@ describe('canonical 骨架 —— %% 指令与 text block（决策 9、10）', (
   });
 
   it('text block：begintext + 原样内容行（含前导空白）+ endtext', () => {
-    const lines = canonicalLines('text-block');
+    const lines = headerPart('text-block');
     expect(lines.slice(-6)).toEqual([
       '%%begintext',
       '      first text line',
@@ -191,31 +214,34 @@ describe('canonical 骨架 —— %% 指令与 text block（决策 9、10）', (
     const { score } = loadJcx(source);
     expect(score.textBlocks[0]?.closed).toBe(false);
 
+    // 未闭合的块会把其后的所有行吃进块内容，因此 T4 起它排在**全文最后**
+    // （`directives.ts` 的 `renderTrailingTextBlocks`），body 在它之前。
     const lines = linesOf(serializeCanonical(score, { mode: 'canonical' }).text);
-    expect(lines.slice(-3)).toEqual(['%%begintext', '  tail note line', 'V:1']);
+    expect(lines.slice(-2)).toEqual(['%%begintext', '  tail note line']);
     expect(lines).not.toContain('%%endtext');
+    expect(lines.indexOf('V:1')).toBeLessThan(lines.indexOf('%%begintext'));
   });
 });
 
 describe('canonical 骨架 —— V: 声明行（拍板 C / F）', () => {
   it('声部 id 用声明序号：v1 → V:1、v2 → V:2', () => {
-    const lines = canonicalLines('voice-quoted-name');
+    const lines = headerPart('voice-quoted-name');
     expect(lines.slice(-2)).toEqual(['V:1 name="a b"', 'V:2 name=伴奏']);
   });
 
   it('volumn=46 → vol=46、instrument=24 → ins=24；play=1 保持原拼写在尾部', () => {
-    expect(canonicalLines('voice-alias-new').at(-1)).toBe('V:1 ins=24 vol=46 play=1');
+    expect(headerPart('voice-alias-new').at(-1)).toBe('V:1 ins=24 vol=46 play=1');
   });
 
   it('短别名 ins=/vol= 原样往返（不写 UNVERIFIED 的 volume=）', () => {
-    const line = canonicalLines('voice-alias-old').at(-1);
+    const line = headerPart('voice-alias-old').at(-1);
     expect(line).toBe('V:1 ins=24 vol=40');
     expect(line).not.toContain('volume=');
     expect(line).not.toContain('volumn=');
   });
 
   it('属性顺序固定为 name style clef ins vol bracket…，与源顺序无关', () => {
-    const lines = canonicalLines('canonical-header-roles');
+    const lines = headerPart('canonical-header-roles');
     expect(lines.slice(-2)).toEqual([
       'V:1 name=Guitar style=tab clef=standardtab ins=24 vol=40 bracket=2',
       'V:2 name="Lead Line" play=1',
