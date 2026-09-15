@@ -94,7 +94,11 @@ export interface ScanValueContext {
 
 /**
  * pitch 形态的时值：原文直接是 §16.1 的形态。
- * 无时值原文时既无 `duration` 也无 `durationRaw`（缺省即 1 倍单位音长，由 M2 解释）。
+ *
+ * **无时值原文 = 隐含 multiplier 1**（spec §16.1 的 `duration` 可缺省，缺省即 1 倍单位音长；
+ * 与 ABC 2.1 §4.3 一致）：`unitLength` 已知时物化 `duration = unitLength`，`durationRaw`
+ * 仍然缺省——它是「源文本里写了什么」的事实字段，不能凭空补一个 `"1"`。
+ * 只有 `unitLength` 未知（方案 §7 E1）才连 `duration` 一起省略。
  */
 function pitchDuration(
   raw: string,
@@ -102,7 +106,7 @@ function pitchDuration(
   dur: ScanValueContext,
 ): { readonly duration?: Rational; readonly durationRaw?: string } {
   if (raw === '') {
-    return {};
+    return dur.unitLength === undefined ? {} : { duration: dur.unitLength };
   }
   const value = resolveDuration(parseDurationRaw(raw), raw, dur.unitLength, dur.ctx.bag, node.span, node.path);
   return { durationRaw: raw, ...(value === undefined ? {} : { duration: value }) };

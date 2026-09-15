@@ -153,8 +153,10 @@ describe('scan-pitch-kinds fixture（spec §14–§25 的 pitch 形态全覆盖�
       'note',
       'rest',
     ]);
-    // `[CE2G]`：首音无时值 → 整个和弦无时值，**不**去后面的成员里找替补。
-    expect(third.duration).toBeUndefined();
+    // `[CE2G]`：首音没有时值原文 → 隐含 1 倍单位音长（1/8），组时值**严格**取首音，
+    // 不去后面写了 `2` 的成员里找替补。
+    expect(third.duration).toEqual({ num: 1, den: 8 });
+    expect(third.members[0]?.durationRaw).toBeUndefined();
     expect(third.members[1]?.duration).toEqual({ num: 1, den: 4 });
   });
 
@@ -276,17 +278,17 @@ describe('scan-tab-kinds fixture（spec §26）', () => {
   });
 
   it('TAB 时值由 `*` / `/` 引出（§26.5），tabGroup 取末音（§26.8）', () => {
-    // `a1*2`=2、`ax`/`Va1` 无时值、`c10/`=1/2、`ax//`=1/4、`z*2`=2、
-    // `V[ax/bx/]` 取末音 `bx/`=1/2、`[a1*2bx]` 末音无时值 → 整组无时值。
+    // `a1*2`=2、`ax`/`Va1` 无时值原文 → 隐含 1 倍（1/8）、`c10/`=1/2、`ax//`=1/4、
+    // `z*2`=2、`V[ax/bx/]` 取末音 `bx/`=1/2、`[a1*2bx]` 取末音 `bx`（隐含 1 倍 = 1/8）。
     expect(durations(voice)).toEqual([
       { num: 1, den: 4 },
-      undefined,
-      undefined,
+      { num: 1, den: 8 },
+      { num: 1, den: 8 },
       { num: 1, den: 16 },
       { num: 1, den: 32 },
       { num: 1, den: 4 },
       { num: 1, den: 16 },
-      undefined,
+      { num: 1, den: 8 },
       // `a1/2`：§26.5 的 `/N` 形态 = 1/2 单位音长。
       { num: 1, den: 16 },
       undefined,
@@ -301,12 +303,13 @@ describe('scan-tab-kinds fixture（spec §26）', () => {
     expect(note.note).toMatchObject({ durationRaw: '/2', duration: { num: 1, den: 16 } });
   });
 
-  it('tabGroup 严格取末音：末音无时值时整组无时值，首音的时值不顶替（§26.8）', () => {
+  it('tabGroup 严格取末音：`[a1*2bx]` 取 `bx` 的隐含 1 倍，首音的 `*2` 不顶替（§26.8）', () => {
     const group = voice.events[7];
     if (group?.kind !== 'tabGroup') {
       throw new Error('expected tabGroup event');
     }
-    expect(group.duration).toBeUndefined();
+    expect(group.duration).toEqual({ num: 1, den: 8 });
+    expect(group.members[1]?.durationRaw).toBeUndefined();
     expect(group.members[0]?.duration).toEqual({ num: 1, den: 4 });
   });
 
@@ -388,17 +391,18 @@ describe('scan-markers fixture（方案 §0-5：marker 不进 events、时值不
   });
 
   it('broken rhythm 两侧时值未被改写（改写是 T7 的事）', () => {
+    // 无时值原文的音符取隐含 1 倍（1/8）；`C2>D2` 两侧在扫描期仍是各自的 1/4。
     expect(durations(pitchVoice).slice(0, 10)).toEqual([
       { num: 1, den: 4 },
       { num: 1, den: 4 },
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
+      { num: 1, den: 8 },
+      { num: 1, den: 8 },
+      { num: 1, den: 8 },
+      { num: 1, den: 8 },
+      { num: 1, den: 8 },
       { num: 1, den: 4 },
       { num: 1, den: 4 },
-      undefined,
+      { num: 1, den: 8 },
     ]);
   });
 });

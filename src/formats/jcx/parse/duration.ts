@@ -202,6 +202,9 @@ export function parseTabDurationRaw(sep: string, value: string): Rational | unde
 /**
  * 倍数 × 单位音长（方案 §1.7 派生行，CONFIRMED §16.1 + §8.5）。
  *
+ * 口径：时值原文缺省时倍数隐含为 1，由调用方（`scanPitch.pitchDuration`）直接取
+ * `unitLength` 物化，不经过本函数——`durationRaw` 保持缺省，只有 `duration` 被派生。
+ *
  * `unitLength` 未知（E1）时返回 `undefined`：只保留 `durationRaw`，不猜时值。
  * 乘法越界同样降级为 `undefined`，不抛。
  */
