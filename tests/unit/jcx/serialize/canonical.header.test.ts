@@ -313,11 +313,12 @@ describe('canonical 骨架 —— 输出形态与幂等', () => {
     expect(result.diagnostics).toEqual([]);
   });
 
-  it('公开入口 serializeJcx 在 T6 L2 验收前拒绝 canonical（不承诺未经验证的往返契约）', () => {
+  it('公开入口 serializeJcx（T6 接线后）canonical 分支与内部 serializeCanonical 等价', () => {
     const { score } = loadJcx(fixtureSource('minimal'));
-    expect(() => serializeJcx(score, { mode: 'canonical' })).toThrow(
-      'canonical: unavailable until M1.7 T6 (L2 round-trip not yet verified)',
-    );
+    const viaPublic = serializeJcx(score, { mode: 'canonical' });
+    const viaInternal = serializeCanonical(score, { mode: 'canonical' });
+    expect(viaPublic.text).toBe(viaInternal.text);
+    expect(viaPublic.encoding).toBe('utf-8');
   });
 
   it('header 骨架幂等：canonical(parse(canonical(x))) === canonical(x)', () => {

@@ -1,8 +1,11 @@
 /**
  * M1.7 Serializer 类型定义（方案 v1.1 §1）。
  *
- * `serializeJcx` 本体由 T2 实现；本文件只放置签名所需的类型，供 T1
- * `encodeJcx` 与后续任务（preserve/canonical）共用。
+ * 本文件只放置公开签名所需的类型，由 `encodeJcx` / preserve / canonical 共用。
+ * `CanonicalOptions.magicHeader` 缺省为 `true`（拍板 A：canonical 默认输出
+ * `%MUSE2`）。canonical 内部的 `CanonicalResult` 比 `SerializeResult` 多一个
+ * `bodyLines`，那是实现细节，**不进入本文件的公开类型**：公开 `serializeJcx`
+ * 的返回类型恒为 `SerializeResult`。
  */
 
 import type { JcxDiagnostic } from '../lexer/diagnostics';

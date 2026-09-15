@@ -5,7 +5,11 @@
  * `lexer/` `ast/` `parse/` 各子目录——那些导出仍然存在，服务于本层内部与单元
  * 测试，但不构成对外契约。
  *
- * 管线：`lexJcx → buildAst → parseJcxDocument`，一次性版本见 `loadJcx`。
+ * 管线：`lexJcx → buildAst → parseJcxDocument`，一次性版本见 `loadJcx`；
+ * 反向的 `serializeJcx` 两种模式都已开放（M1.7 T6）：
+ * `serializeJcx(loadResult, { mode: 'preserve' })` 逐字节还原原文，
+ * `serializeJcx(score, { mode: 'canonical' })` 输出规范形态（恒 UTF-8 / 无 BOM /
+ * LF / 末尾换行），后者丢注释与排版、保全部事实（方案 v1.1 §3 / 拍板 H）。
  */
 
 export type { LoadResult } from './loadJcx';

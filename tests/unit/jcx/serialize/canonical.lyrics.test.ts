@@ -448,11 +448,11 @@ describe('canonical 内部入口 serializeCanonical（公开 serializeJcx 接线
     expect(linesOf(withoutHeader.text)).toEqual(linesOf(withHeader.text).filter((l) => l !== '%MUSE2'));
   });
 
-  it('公开入口 serializeJcx 在 T6 L2 验收前仍拒绝 canonical（2026-09-15 用户裁决①覆盖原 T5 任务书第 2 项）', () => {
+  it('公开入口 serializeJcx（T6 接线后）输出与内部 serializeCanonical 一致，歌词行不丢', () => {
     const { score } = loadJcx(fixtureSource('lyrics'));
-    expect(() => serializeJcx(score, { mode: 'canonical' })).toThrow(
-      'canonical: unavailable until M1.7 T6 (L2 round-trip not yet verified)',
-    );
+    const viaPublic = serializeJcx(score, { mode: 'canonical' });
+    expect(viaPublic.text).toBe(serializeCanonical(score, { mode: 'canonical' }).text);
+    expect(linesOf(viaPublic.text).some((line) => line.startsWith('w:'))).toBe(true);
   });
 });
 

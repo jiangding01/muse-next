@@ -1,9 +1,10 @@
 /**
  * serialize 模块边界架构守卫（M1.7 方案 v1.1 §1）。
  *
- * `encodeJcx.ts` 已存在，钉死其 import 白名单；`preserve.ts`（T2）与
- * `canonical/**`（T3/T4/T5）尚未落地，规则先写好，文件/目录不存在时跳过
- * （不是「测试作废」，是「等它出现再生效」）。
+ * `encodeJcx.ts` 钉死 import 白名单；`preserve.ts` 不得 import domain；
+ * `canonical/**` 不得 import ast/lexer；`projection/**`（T6）与 canonical 同侧，
+ * 只许 import domain 与同目录文件。preserve/canonical 两条规则写在文件不存在时
+ * 跳过的形式里（历史原因，等它出现再生效），projection 一条则直接要求非空。
  */
 
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
@@ -66,6 +67,16 @@ describe('serialize 架构守卫（方案 §1 模块边界表）', () => {
     const specs = collectSpecifiers(readFileSync(file, 'utf8'));
     const bad = specs.filter((spec) => /(^|\/)domain(\/|$)/.test(spec));
     expect(bad).toEqual([]);
+  });
+
+  it('projection/** 只 import domain 与同目录文件（T6）', () => {
+    const files = collectTsFiles(join(SERIALIZE_DIR, 'projection'));
+    expect(files.length).toBeGreaterThan(0);
+    for (const file of files) {
+      const specs = collectSpecifiers(readFileSync(file, 'utf8'));
+      const bad = specs.filter((spec) => !spec.startsWith('./') && !/(^|\/)domain(\/|$)/.test(spec));
+      expect(bad).toEqual([]);
+    }
   });
 
   it('canonical/** 不 import ast/lexer（T3-T5 落地前跳过）', () => {
