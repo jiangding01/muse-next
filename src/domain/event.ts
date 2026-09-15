@@ -22,11 +22,20 @@ export interface EventBase {
 
 export type PitchLetter = 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G';
 
-/** `register` 区分大小写字母（spec §14.1/§14.2），`octaveShift` 为 `'` / `,` 的净位移。 */
+/**
+ * `register` 区分大小写字母（spec §14.1/§14.2）。
+ *
+ * 八度修饰是**两个字段**：
+ * - `octaveRaw` 是事实——原文中全部 `'` / `,` 的拼接（没有修饰时为空串）；
+ * - `octaveShift` 是派生，且**只在标记同方向时才存在**：spec §14.2 明文裁决混合叠加
+ *   （如 `C,'`）的行为 UNVERIFIED、「不实现抵消逻辑，保留原文」，故混合方向时本字段
+ *   整个省略，只留 `octaveRaw`（parse 层同时发 info）。
+ */
 export interface Pitch {
   readonly letter: PitchLetter;
   readonly register: 'upper' | 'lower';
-  readonly octaveShift: number;
+  readonly octaveRaw?: string;
+  readonly octaveShift?: number;
 }
 
 export type Accidental = '^' | '^^' | '_' | '__' | '=';

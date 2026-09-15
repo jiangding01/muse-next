@@ -131,3 +131,115 @@ export function createUnitLengthScope(
 
   return { header, entries: ordered, unitLengthAtLine, unitLengthAt };
 }
+
+// ---------------------------------------------------------------------------
+// 时值形态解析（T6；spec §16.1 / §26.5）
+// ---------------------------------------------------------------------------
+
+/** §16.1 的五种形态，外加 `N/M`。顺序即优先级，`//` 必须先于 `/N` 与 `/`。 */
+const DURATION_FORMS: readonly { readonly re: RegExp; readonly of: (m: RegExpExecArray) => readonly [number, number] }[] = [
+  { re: /^(\d+)\/(\d+)$/, of: (m) => [Number(m[1]), Number(m[2])] },
+  { re: /^(\d+)\/$/, of: (m) => [Number(m[1]), 2] },
+  { re: /^(\d+)$/, of: (m) => [Number(m[1]), 1] },
+  { re: /^\/\/$/, of: () => [1, 4] },
+  { re: /^\/(\d+)$/, of: (m) => [1, Number(m[1])] },
+  { re: /^\/$/, of: () => [1, 2] },
+];
+
+/**
+ * `fromParts` 的吞异常包装：`den === 0`（如 `C/0`）与越界输入一律降级为 `undefined`，
+ * 不向上抛——parse 层「永不抛异常」的契约优先于「越界必须可见」。
+ */
+function safeRational(num: number, den: number): Rational | undefined {
+  if (!Number.isSafeInteger(num) || !Number.isSafeInteger(den) || den === 0) {
+    return undefined;
+  }
+  return fromParts(num, den);
+}
+
+/**
+ * 把 pitch 模式的时值原文解析成「单位音长的倍数」（spec §16.1）。
+ *
+ * `N` → N、`N/` → N/2、`/N` → 1/N、`/` → 1/2、`//` → 1/4、`N/M` → N/M。
+ * 形态不符返回 `undefined`（lexer 的 `DURATION_RE` 已保证形态，实际不应发生）。
+ */
+export function parseDurationRaw(raw: string): Rational | undefined {
+  for (const form of DURATION_FORMS) {
+    const match = form.re.exec(raw);
+    if (match !== null) {
+      const [num, den] = form.of(match);
+      return safeRational(num, den);
+    }
+  }
+  return undefined;
+}
+
+/**
+ * TAB 模式的时值（spec §26.5）：分隔符本身携带语义，必须与数值一起看。
+ *
+ * 逐条对照 §26.5 的 `tab-note = [stroke] string-letter fret [ ("*"|"/") duration-value ]`：
+ * - `*N` → N 倍单位音长（§26.5 表：`a1*2` = 2 倍；`*3/2` 为同表的 DOC-ONLY 附点形态）；
+ * - `/N` → 1/N（§26.5 表：`a1/2` = 1/2）；`/` 单独出现 → 1/2（§16.1 的 `/` 简写，
+ *   §26.5 只写「用 `/` 分隔」而未单列该简写，故此处依据是 §16.1 + §26.9 的形态共享）；
+ * - `//` → 1/4：**§26.5 未直接定义**，依据是 §16.1 的 `//` = 1/4 加上 §16.1 语料印证行
+ *   明确把 `ax//`（TAB 中的 `//`）列为同一形态。
+ *
+ * 无法归入以上形态（如 `*` 后无数值、`//` 后又跟数值）时返回 `undefined`，由调用方发诊断。
+ */
+export function parseTabDurationRaw(sep: string, value: string): Rational | undefined {
+  if (sep === '*') {
+    return value === '' ? undefined : parseDurationRaw(value);
+  }
+  if (sep === '//') {
+    return value === '' ? parseDurationRaw('//') : undefined;
+  }
+  if (sep === '/') {
+    return parseDurationRaw(`/${value}`);
+  }
+  return undefined;
+}
+
+/**
+ * 倍数 × 单位音长（方案 §1.7 派生行，CONFIRMED §16.1 + §8.5）。
+ *
+ * `unitLength` 未知（E1）时返回 `undefined`：只保留 `durationRaw`，不猜时值。
+ * 乘法越界同样降级为 `undefined`，不抛。
+ */
+export function scaleByUnitLength(
+  factor: Rational,
+  unitLength: Rational | undefined,
+): Rational | undefined {
+  if (unitLength === undefined) {
+    return undefined;
+  }
+  return safeRational(factor.num * unitLength.num, factor.den * unitLength.den);
+}
+
+/**
+ * T6 的统一出口：`factor` 已由 `parseDurationRaw` / `parseTabDurationRaw` 得出。
+ *
+ * - `factor === undefined` 且原文非空 → warning `jcx.parse.duration.unparsed`
+ *   （lexer 已保证形态，触发即说明 lexer 与本表脱节，故取 warning 而非静默）；
+ * - `unitLength` 未知 → 返回 `undefined`（E1，不再重复发诊断，header 已发过一次）。
+ */
+export function resolveDuration(
+  factor: Rational | undefined,
+  raw: string,
+  unitLength: Rational | undefined,
+  bag: DiagnosticBag,
+  span: SourceSpan,
+  path: SourceRef,
+): Rational | undefined {
+  if (factor === undefined) {
+    reportParse(
+      bag,
+      'jcx.parse.duration.unparsed',
+      'warning',
+      `时值原文 ${JSON.stringify(raw)} 不符合 spec §16.1 / §26.5 的任何形态，只保留 durationRaw`,
+      span,
+      path,
+    );
+    return undefined;
+  }
+  return scaleByUnitLength(factor, unitLength);
+}

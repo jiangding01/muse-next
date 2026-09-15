@@ -1,0 +1,10 @@
+%MUSE2
+X:1
+T:Scan Markers
+M:4/4
+L:1/8
+K:C
+V:1
+V:2 style=tab clef=standardtab
+[V:1]C2-D2 (3CDE (C D) C2>D2 [C-C] [CD-] {C2}A-
+[V:2]a1-S-a3 {a1-S-a3}|

@@ -24,6 +24,8 @@ import type { VoiceRegistry } from './voice';
 import { parseVoices } from './voice';
 import type { SegmentsResult, VoiceSegment } from './body/segments';
 import { assignSegments } from './body/segments';
+import type { ScanByVoice } from './body/scan';
+import { scanSegments } from './body/scan';
 
 export type { HasAstPath } from './origin';
 export { originOf, originsOf } from './origin';
@@ -48,11 +50,16 @@ export type {
 export { parseVoices, splitVoiceAttributes } from './voice';
 export type { SegmentsResult, SegmentUnit, VoiceSegment } from './body/segments';
 export { assignSegments } from './body/segments';
+export type { ScanByVoice, ScanMarker, ScanMarkerAnchor, ScanMarkerKind, ScanResult } from './body/scan';
+export { scanSegments } from './body/scan';
+export { parseDurationRaw, parseTabDurationRaw, resolveDuration, scaleByUnitLength } from './duration';
 
 /** `parseHeader` / `parseVoices` 共享的上下文，额外携带声部注册表与 T5 段落归属结果供后续阶段（T6）复用。 */
 interface DocumentParseContext extends ParseContext {
   voiceRegistry: VoiceRegistry | undefined;
   segments: readonly VoiceSegment[];
+  /** T6 扫描出的事件流与并列 marker 列表；marker 留给 T7 配对，不进 `Voice.events`。 */
+  scan: ScanByVoice;
 }
 
 export interface ParseResult {
@@ -94,12 +101,18 @@ function buildScore(
 /**
  * 把 Lossless AST 归一化为 Domain `Score`。
  *
- * 当前进度：T3 描述头、T4 声部属性、T5 段落归属已接入；事件扫描 / 配对 / 歌词仍待 T6–T8。
+ * 当前进度：T3 描述头、T4 声部属性、T5 段落归属、T6 事件扫描已接入；配对 / 歌词仍待 T7–T8。
  */
 export function parseJcxDocument(ast: JcxAstDocument): ParseResult {
   const bag = createDiagnosticBag();
   // 各阶段共享同一个 bag 与同一个「每文档一次」去重作用域。
-  const ctx: DocumentParseContext = { bag, once: onceKeyed(bag), voiceRegistry: undefined, segments: [] };
+  const ctx: DocumentParseContext = {
+    bag,
+    once: onceKeyed(bag),
+    voiceRegistry: undefined,
+    segments: [],
+    scan: new Map(),
+  };
 
   const header = parseHeader(ast, ctx);
   const { voices: declaredVoices, registry } = parseVoices(header.voiceFields, ctx);
@@ -108,8 +121,15 @@ export function parseJcxDocument(ast: JcxAstDocument): ParseResult {
   const segmentsResult: SegmentsResult = assignSegments(ast, registry, declaredVoices, ctx);
   // T5 可能因未声明 id / 无任何声明而隐式追加声部，Score.voices 必须反映最终列表。
   ctx.segments = segmentsResult.segments;
-  // T6 用 header.unitLengthScope；T8 用 header.lyricFields。此处刻意不放 stub 函数，避免死代码。
-  const score = buildScore(header, segmentsResult.voices, segmentsResult.ignoredFields);
+  // T6：扫描事件流；marker 挂在 ctx 上供 T7 配对，不进 Score（方案 §0-5）。
+  const scan = scanSegments(segmentsResult.segments, header.unitLengthScope, ctx);
+  ctx.scan = scan;
+  const voices = segmentsResult.voices.map((voice) => ({
+    ...voice,
+    events: scan.get(voice.id)?.events ?? [],
+  }));
+  // T8 用 header.lyricFields。此处刻意不放 stub 函数，避免死代码。
+  const score = buildScore(header, voices, segmentsResult.ignoredFields);
 
   return {
     score,

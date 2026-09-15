@@ -33,7 +33,7 @@ const SPAN: SourceSpan = {
 };
 
 describe('parseJcxDocument（T2 骨架 + T3 描述头 + T4 声部）', () => {
-  it('minimal fixture 只有一个 V:1 声部；其余正文聚合仍为空（T5–T9 未接入）', () => {
+  it('minimal fixture 只有一个 V:1 声部；和弦图 / 指令 / 文本块仍为空（T9 未接入）', () => {
     const { score } = parseMinimal();
     expect(score.voices).toHaveLength(1);
     expect(score.voices[0]?.id).toBe(voiceId(1));
@@ -47,13 +47,16 @@ describe('parseJcxDocument（T2 骨架 + T3 描述头 + T4 声部）', () => {
     expect(score.titles).toEqual(['Test Piece One']);
   });
 
-  it('index：voiceById 有一条，其余四张表全空', () => {
-    const { index } = parseMinimal();
-    expect(index.eventById.size).toBe(0);
+  it('index：voiceById 一条、eventById 覆盖 T6 扫出的全部事件，relation 表仍空（T7 未接入）', () => {
+    const { score, index } = parseMinimal();
+    const events = score.voices[0]?.events ?? [];
+    expect(events.length).toBeGreaterThan(0);
+    expect(index.eventById.size).toBe(events.length);
     expect(index.relationById.size).toBe(0);
     expect(index.relationsByNote.size).toBe(0);
     expect(index.voiceById.size).toBe(1);
-    expect(index.byPath.size).toBe(1);
+    // byPath：1 条声部 origin + 每个事件各一条。
+    expect(index.byPath.size).toBe(events.length + 1);
     expect(index.voiceById.has(voiceId(1))).toBe(true);
   });
 
