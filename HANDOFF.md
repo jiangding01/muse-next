@@ -1755,10 +1755,10 @@ Parser / Domain Model
 ✅ M1.7
 Serializer
 
-🟡 M1.8
-Round-trip compatibility（本地完成，封板待 CI：fixture 矩阵 + closure + CI
-看板已就绪，见 §30.1「M1.8 实际状态」；本地验收全绿，push 后三平台 Actions
-确认绿即可补 ✅）
+✅ M1.8
+Round-trip compatibility（fixture 矩阵 + closure + CI 看板，见 §30.1「M1.8
+实际状态」；2026-09-16 GitHub Actions run 35054230663 于 macOS/Windows/Ubuntu
+三平台 typecheck / test / fixture report 全绿后封板）
 
 → M2
 Notation Rendering
@@ -2245,13 +2245,13 @@ unencodable-replaced` warning；canonical 恒 UTF-8，不受此限制。
 虚勾——「Voice aliases」只回写 CONFIRMED 的短别名/全称，不包含 spec 标
 UNVERIFIED 的 `volume=`。
 
-### M1.8 实际状态（Round-trip guardrails，T0–T4，本地完成，封板待 CI）
+### M1.8 实际状态（Round-trip guardrails，T0–T4，已封板）
 
-M1.8 T0–T4 已在本地全部完成（逐条证据见本小节末尾），**但尚未封板**——
-封板条件是 push 后 GitHub Actions 三平台（macOS/Windows/Ubuntu）实际跑绿，
-见本小节末尾「验收边界」与 §60 后「M1.8 实施记录」勾选表的最后一条。CI
-确认绿之后再补一个极小 seal commit，把 §30 milestone 表的 🟡 改成 ✅、
-把 §60 那一条未勾项打勾。**护栏定位**：本里程碑的产出是
+M1.8 T0–T4 全部完成（逐条证据见本小节末尾）并于 2026-09-16 封板：push 后
+GitHub Actions run 35054230663 在 macOS/Windows/Ubuntu 三平台上 typecheck、
+`npm test`、`jcx:fixture-report` 三步全绿（首次 run 35054050143 的 Windows
+失败是 fixture 名路径分隔符问题，已在 `fixtureNames` 生产端归一化为 `/`，
+见 3f578fe）。**护栏定位**：本里程碑的产出是
 断言、fixture、CI 产物，`src/` 是**零行为变更**——唯一 approved 例外是 T1
 在 `canonical/body.ts` 加的一条谓词：`breaksLineAfter` 把
 `UnknownEvent(tokenKind: 'barline')` 也算作断行点。作用域仅限断行规划，不
@@ -2371,11 +2371,10 @@ tests/unit/jcx/serialize` 各跑 3 次取中位数，均为 warm run）：本文
 
 **验收边界（重要）**：以上全部数字来自本地 `npm run typecheck && npx
 vitest run && npm run jcx:corpus-test && npm run jcx:fixture-report` 跑绿，
-**只证明 workflow 配置与脚本本身正确**，不等价于「CI 已跑绿」——本次改动
-未 push，`.github/workflows/ci.yml` 新增的 `jcx:fixture-report` 步骤尚未
-在 GitHub Actions 的 macOS/Windows/Ubuntu 三平台矩阵上实际执行过。**M1.8
-最终封板以 push 后三平台 Actions 全绿为准**；见 §60 DoD 逐条勾选处的
-「待 push 后 CI 确认」标注。
+**只证明 workflow 配置与脚本本身正确**；封板证据是 push 后的实际运行：
+GitHub Actions run 35054230663（commit 3f578fe）在 macOS/Windows/Ubuntu
+三平台上 `npm run typecheck`、`npm test`、`jcx:fixture-report` 全部 success，
+见 §60 后勾选表最后一条。
 
 **M1.8 §60 DoD 逐条证据**：见 §60 后的勾选表。
 
@@ -3500,11 +3499,12 @@ DoD 打勾只按最终实际结果给，不支持的条目不勾并写原因；�
 - [x] *HANDOFF 无语料文件名/本地路径* —— 已自查确认本次新增段落不含本地
   绝对路径与真实语料文件名（fixture 名如 `unclosed-chord.jcx`/
   `grace-unclosed.jcx` 是自建测试样本，不是语料，允许出现）。
-- [ ] **CI 三平台（macOS/Windows/Ubuntu，见 `.github/workflows/ci.yml`
+- [x] **CI 三平台（macOS/Windows/Ubuntu，见 `.github/workflows/ci.yml`
   `strategy.matrix.os`）在 `npm run jcx:fixture-report` 步骤上实际跑绿** ——
-  **待 push 后 CI 确认**。本次改动未 push，workflow 文件本身已按方案改好
-  （`npm test` 之后新增一步），但「CI 上真的三平台全绿」这一验收标准无法
-  在本地环境证明，不得直接打勾。
+  2026-09-16 GitHub Actions run 35054230663（commit 3f578fe）三平台的
+  typecheck / `npm test` / fixture report 步骤均 success。首次 run
+  35054050143 的 Windows `npm test` 失败为 fixture 名反斜杠分隔符问题，
+  已在 `roundtrip.helpers.ts` 归一化后重跑通过。
 
 ---
 
@@ -3861,13 +3861,11 @@ JCX
 
 # 69. 当前明确的下一任务
 
-M1.3 / M1.4 / M1.5 / M1.6 / M1.7 已完成；M1.8 **本地完成，封板待 CI**
+M1.3 / M1.4 / M1.5 / M1.6 / M1.7 / M1.8 已完成
 （§30.1 有文件结构、Domain 边界、归一化规则、evidence 策略、Serializer
 模块清单/canonical 规则摘要、语料四级回归结果、以及 M1.8 T0–T4 的 fixture
-矩阵/closure/CI 看板完整现状快照；§55–§59 DoD 已逐条打勾给证据，§60 DoD
-除「CI 三平台实跑」一条待 push 后确认外其余已逐条打勾）。接手后可以直接
-开始 M2，**前提是先确认 M1.8 的 CI 三平台已经跑绿**（push 后看
-GitHub Actions；若还没绿，先处理 CI 失败，不要带着未确认的封板往下走）：
+矩阵/closure/CI 看板完整现状快照；§55–§60 DoD 已逐条打勾给证据，M1.8 于
+2026-09-16 经 GitHub Actions 三平台全绿封板）。接手后直接开始 M2：
 
 ```text
 M2 — Notation Rendering（§40）
