@@ -136,3 +136,34 @@ function systemBox(index: number, width: number, geometry: SystemGeometry): Box 
     height: geometry.systemHeight,
   };
 }
+
+/**
+ * 纵向重排：把已经**横向排好**的 system 序列按各自的额外高度重新堆叠（T5.2-A）。
+ *
+ * 为什么要分两步：`layoutSystems` 的横向打包（哪个 measure 落在第几行、行内 x 多少）
+ * 只取决于 measure 宽度与容器宽度，**与行高无关**；而一行实际要多高，取决于该行里
+ * 出现了几行歌词——那要等横向归属定下来才知道。于是先打包、再回填行高，两步都是纯
+ * 函数，合起来仍然确定性。
+ *
+ * `extraHeights[i]` 是第 i 行在 `geometry.systemHeight` 之外额外需要的高度（负值按 0
+ * 处理）。相邻两行的垂直范围因此恒不相交（间隔恰为 `systemGap`）。`box.width` 与
+ * `index` 原样保留——本函数只动 y 与 height。
+ */
+export function restackSystems(
+  systems: readonly System[],
+  extraHeights: readonly number[],
+  geometry: Pick<SystemGeometry, 'systemHeight' | 'systemGap' | 'originY'>,
+): readonly System[] {
+  const restacked: System[] = [];
+  let y = geometry.originY;
+  for (const system of systems) {
+    const extra = Math.max(0, extraHeights[system.index] ?? 0);
+    const height = geometry.systemHeight + extra;
+    restacked.push({
+      index: system.index,
+      box: { origin: { x: system.box.origin.x, y }, width: system.box.width, height },
+    });
+    y += height + geometry.systemGap;
+  }
+  return restacked;
+}

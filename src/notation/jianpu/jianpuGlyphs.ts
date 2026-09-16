@@ -4,7 +4,7 @@
  *
  * 拆分理由很实在：`layoutJianpu.ts` 要同时管 measure 切分、换行、事件节点、关系、歌词、
  * 标签与诊断，一个文件必然超过 350 行的工程上限。切口选在**不依赖事件排布结果**的部分：
- * 本文件的几何只认「一个基准点」，歌词行与头部标签另见 `jianpuLyrics.ts`。
+ * 本文件的几何只认「一个基准点」，歌词行与头部标签另见 `jianpuSections.ts`。
  *
  * 这些类型是**简谱自己的** layout model，不继承任何万能基类，也不与 `ChordLayout` /
  * `TabLayout` / `StaffLayout` 互相转换（§2.7）。依赖方向单向 `layoutJianpu.ts →
@@ -53,12 +53,10 @@ export interface JianpuPitchGlyphs {
 }
 
 /**
- * 小节线形态（spec §18 最长匹配）。
- *
- * **只有四种形态是 `CONFIRMED` 的**：`|`（单线）、`|]`（细+粗终止线）、`:|` / `|:`
- * （反复点）。`||`、`::`、`[|`、`[:]`、`[|]` 等在 spec §18 里是 `DOC-ONLY` 且语料 0，
- * 与任意表外组合同等对待 → `unrecognized`：画一根普通竖线 + 一条诊断。
- * 给 `DOC-ONLY` 的写法配一套专属字形，等于把没有证据的记法画成既成事实。
+ * 小节线形态（spec §18 最长匹配）。**只有四种形态是 `CONFIRMED` 的**：`|`（单线）、
+ * `|]`（细+粗终止线）、`:|` / `|:`（反复点）。`||`、`::`、`[|`、`[:]`、`[|]` 等在
+ * spec §18 里是 `DOC-ONLY` 且语料 0，与任意表外组合同等对待 → `unrecognized`：画一根
+ * 普通竖线 + 一条诊断。给 `DOC-ONLY` 的写法配专属字形＝把没有证据的记法画成既成事实。
  */
 export type BarlineForm = 'single' | 'final' | 'repeat-start' | 'repeat-end' | 'unrecognized';
 
@@ -172,7 +170,9 @@ export interface JianpuArc {
 export interface JianpuLyricNode {
   readonly anchor: Anchor;
   readonly verseIndex: number;
-  /** Domain 给的类别原样保留（§24）；`-` / `_` / `|` 是普通字符，不做连字符语义（U31）。 */
+  /** 落在第几行谱（T5.2-A）：歌词基线是**行谱局部**的，跨行谱的歌词跟随音符走。 */
+  readonly systemIndex: number;
+  /** Domain 给的类别原样保留（§24）；`skip` 已在归属阶段滤掉，**不会出现在这里**。 */
   readonly syllableKind: 'text' | 'skip' | 'merge';
   /** `aligned` 为假表示没有可对齐的 `NoteRef` 目标，调用方已发诊断。 */
   readonly text: JianpuTextGlyph;
