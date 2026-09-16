@@ -6,8 +6,9 @@
  * 350 行上限。纯打印，不做任何断言——断言逻辑分别在 `astInvariants.ts` /
  * `parseInvariants.ts` / `roundtripInvariants.ts`，已经通过 `report.failures`
  * 影响退出码；这里的清单（残留通用叶子、diagnostic code 直方图、
- * `UnknownEvent.tokenKind` 去重清单、round-trip 三指标）都只是观测指标或
- * （round-trip 的 byte-identical / semantic 两项）已经在别处判过失败的复述。
+ * `UnknownEvent.tokenKind` 去重清单、round-trip 五指标）都只是观测指标或
+ * （round-trip 的 byte-identical / semantic / reparseClean 三项）已经在别处
+ * 判过失败的复述。
  */
 
 import type { ParseSummary } from './parseInvariants';
@@ -133,26 +134,31 @@ export function printParseSection(reports: readonly ParseSectionReport[], nameWi
 }
 
 /**
- * round-trip 级（第四级，M1.7 T7）汇总：逐文件三指标 + 总体通过率 + 幂等观测。
- * 失败条件只有 byte-identical / semantic 两项（由 `report.failures` 已经体现在
- * 退出码里）；line-identical 与幂等只报数字。
+ * round-trip 级（第四级，M1.7 T7 + M1.8 T0）汇总：逐文件五指标 + 总体通过率 +
+ * 幂等/reparse-warning 观测。失败条件共三项——byte-identical / semantic /
+ * reparse-clean（由 `report.failures` 已经体现在退出码里）；line-identical 与
+ * 幂等只报数字，reparse warning 总数只观测。
  */
 export function printRoundtripSection(
   reports: readonly RoundtripSectionReport[],
   nameWidth: number,
 ): void {
   console.log('');
-  console.log('round-trip level (M1.7 T7): preserve byte/line-identical + canonical semantic + idempotence');
+  console.log(
+    'round-trip level (M1.7 T7 + M1.8 T0): preserve byte/line-identical + canonical semantic + reparse-clean + idempotence',
+  );
   console.log('');
   console.log(
-    `${pad('no.', nameWidth)}  ${pad('byte', 5)}  ${pad('line', 5)}  ${pad('semantic', 8)}  ${pad('idempotent', 10)}`,
+    `${pad('no.', nameWidth)}  ${pad('byte', 5)}  ${pad('line', 5)}  ${pad('semantic', 8)}  ${pad('reparse', 7)}  ${pad('idempotent', 10)}`,
   );
 
   let byteOk = 0;
   let lineOk = 0;
   let semanticOk = 0;
+  let reparseOk = 0;
   let idempotentOk = 0;
   let withSummary = 0;
+  let reparseWarningTotal = 0;
 
   for (const report of reports) {
     const s = report.roundtripSummary;
@@ -164,9 +170,11 @@ export function printRoundtripSection(
     if (s.byteIdentical) byteOk += 1;
     if (s.lineIdentical) lineOk += 1;
     if (s.semanticEqual) semanticOk += 1;
+    if (s.reparseClean) reparseOk += 1;
     if (s.canonicalIdempotent) idempotentOk += 1;
+    reparseWarningTotal += s.reparseWarningCount;
     console.log(
-      `${pad(report.label, nameWidth)}  ${pad(s.byteIdentical ? 'OK' : 'FAIL', 5)}  ${pad(s.lineIdentical ? 'OK' : 'FAIL', 5)}  ${pad(s.semanticEqual ? 'OK' : 'FAIL', 8)}  ${pad(s.canonicalIdempotent ? 'yes' : 'no', 10)}`,
+      `${pad(report.label, nameWidth)}  ${pad(s.byteIdentical ? 'OK' : 'FAIL', 5)}  ${pad(s.lineIdentical ? 'OK' : 'FAIL', 5)}  ${pad(s.semanticEqual ? 'OK' : 'FAIL', 8)}  ${pad(s.reparseClean ? 'OK' : 'FAIL', 7)}  ${pad(s.canonicalIdempotent ? 'yes' : 'no', 10)}`,
     );
     if (!s.semanticEqual && s.semanticDiffPath !== null) {
       console.log(`${' '.repeat(nameWidth + 2)}  ! semantic diff path: ${s.semanticDiffPath}`);
@@ -182,6 +190,12 @@ export function printRoundtripSection(
     `semantic:       ${semanticOk}/${reports.length} (failure condition, must be 100%)`,
   );
   console.log(
+    `reparse-clean:  ${reparseOk}/${reports.length} (failure condition, must be 100%)`,
+  );
+  console.log(
     `canonical idempotent: ${idempotentOk}/${withSummary} of file(s) with a summary (observational only)`,
+  );
+  console.log(
+    `reparse warnings: ${reparseWarningTotal} total across ${withSummary} file(s) with a summary (observational only, not a failure condition)`,
   );
 }

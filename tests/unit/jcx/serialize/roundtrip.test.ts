@@ -39,9 +39,12 @@ import {
 } from '../../../../src/formats/jcx/serialize';
 import {
   canonicalTrip,
+  cleanFixtureNames,
   collectUnresolvedRefPaths,
+  errorDiagnostics,
   fixtureBytes,
   fixtureNames,
+  malformedFixtureNames,
 } from './roundtrip.helpers';
 
 /** 对一段 canonical 文本再 canonical 一次（只有已知限制那一例需要看第三趟）。 */
@@ -59,6 +62,11 @@ const l2Names = fixtureNames.filter((name) => !(name in L2_KNOWN_LIMITATION));
 it('fixture 集合非空（空集不得被当成全绿）', () => {
   expect(fixtureNames.length).toBeGreaterThan(0);
   expect(l2Names.length).toBeGreaterThan(0);
+});
+
+it('reparse health 分组之和等于 fixture 总数（M1.8 T0，防空集）', () => {
+  expect(cleanFixtureNames.length + malformedFixtureNames.length).toBe(fixtureNames.length);
+  expect(cleanFixtureNames.length).toBeGreaterThan(0);
 });
 
 describe.each(fixtureNames)('round-trip 矩阵: %s', (name) => {
@@ -100,6 +108,32 @@ describe.each(l2Names)('L2 语义 round-trip: %s', (name) => {
     expect(firstProjectionDifference(trip.before, trip.after)).toBeNull();
     expect(trip.after).toEqual(trip.before);
   });
+});
+
+describe.each(cleanFixtureNames)('reparse health（原始输入无 error 级，硬门槛）: %s', (name) => {
+  it('canonical 输出重解析后无 error 级 diagnostic', () => {
+    const trip = canonicalTrip(name);
+    expect(errorDiagnostics(trip.reparsedDiagnostics)).toEqual([]);
+  });
+});
+
+describe.each(malformedFixtureNames)('reparse health（原始输入含 error 级，仅观测）: %s', (name) => {
+  it('observed：canonical 输出重解析后的 error 级 diagnostic 数量（不设硬门槛）', () => {
+    // 原始输入本身已带 error 级 diagnostic（malformed/recovery 样本），canonical
+    // 如何写回一段合法性存疑的输入不是本里程碑要回答的问题——这里只记录数字，
+    // 不断言，it 标题已注明 observed。当前语料/fixture 集合下这一组为空集
+    // （`malformedFixtureNames.length === 0`），保留这条 describe.each 是为了
+    // 在未来出现 malformed fixture 时自动纳入观测而不需要改动测试结构。
+    const trip = canonicalTrip(name);
+    expect(errorDiagnostics(trip.reparsedDiagnostics).length).toBeGreaterThanOrEqual(0);
+  });
+});
+
+it('契约哨兵：全部 fixture 的 canonical diagnostics 无 error 级（canonical renderer warning-only 契约）', () => {
+  for (const name of fixtureNames) {
+    const trip = canonicalTrip(name);
+    expect(errorDiagnostics(trip.canonicalDiagnostics)).toEqual([]);
+  }
 });
 
 describe('L2 已知限制（canonical/body.ts 限制①）', () => {

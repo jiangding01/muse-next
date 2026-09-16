@@ -22,11 +22,13 @@
  * 结尾追加 diagnostic code 直方图与 `UnknownEvent.tokenKind` 去重清单——两者
  * 都是观测指标，不影响退出码。
  *
- * **round-trip 级**（第四级，M1.7 T7，逻辑在 `lib/roundtripInvariants.ts`）：
- * 对每个文件计算 preserve byte-identical / line-identical 与 canonical 语义
- * round-trip（L2 投影相等），外加 canonical 幂等观测。失败条件只有
- * byte-identical < 100% 与 semantic < 100%；line-identical 与幂等只汇报数字，
- * 不影响退出码。
+ * **round-trip 级**（第四级，M1.7 T7 + M1.8 T0，逻辑在
+ * `lib/roundtripInvariants.ts`）：对每个文件计算 preserve byte-identical /
+ * line-identical、canonical 语义 round-trip（L2 投影相等）、以及 canonical
+ * 文本重解析后 diagnostics 无 error 级（`reparseClean`），外加 canonical 幂等
+ * 与 reparse warning 计数观测。**失败条件三项**：byte-identical < 100%、
+ * semantic < 100%、reparseClean < 100%；line-identical、幂等、reparse
+ * warning 数只汇报数字，不影响退出码。
  *
  * 语料**不进 git**（HANDOFF §39.1 / §51），因此 CI 上目录必然缺失：
  * 目录不存在或没有 `.jcx` 时打印跳过并 `exit 0`，只有真正的断言失败才 `exit 1`。

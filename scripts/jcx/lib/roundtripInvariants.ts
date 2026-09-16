@@ -20,10 +20,17 @@
  * 是否成立，计数但不作为失败条件——语料可能命中 `canonical/body.ts` 文件头
  * 「已知限制①」那类「从第二趟起才稳定」的情形（fixture 级矩阵已有先例）。
  *
- * 失败条件只有两条（方案 T7 要求）：byte-identical < 100%、semantic < 100%。
- * line-identical 与幂等只汇报数字，不影响退出码。语料 semantic 门槛恒为
- * 100%——本文件不引入、也不允许调用方引入任何语料级豁免名单（豁免只存在于
- * fixture 级 `roundtrip.test.ts` 的 `unclosed-chord.jcx` 一例）。
+ * **第五项指标 `reparseClean`（M1.8 T0）**：canonical 文本重新 `loadJcx` 之后，
+ * `diagnostics` 中 severity === 'error' 的数量必须为 0——这是 §60 DoD
+ * `reparse success` 此前从未被断言的一半（此前只取 `.score` 做投影，从不看
+ * `reparsed.diagnostics`，理论上 canonical 可能输出「投影相等但重解析报
+ * error」的文本而全绿）。warning 级只计数进 summary，不影响判定。
+ *
+ * 失败条件共三条（M1.8 T0 起）：byte-identical < 100%、semantic < 100%、
+ * reparseClean < 100%。line-identical 与幂等只汇报数字，不影响退出码。语料
+ * 三项失败条件门槛恒为 100%——本文件不引入、也不允许调用方引入任何语料级
+ * 豁免名单（豁免只存在于 fixture 级 `roundtrip.test.ts` 的 `unclosed-chord.jcx`
+ * 一例，且只作用于原始输入本身无 error 级 diagnostic 的那一侧）。
  *
  * **失败记录的内容边界**（版权边界，方案 §9 第 6 条）：`failures` 里的每条
  * 记录只允许是固定 code 字符串、`firstProjectionDifference` 返回的字段路径、
@@ -52,6 +59,10 @@ export interface RoundtripSummary {
   /** 语义不等时的第一处差异路径；相等或未计算时为 `null`。 */
   readonly semanticDiffPath: string | null;
   readonly canonicalIdempotent: boolean;
+  /** canonical 文本重解析后 diagnostics 中无 error 级（M1.8 T0，失败条件之一）。 */
+  readonly reparseClean: boolean;
+  /** canonical 文本重解析后 diagnostics 中 warning 级的数量（仅观测，不影响判定）。 */
+  readonly reparseWarningCount: number;
 }
 
 export interface RoundtripRunResult {
@@ -127,12 +138,26 @@ export function runRoundtripChecks(
     const canonicalTwice = serializeJcx(reparsed.score, { mode: 'canonical' }).text;
     const canonicalIdempotent = canonicalTwice === canonicalText;
 
+    const reparseErrorDiagnostics = reparsed.diagnostics.filter((d) => d.severity === 'error');
+    const reparseClean = reparseErrorDiagnostics.length === 0;
+    const reparseWarningCount = reparsed.diagnostics.filter((d) => d.severity === 'warning').length;
+
     const failures: string[] = [];
     if (!byteIdentical) {
       failures.push('jcx.corpus.roundtrip-byte-identical');
     }
     if (!semanticEqual) {
       failures.push(`jcx.corpus.roundtrip-semantic path=${semanticDiffPath ?? '?'}`);
+    }
+    if (!reparseClean) {
+      const codeCounts = new Map<string, number>();
+      for (const diagnostic of reparseErrorDiagnostics) {
+        codeCounts.set(diagnostic.code, (codeCounts.get(diagnostic.code) ?? 0) + 1);
+      }
+      const codeSummary = [...codeCounts.entries()]
+        .map(([code, count]) => `code=${code} count=${count}`)
+        .join(' ');
+      failures.push(`jcx.corpus.reparse-error count=${reparseErrorDiagnostics.length} ${codeSummary}`);
     }
 
     return {
@@ -143,6 +168,8 @@ export function runRoundtripChecks(
         semanticEqual,
         semanticDiffPath,
         canonicalIdempotent,
+        reparseClean,
+        reparseWarningCount,
       },
     };
   } catch (error) {

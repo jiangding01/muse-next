@@ -9,6 +9,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
 
 import { loadJcx } from '../../../../src/formats/jcx';
+import type { JcxDiagnostic } from '../../../../src/formats/jcx/lexer/diagnostics';
 import { serializeJcx } from '../../../../src/formats/jcx/serialize';
 import type { ProjectedScore } from '../../../../src/formats/jcx/serialize';
 import { projectScore } from '../../../../src/formats/jcx/serialize';
@@ -45,20 +46,48 @@ export interface CanonicalTrip {
   readonly canonicalText: string;
   /** 对 canonical 文本再 canonical 一次的结果（幂等断言用）。 */
   readonly canonicalTwice: string;
+  /** `serializeJcx(source, {mode:'canonical'}).diagnostics`（契约哨兵用，M1.8 T0）。 */
+  readonly canonicalDiagnostics: readonly JcxDiagnostic[];
+  /** canonical 文本重解析（`loadJcx(canonicalText)`）产出的 diagnostics（reparse health 用，M1.8 T0）。 */
+  readonly reparsedDiagnostics: readonly JcxDiagnostic[];
 }
 
-/** `bytes → parse → canonical → parse`，一次跑完 L2 与幂等两项所需的全部素材。 */
+/** `bytes → parse → canonical → parse`，一次跑完 L2、幂等、reparse health 所需的全部素材。 */
 export function canonicalTrip(name: string): CanonicalTrip {
   const source = loadJcx(fixtureBytes(name)).score;
-  const canonicalText = serializeJcx(source, { mode: 'canonical' }).text;
-  const reparsed = loadJcx(canonicalText).score;
+  const canonicalResult = serializeJcx(source, { mode: 'canonical' });
+  const canonicalText = canonicalResult.text;
+  const reparsed = loadJcx(canonicalText);
   return {
     before: projectScore(source),
-    after: projectScore(reparsed),
+    after: projectScore(reparsed.score),
     canonicalText,
-    canonicalTwice: serializeJcx(reparsed, { mode: 'canonical' }).text,
+    canonicalTwice: serializeJcx(reparsed.score, { mode: 'canonical' }).text,
+    canonicalDiagnostics: canonicalResult.diagnostics,
+    reparsedDiagnostics: reparsed.diagnostics,
   };
 }
+
+/** 只筛出 `severity === 'error'` 的 diagnostic（reparse health / 契约哨兵共用）。 */
+export function errorDiagnostics(diagnostics: readonly JcxDiagnostic[]): readonly JcxDiagnostic[] {
+  return diagnostics.filter((d) => d.severity === 'error');
+}
+
+/**
+ * 原始输入 parse 是否无 error 级 diagnostic（M1.8 T0 分组判据）。
+ *
+ * 为 `true` 的 fixture 归入 clean 组——canonical 输出重解析 error=0 是硬门槛；
+ * 为 `false` 的归入 malformed 组——只观测，不设硬门槛（原文本身已经带 error，
+ * canonical 如何写回一段合法性存疑的输入不属于本里程碑要回答的问题）。
+ */
+export function isOriginalClean(name: string): boolean {
+  return errorDiagnostics(loadJcx(fixtureBytes(name)).diagnostics).length === 0;
+}
+
+export const cleanFixtureNames: readonly string[] = fixtureNames.filter((name) => isOriginalClean(name));
+export const malformedFixtureNames: readonly string[] = fixtureNames.filter(
+  (name) => !isOriginalClean(name),
+);
 
 /**
  * 收集投影里所有 `{ unresolved: true }` 引用的字段路径。
