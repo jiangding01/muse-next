@@ -194,6 +194,52 @@ export const JIANPU_METRICS = {
   headerLabelGap: 16,
 } as const;
 
+/**
+ * 谱面头部（`Score.titles/credits/notes/meter/key/tempo`，§3.5 P2-11）专属字号表
+ * （M2 方案 v1.1.1 §3.5，T5 追加）。
+ *
+ * `layoutScoreHeader` 用它们驱动注入的 `TextMeasurer`；**输出路径是 HTML**（P2-E），
+ * `ScoreView` 只消费这里产出的 `.text` 字符串，字号由 `global.css` 按语义 class
+ * （title / subtitle / credit / note / metadata）决定——测出的 `width`/`fontSize`
+ * 是 abstract unit，**不得当 CSS px 写进内联样式**（D6），只为 M5 的 `toSvg` 预留。
+ */
+export const SCORE_HEADER_METRICS = {
+  /** 主标题字号。 */
+  titleFontSize: 24,
+  /** 副标题字号（`titles[1..]`，§8.12 有序、逐行、不拼接）。 */
+  subtitleFontSize: 14,
+  /** credits 字号。 */
+  creditFontSize: 11,
+  /** notes（`I:`）字号。 */
+  noteFontSize: 10,
+  /** meter / key / tempo 一行次要信息带的字号。 */
+  metaFontSize: 12,
+  /** `Score.textBlocks` 段落字号。 */
+  textBlockFontSize: 11,
+} as const;
+
+/**
+ * `ScoreView` 自身的布局常量（T5 追加）。
+ *
+ * `defaultAvailableWidth` 是简谱 system 换行（D7）的固定阈值——**不是**容器的真实
+ * CSS 像素宽度：M2 未引入 `zoom`（T6 才有），`<svg>` 用自己的 `viewBox` 表达内部
+ * abstract-unit 几何，外层用 `width: 100%` 让浏览器按容器实际宽度整体缩放，
+ * 二者不混在一起（D6：abstract unit 与 px 不建立契约性换算关系）。
+ */
+export const SCORE_VIEW_METRICS = {
+  defaultAvailableWidth: 960,
+  /**
+   * 容器 CSS 像素 → abstract unit 的固定换算比例（**产品决定，不是格式事实**）。
+   *
+   * 这不是把「1u ≈ 1px」写成 layout 层的契约（D6 明确禁止的是那种写法）：本常量
+   * 只活在 `ScoreView`（renderer 层）用真实 `ResizeObserver` 宽度换算
+   * `availableWidth` 这一处，`notation/**` 内部仍然只谈 abstract unit，换算比例
+   * 可以随时调整（T6 的 `zoom` 落地后大概率会替换成 `zoom` 参与的公式），
+   * 不影响任何 layout 数值的语义。
+   */
+  cssPixelsPerUnitAtZoom1: 1,
+} as const;
+
 /** 尺寸常量的唯一汇总入口；调用方按需解构，不直接在别处写字面数字。 */
 export const NOTATION_METRICS = {
   text: TEXT_METRICS,
@@ -201,4 +247,6 @@ export const NOTATION_METRICS = {
   chord: CHORD_METRICS,
   slot: SLOT_SPACING_METRICS,
   jianpu: JIANPU_METRICS,
+  scoreHeader: SCORE_HEADER_METRICS,
+  scoreView: SCORE_VIEW_METRICS,
 } as const;

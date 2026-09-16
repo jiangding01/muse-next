@@ -1,11 +1,18 @@
 /**
- * 中间乐谱区：M1.6 T10b 起读 `Score.titles/credits/chordShapes`。
+ * 中间乐谱区（M2 T5 接线：M2 方案 v1.1.1 §6 T5）。
  *
- * 旧的 `error-card`（解析抛异常）已移除——`loadJcx` 对字符串输入永不抛，
- * 结构问题一律以 diagnostic 呈现，见 `SourceInspector` 的诊断列表。
+ * 谱面本体交给 `<ScoreView>`（store `{score,index}` → `buildRenderScore` → 按
+ * `voice.style` 分派各记谱渲染器 + 头部 + 诊断联动，见该文件）；本组件只保留页面
+ * 外壳（标签页）与 `%%gchord` 和弦图区——`ScoreView` 已经渲染谱面头部（标题/
+ * credits/notes/meter/key/tempo），旧的静态标题块 + 占位五线装饰随之移除。
+ *
+ * `showFinger` 在此接线到 `ChordDiagram`：迁移前的组件从未读取过
+ * `Score.showFinger`（T3 报告已注明这是 T5 的职责），三态语义见
+ * `notation/chord/layoutChord.ts` 文件头。
  */
 
 import { ChordDiagram } from './notation/ChordDiagram';
+import { ScoreView } from './notation/ScoreView';
 import { useMuseAppStore } from '../app/store';
 
 export function ScoreWorkspace() {
@@ -21,20 +28,7 @@ export function ScoreWorkspace() {
 
       <div className="page-stage">
         <article className="score-page">
-          <header className="score-title">
-            <h1>{score.titles[0] ?? 'Untitled'}</h1>
-            {score.credits[0] !== undefined && <p>{score.credits[0]}</p>}
-          </header>
-
-          <section className="notation-placeholder">
-            <div className="staff-lines" aria-hidden="true">
-              {Array.from({ length: 5 }, (_, index) => <i key={index} />)}
-            </div>
-            <div className="notation-copy">
-              <strong>Notation renderer boundary</strong>
-              <span>Staff / Jianpu / TAB renderers will consume the same domain model.</span>
-            </div>
-          </section>
+          <ScoreView />
 
           <section className="chord-section">
             <div className="section-title">
@@ -43,7 +37,7 @@ export function ScoreWorkspace() {
             </div>
             <div className="chord-grid">
               {score.chordShapes.map((chord) => (
-                <ChordDiagram key={chord.origin} chord={chord} />
+                <ChordDiagram key={chord.origin} chord={chord} showFinger={score.showFinger} />
               ))}
             </div>
           </section>

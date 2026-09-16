@@ -206,72 +206,36 @@ export function buildLyricNodes(
 /**
  * 头部标签：`K: <值>` 与拍号。**没有任何分支输出 `1=<tonic>`**（P1-2）。
  *
- * `KeySignature` 四形态 fallback 逐条对应 §3.2 的表：
- * - `tonic` 有值且 `raw` 就是它 → 画 `K: <值>`，无诊断；
- * - `tonic` 有值但 `raw` 还带调式文本 → mode 原文一并显示 + `key.mode-unrecognized`
- *   （**不假设 major、不据 mode 推任何 degree**）；
- * - `tonic` 缺失 → 原样转述 `K: <raw>` + `key.unresolved`（**不从 `alter` 反推主音**：
- *   升降号数量到调的映射在大小调间二义）；
- * - `key` 整个缺席 → **不画调号标签** + `key.absent`（默认调号无证据，spec §8.7）。
+ * `KeySignature` 四形态 fallback 逐条对应 §3.2 的表——**但诊断不在这里发**（T5 修订）：
+ * `key.absent` / `key.unresolved` / `key.mode-unrecognized` / `meter.raw` 现在只由
+ * `notation/layout/scoreHeader.ts` 在文档级发一次。原因：`Score.key`/`Score.meter`
+ * 是文档级事实，一份乐谱可以有多个 `style=jianpu` 声部，每个声部各自调用一次本函数
+ * 若各自都发一遍，同一件事就会被报告 N 次（且两处各自独立走
+ * `collectRenderDiagnostics` 时序号都从 0 起算，`(document, code)` 组合会撞出重复
+ * id）。本函数因此**只负责画标签文本**，不产生任何 `RenderDiagnosticDraft`——
+ * `sink` 参数保留只是为了与同文件其它段落（`relationLayout` / `buildLyricNodes`）
+ * 签名一致，当前不会被调用。
  */
 export function buildHeaderLabels(
   key: KeySignature | undefined,
   meter: Meter | undefined,
   measurer: TextMeasurer,
-  sink: DraftSink,
+  _sink: DraftSink,
 ): readonly JianpuLabel[] {
   const labels: JianpuLabel[] = [];
   const anchor: Anchor = { kind: 'document' };
   const size = JIANPU_METRICS.labelFontSize;
   let x = 0;
 
-  if (key === undefined) {
-    sink(
-      draftOf(
-        CODES.keyAbsent,
-        'info',
-        'Score.key 缺席：不画调号标签（默认调号无证据，spec §8.7 未记载缺省行为）',
-        anchor,
-      ),
-    );
-  } else {
+  if (key !== undefined) {
     const text = `K: ${key.raw}`;
     labels.push({ anchor, kind: 'key', text: glyph(text, x, size, size) });
     x += measurer.measure(text, { fontSize: size }).width + JIANPU_METRICS.headerLabelGap;
-    if (key.tonic === undefined) {
-      sink(
-        draftOf(
-          CODES.keyUnresolved,
-          'warning',
-          'K: 未能解析出主音：原样转述 raw，不从 alter 反推主音（升降号数量到调的映射在大小调间二义）',
-          anchor,
-        ),
-      );
-    } else if (key.raw.trim() !== key.tonic) {
-      sink(
-        draftOf(
-          CODES.keyModeUnrecognized,
-          'info',
-          'K: 含未识别的调式文本：mode 原文一并显示，不假设 major、不据 mode 推任何 degree',
-          anchor,
-        ),
-      );
-    }
   }
 
   if (meter !== undefined) {
     const text = meter.kind === 'fraction' ? `${String(meter.num)}/${String(meter.den)}` : meter.raw;
     labels.push({ anchor, kind: 'meter', text: glyph(text, x, size, size) });
-    if (meter.kind === 'raw') {
-      sink(
-        draftOf(
-          CODES.meterRaw,
-          'info',
-          `拍号 ${meter.raw} 是 DOC-ONLY 的 raw 形态：原样显示，不换算成 4/4`,
-          anchor,
-        ),
-      );
-    }
   }
 
   return labels;

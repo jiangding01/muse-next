@@ -429,6 +429,15 @@ describe('歌词（§24：按 NoteRef 对齐到列 x，多段逐行下排）', (
 });
 
 describe('头部标签（§3.2 调号 / 拍号；P1-2：永不生成 1=<tonic>）', () => {
+  /**
+   * T5 修订：`key.absent` / `key.unresolved` / `key.mode-unrecognized` / `meter.raw`
+   * 四类诊断**不再由本层（`layoutJianpu` → `jianpuSections.buildHeaderLabels`）发出**
+   * ——它们是文档级事实，一份乐谱可能有多个 jianpu 声部，每个声部各发一遍会把同一件
+   * 事报告 N 次。现在只由 `notation/layout/scoreHeader.ts` 的 `layoutScoreHeader` 在
+   * 文档级发一次（且按「是否存在 jianpu 消费者」门控），对应测试见
+   * `jianpu.toSvg.test.ts` 的 `layoutScoreHeader` 描述块。本文件只保留「标签文本画对
+   * 了没有」——诊断与标签文本是两件事，`buildHeaderLabels` 现在只管后者。
+   */
   function keyLabel(text: string): string | undefined {
     return layout(text).labels.find((label) => label.kind === 'key')?.text.text;
   }
@@ -439,36 +448,53 @@ describe('头部标签（§3.2 调号 / 拍号；P1-2：永不生成 1=<tonic>�
     }
   });
 
-  it('形态一：tonic 有值 → 画 `K: <值>`，无诊断', () => {
-    const result = layout(header('C|', 'M:4/4\nL:1/4\nK:G\n'));
+  it('形态一：tonic 有值 → 画 `K: <值>`', () => {
     expect(keyLabel(header('C|', 'M:4/4\nL:1/4\nK:G\n'))).toBe('K: G');
-    expect(codesOf(result)).not.toContain(CODES.keyModeUnrecognized);
-    expect(codesOf(result)).not.toContain(CODES.keyUnresolved);
   });
 
-  it('形态二：tonic + 未知 mode → mode 原文一并显示 + info，**不假设 major**', () => {
-    const source = header('C|', 'M:4/4\nL:1/4\nK:A Mix\n');
-    expect(keyLabel(source)).toBe('K: A Mix');
-    expect(codesOf(layout(source))).toContain(CODES.keyModeUnrecognized);
+  it('形态二：tonic + 未知 mode → mode 原文一并显示，**不假设 major**', () => {
+    expect(keyLabel(header('C|', 'M:4/4\nL:1/4\nK:A Mix\n'))).toBe('K: A Mix');
   });
 
-  it('形态三：只有 raw → 原样转述 + warning，**不从 alter 反推主音**', () => {
-    const source = header('C|', 'M:4/4\nL:1/4\nK:???\n');
-    expect(keyLabel(source)).toBe('K: ???');
-    expect(codesOf(layout(source))).toContain(CODES.keyUnresolved);
+  it('形态三：只有 raw → 原样转述，**不从 alter 反推主音**', () => {
+    expect(keyLabel(header('C|', 'M:4/4\nL:1/4\nK:???\n'))).toBe('K: ???');
   });
 
-  it('形态四：key 整个缺席 → 不画调号标签 + info（默认调号无证据，§8.7）', () => {
+  it('形态四：key 整个缺席 → 不画调号标签（默认调号无证据，§8.7）', () => {
     const result = layout(header('C|', 'M:4/4\nL:1/4\n'));
     expect(result.labels.some((label) => label.kind === 'key')).toBe(false);
-    expect(codesOf(result)).toContain(CODES.keyAbsent);
   });
 
-  it('拍号：fraction 画 num/den；raw（`C`）原样显示 + info，**不换算成 4/4**', () => {
+  it('拍号：fraction 画 num/den；raw（`C`）原样显示，**不换算成 4/4**', () => {
     expect(layout(header('C|')).labels.find((label) => label.kind === 'meter')?.text.text).toBe('4/4');
     const rawMeter = layout(header('C|', 'M:C\nL:1/4\nK:C\n'));
     expect(rawMeter.labels.find((label) => label.kind === 'meter')?.text.text).toBe('C');
-    expect(codesOf(rawMeter)).toContain(CODES.meterRaw);
+  });
+});
+
+describe('按容器宽度换行（D7）：更窄的 availableWidth 产出更多 system（P1-1 的 producer 层证据）', () => {
+  /**
+   * `ScoreView` 的 `availableWidth` 只是把真实容器像素换算后传进来——真正「换行
+   * 生效」的证据必须钉在 `layoutJianpu` 这一层：同一份乐谱、只改 `availableWidth`，
+   * 更窄的容器必须切出更多 system（或至少不能更少），不能只断言某个宽度数值变了。
+   */
+  const longScore = header('CDEF|GABc|CDEF|GABc|CDEF|GABc|');
+
+  it('窄 availableWidth 下 system 数量严格多于宽 availableWidth', () => {
+    const narrow = layout(longScore, 60).systems.length;
+    const wide = layout(longScore, WIDE).systems.length;
+    expect(wide).toBe(1);
+    expect(narrow).toBeGreaterThan(wide);
+  });
+
+  it('窄 availableWidth 下每个 system 容纳的 measure 数不多于宽 availableWidth（更早换行）', () => {
+    const narrowMeasures = layout(longScore, 60).measures.length;
+    const wideMeasures = layout(longScore, WIDE).measures.length;
+    // measure 总数不因换行而改变——换行只影响它们分到哪个 system，不改变切分本身。
+    expect(narrowMeasures).toBe(wideMeasures);
+    const narrowSystems = layout(longScore, 60).systems.length;
+    const measuresPerNarrowSystem = narrowMeasures / narrowSystems;
+    expect(measuresPerNarrowSystem).toBeLessThan(wideMeasures);
   });
 });
 

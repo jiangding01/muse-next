@@ -91,6 +91,13 @@ export const RENDER_DIAGNOSTIC_CODES = {
   decorationPlaceholder: 'muse.render.decoration.placeholder',
   /** body 内 `L:` 变化点：画一个细标记；渲染直接用已解算好的 `duration`，不重新解释作用域（§3.2）。 */
   unitLengthChanged: 'muse.render.unit-length.changed',
+  /**
+   * T5 追加（`notation/layout/scoreHeader.ts`，document 级）：`Score.textBlocks`
+   * 里 `closed === false` 的文本块——照常渲染已捕获的内容，不截断也不报错。**只有
+   * 头部布局报告这件事**：任何记谱类型的头部标签（如简谱的 `K:`/拍号）都不覆盖
+   * `textBlocks`，因此不存在与别处重复发诊断的风险（§4.2「同一件事只由一层报告一次」）。
+   */
+  textBlockUnclosed: 'muse.render.text-block.unclosed',
 } as const satisfies Record<string, RenderDiagnosticCode>;
 
 /** 纯构造：给定 draft 与序号，得到最终诊断。`ordinal` 只参与 id，不参与语义。 */

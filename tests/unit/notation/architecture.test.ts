@@ -217,3 +217,68 @@ describe('notation 架构守卫 —— 不解析 AstPath（P2-9）', () => {
     expect(/\bparseAstPath\b|\bastPathSegments\b/.test(source)).toBe(false);
   });
 });
+
+/**
+ * renderer 架构守卫 —— **反方向**（M2 方案 v1.1.1 §2.1 / §4.2 P2-9，T5 修订补）。
+ *
+ * `src/notation/**` 单向依赖 Domain、不回到 AST 的规则已经被上面几段钉住；但
+ * `src/renderer/**` 同样不该绕过 notation 层直接解析 `AstPath`、直接 import
+ * `formats/jcx` 的内部子模块（`parse`/`ast`/`lexer`/`serialize`——公共入口只有
+ * `src/formats/jcx` 一个），也不该在组件里就地声明「Domain → 展示文本」的摘要函数
+ * （`summarizeEvent`/`summarizePitch` 这类：T5 一度被直接写进 `ScoreView.tsx`，
+ * 后移到 `notation/layout/fallbackSummary.ts` 作为可单测的纯函数，见该文件与
+ * `fallbackSummary.test.ts` 的 P1-4 记录——这条守卫防止它又悄悄长回组件里）。
+ *
+ * **不禁止**的东西（避免误伤）：renderer import `domain`（Anchor/VoiceId/EventId 等
+ * identity 本来就要在 renderer 里用于 `data-*` 属性与点击匹配）、import
+ * `notation/**` 的公开导出、import `formats/jcx` 本身。
+ */
+describe('renderer 架构守卫 —— 反方向：不回到 AST / parse 内部，不声明 Domain→presentation 摘要函数', () => {
+  const RENDERER_DIR = join(import.meta.dirname, '../../../src/renderer');
+  const rendererFiles = collectFiles(RENDERER_DIR);
+
+  /** 只放行 `formats/jcx` 这一个包入口；任何更深的子路径都当作内部实现细节。 */
+  const FORMATS_JCX_SUBPATH_RE = /formats\/jcx\/./;
+
+  const FORBIDDEN_PRESENTATION_HELPER_RE =
+    /\b(?:function|const)\s+(?:summarizeEvent|summarizePitch|eventTo\w+|pitchTo\w+|restTo\w+)\b/;
+
+  it('至少扫到 renderer 的一些文件（守卫没有扫空目录）', () => {
+    expect(rendererFiles.length).toBeGreaterThan(0);
+  });
+
+  it.each(rendererFiles)('%s 不 import formats/jcx 内部子模块（只允许包入口 src/formats/jcx）', (file) => {
+    const specs = collectSpecifiers(readFileSync(file, 'utf8'));
+    const bad = specs.filter((spec) => FORMATS_JCX_SUBPATH_RE.test(spec));
+    expect(bad).toEqual([]);
+  });
+
+  it.each(rendererFiles)('%s 不出现 AstPath 的解析', (file) => {
+    const source = stripComments(readFileSync(file, 'utf8'));
+    expect(/\bAstPath\b/.test(source)).toBe(false);
+    expect(/\bparseAstPath\b|\bastPathSegments\b/.test(source)).toBe(false);
+  });
+
+  it.each(rendererFiles)('%s 不声明 summarizeEvent/summarizePitch 之类的 Domain→presentation 摘要函数', (file) => {
+    const source = stripComments(readFileSync(file, 'utf8'));
+    expect(FORBIDDEN_PRESENTATION_HELPER_RE.test(source)).toBe(false);
+  });
+
+  it('正例：当前 renderer/** 零命中三条禁止边', () => {
+    for (const file of rendererFiles) {
+      const source = readFileSync(file, 'utf8');
+      const specs = collectSpecifiers(source);
+      expect(specs.some((spec) => FORMATS_JCX_SUBPATH_RE.test(spec))).toBe(false);
+      expect(FORBIDDEN_PRESENTATION_HELPER_RE.test(stripComments(source))).toBe(false);
+    }
+  });
+
+  it('反例：探针字符串 `function summarizeEvent(...)` 确实会被规则命中（证明规则不是形同虚设）', () => {
+    const probe = 'export function summarizeEvent(event: MusicEvent): string { return event.kind; }';
+    expect(FORBIDDEN_PRESENTATION_HELPER_RE.test(probe)).toBe(true);
+    const probeConst = 'const pitchToLabel = (p: Pitch) => p.letter;';
+    expect(FORBIDDEN_PRESENTATION_HELPER_RE.test(probeConst)).toBe(true);
+    const probeImportPath = "import { parseDirectives } from '../../formats/jcx/parse/directives';";
+    expect(FORMATS_JCX_SUBPATH_RE.test(probeImportPath)).toBe(true);
+  });
+});
