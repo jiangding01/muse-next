@@ -66,7 +66,14 @@ const PENDING_STYLE_LABEL: Record<PendingStyle, string> = {
 };
 
 type VoiceRender =
-  | { readonly kind: 'jianpu'; readonly voiceId: VoiceId; readonly node: SvgNode; readonly diagnostics: readonly RenderDiagnostic[] }
+  | {
+      readonly kind: 'jianpu';
+      readonly voiceId: VoiceId;
+      readonly node: SvgNode;
+      /** 布局宽度（abstract unit），渲染时按 `cssPixelsPerUnitAtZoom1` 换算成 CSS 宽度，字号不随容器缩放。 */
+      readonly width: number;
+      readonly diagnostics: readonly RenderDiagnostic[];
+    }
   | { readonly kind: 'pending'; readonly voiceId: VoiceId; readonly style: PendingStyle }
   | { readonly kind: 'fallback'; readonly voiceId: VoiceId; readonly label: string; readonly summary: string };
 
@@ -91,7 +98,13 @@ function buildVoiceRender(voice: RenderVoice, ctx: VoiceRenderContext): VoiceRen
         availableWidth: ctx.availableWidth,
       };
       const layout = layoutJianpu(voice, jianpuCtx);
-      return { kind: 'jianpu', voiceId: voice.voiceId, node: jianpuToSvg(layout), diagnostics: layout.diagnostics };
+      return {
+        kind: 'jianpu',
+        voiceId: voice.voiceId,
+        node: jianpuToSvg(layout),
+        width: layout.width,
+        diagnostics: layout.diagnostics,
+      };
     }
     return { kind: 'pending', voiceId: voice.voiceId, style };
   }
@@ -111,7 +124,13 @@ function VoiceRenderView({ render }: { readonly render: VoiceRender }) {
   if (render.kind === 'jianpu') {
     return (
       <section className="score-voice score-voice-jianpu" data-voice-id={render.voiceId} data-anchor-key={anchor}>
-        <SvgTree node={render.node} />
+        {/* 谱面按固定比例绘制：容器变窄靠 system 换行（D7），不靠 SVG 等比缩放（否则字号随窗口变化）。 */}
+        <div
+          className="jianpu-canvas"
+          style={{ width: `${String(render.width * SCORE_VIEW_METRICS.cssPixelsPerUnitAtZoom1)}px` }}
+        >
+          <SvgTree node={render.node} />
+        </div>
       </section>
     );
   }

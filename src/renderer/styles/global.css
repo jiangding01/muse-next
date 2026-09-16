@@ -72,6 +72,7 @@ button { cursor: pointer; }
 .score-voices { display: grid; gap: 24px; }
 .score-voice { min-width: 0; }
 .score-voice.render-anchor-highlighted { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 4px; }
+.score-voice-jianpu .jianpu-canvas { max-width: 100%; }
 .score-voice-jianpu svg { width: 100%; height: auto; display: block; }
 .score-voice-pending, .score-voice-fallback { padding: 14px 16px; border: 1px dashed #cbc4b7; border-radius: 8px; background: rgba(249,247,241,.6); }
 .score-voice-pending-label { margin: 0; color: var(--ink-muted); font-size: 12px; }
