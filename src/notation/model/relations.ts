@@ -26,18 +26,6 @@ import type {
 } from '../../domain';
 import type { RenderDiagnosticDraft } from './diagnostics';
 import { RENDER_DIAGNOSTIC_CODES } from './diagnostics';
-import type { RenderDiagnosticCode } from './types';
-
-/**
- * **T1 新增 code，暂在本文件局部定义**（T0 的 `diagnostics.ts` 是已拍板契约，本任务
- * 不改它；登记进 `RENDER_DIAGNOSTIC_CODES` 由后续任务统一做）。
- *
- * 语义严格限定为上面的 **B 类**：关系端点在传入的 `DomainIndex` 中查不到，即
- * index / Domain 不变量被破坏。**不用于 A 类恢复状态**（unresolved / unclosed /
- * incomplete 是正常的源文本事实，不是错误）。
- */
-const RELATION_TARGET_MISSING = 'muse.render.relation.target-missing' as const satisfies
-  RenderDiagnosticCode;
 
 /** 端点在关系里扮演的角色；`member` 只出现在 tuplet（成员序列）。 */
 export type RelationEndpointRole = 'from' | 'to' | 'member';
@@ -46,6 +34,13 @@ export interface RelationEndpoint {
   readonly role: RelationEndpointRole;
   /** 端点的位置引用；`memberIndex` 省略表示整个事件（非和弦块，或整块）。 */
   readonly ref: NoteRef;
+}
+
+/** B 类悬空的两种成因，共用一个 code，由本字段区分。 */
+export type DanglingReason = 'event-missing' | 'member-index-invalid';
+
+export interface DanglingRelationEndpoint extends RelationEndpoint {
+  readonly reason: DanglingReason;
 }
 
 /** 端点在 index 中查到了对应事件。`event` 是 Domain 节点的同一引用，永不原地修改。 */
@@ -64,15 +59,52 @@ export interface ResolvedRelationEndpoint extends RelationEndpoint {
  *   层如实记录的**源文本事实**（`relation.ts` 文件头已论证），关系正常可渲染，
  *   `relationEndpoints` 只枚举确实存在的那一端，**不进 `dangling`、不发诊断**；
  *   具体的保守呈现（半条连线 / 不闭合的括号）由各记谱的 layout 任务负责。
- * - **B. 端点查不到**——关系声称指向某个 `EventId`，但传入的 `DomainIndex` 里没有它。
- *   这是 index 与 score 不同源（或上游不变量被破坏）的征兆，进 `dangling` 并发一条
- *   `muse.render.relation.target-missing`（warning）。
+ * - **B. 端点指不到有效目标**——关系声称指向某个 `EventId`（可能还带 `memberIndex`），
+ *   但传入的 `DomainIndex` 里没有该事件，或该事件没有这个成员。这是 index 与 score
+ *   不同源（或上游不变量被破坏）的征兆，进 `dangling` 并发一条
+ *   `muse.render.relation.endpoint-missing`（warning），成因由 `reason` 区分。
  */
 export interface RenderRelation {
   readonly relationId: RelationId;
   readonly relation: Relation;
   readonly resolved: readonly ResolvedRelationEndpoint[];
-  readonly dangling: readonly RelationEndpoint[];
+  readonly dangling: readonly DanglingRelationEndpoint[];
+}
+
+/**
+ * 成员型事件的成员数；非成员型事件返回 `undefined`。
+ *
+ * 判据取自 Domain 的事件定义，不做推断：只有 `chord`（`Note | Rest`）、
+ * `tabGroup`（`TabNote`）、`grace`（`Note | TabNote`）带 `members`。
+ */
+function memberCount(event: MusicEvent): number | undefined {
+  switch (event.kind) {
+    case 'chord':
+    case 'tabGroup':
+    case 'grace':
+      return event.members.length;
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * `NoteRef.memberIndex` 对该事件是否有效。
+ *
+ * - 省略 `memberIndex` → 指整个事件，恒有效；
+ * - 事件没有 `members`（note / rest / tabNote / barline / …）却带了 `memberIndex`
+ *   → **无效**：这是「指向一个不存在的位置」，不是「指向整块」，不能悄悄当整块处理；
+ * - 越界或非自然数下标 → 无效。
+ */
+function isMemberIndexValid(event: MusicEvent, memberIndex: number | undefined): boolean {
+  if (memberIndex === undefined) {
+    return true;
+  }
+  const count = memberCount(event);
+  if (count === undefined) {
+    return false;
+  }
+  return Number.isInteger(memberIndex) && memberIndex >= 0 && memberIndex < count;
 }
 
 /** 未解析 / 未闭合的关系只枚举它确实存在的那一端，不为缺失的对端造引用。 */
@@ -132,12 +164,16 @@ export function lookupRelation(index: DomainIndex, id: RelationId): Relation | u
 /** 解析一条关系的全部端点。纯函数：同一 `(index, relation)` 必然得到同一结果。 */
 export function resolveRelation(index: DomainIndex, relation: Relation): RenderRelation {
   const resolved: ResolvedRelationEndpoint[] = [];
-  const dangling: RelationEndpoint[] = [];
+  const dangling: DanglingRelationEndpoint[] = [];
 
   for (const endpoint of relationEndpoints(relation)) {
     const found = lookupEvent(index, endpoint.ref.eventId);
     if (found === undefined) {
-      dangling.push(endpoint);
+      dangling.push({ ...endpoint, reason: 'event-missing' });
+      continue;
+    }
+    if (!isMemberIndexValid(found.event, endpoint.ref.memberIndex)) {
+      dangling.push({ ...endpoint, reason: 'member-index-invalid' });
       continue;
     }
     resolved.push({ ...endpoint, voiceId: found.voiceId, event: found.event });
@@ -182,7 +218,7 @@ function withOrigin(
  *    关系上（`Anchor` 的 `relation` 分支），**不挂在任何成员上**（§2.6.1，P1-C）——
  *    成员的 `duration` 该怎么分解就怎么分解，tuplet 只额外画一个括号 + 数字。
  *    `q === 0` 同样只保留事实，**不推算 effective duration**（U25）。
- * 2. **每个 B 类悬空端点一条** `muse.render.relation.target-missing`（warning）。
+ * 2. **每个 B 类悬空端点一条** `muse.render.relation.endpoint-missing`（warning）。
  *    A 类恢复状态不在此列。
  */
 export function collectRelationDiagnostics(
@@ -210,12 +246,20 @@ export function collectRelationDiagnostics(
     }
 
     for (const endpoint of dangling) {
+      const target =
+        endpoint.ref.memberIndex === undefined
+          ? endpoint.ref.eventId
+          : `${endpoint.ref.eventId} 的成员 #${String(endpoint.ref.memberIndex)}`;
+      const cause =
+        endpoint.reason === 'event-missing'
+          ? '传入的 index 里没有该事件'
+          : '该事件没有这个成员（memberIndex 越界或事件本就没有 members）';
       drafts.push(
         withOrigin(
           {
-            code: RELATION_TARGET_MISSING,
+            code: RENDER_DIAGNOSTIC_CODES.relationEndpointMissing,
             level: 'warning',
-            message: `关系 ${id}（${relation.kind}）的 ${endpoint.role} 端指向 ${endpoint.ref.eventId}，但传入的 index 里没有该事件；该端不参与渲染`,
+            message: `关系 ${id}（${relation.kind}）的 ${endpoint.role} 端指向 ${target}，但${cause}；该端不参与渲染`,
             anchor,
           },
           relation,

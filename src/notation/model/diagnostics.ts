@@ -11,6 +11,11 @@
  *   **构造与收集**，依赖方向单向 `diagnostics.ts → types.ts`，无循环。
  * - **渲染层永不产生 error 级**：`loadJcx` 保证永远有一个可渲染的 `Score`，渲染层
  *   同样保证永远画得出一页谱，最坏情况是一页全是未知占位块。
+ *
+ * **T1 hygiene 的唯一变更**：`RENDER_DIAGNOSTIC_CODES` 收编了
+ * `relationEndpointMissing`——它在 T1 实现期曾临时定义在 `relations.ts` 局部，
+ * 违反「code 常量表是唯一来源」。本次把它并回表内，`relations.ts` 改为引用本表。
+ * 除此之外本文件相对 T0 没有任何改动（类型形状、构造函数、id 派生规则全部照旧）。
  */
 
 import type { RenderDiagnostic, RenderDiagnosticCode } from './types';
@@ -37,6 +42,15 @@ export const RENDER_DIAGNOSTIC_CODES = {
   voiceStyleAbsent: 'muse.render.voice.style-absent',
   /** `style` 是我们不认识的值——与「没写」是两个不同事实，**不得合并**（§3.0）。 */
   voiceStyleUnknown: 'muse.render.voice.style-unknown',
+  /**
+   * 关系的某个端点（`from` / `to` / `member` 任一）在传入的 `DomainIndex` 里指不到
+   * 有效目标：事件查不到，或事件在但 `memberIndex` 对它无效。
+   *
+   * **只用于 index / Domain 不变量被破坏的情形**，不用于 parse 层如实记录的恢复状态
+   * （`tie.unresolved` / `slur.unclosed` / `tuplet.incomplete` 是正常的源文本事实，
+   * 不是错误，不发这条）。成因由 `relations.ts` 的 `DanglingReason` 区分。
+   */
+  relationEndpointMissing: 'muse.render.relation.endpoint-missing',
 } as const satisfies Record<string, RenderDiagnosticCode>;
 
 /** 纯构造：给定 draft 与序号，得到最终诊断。`ordinal` 只参与 id，不参与语义。 */

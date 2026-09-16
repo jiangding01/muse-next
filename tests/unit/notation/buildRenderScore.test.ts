@@ -11,8 +11,8 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import type { DomainIndex, EventId, Score } from '../../../src/domain/index';
-import { voiceId as makeVoiceId } from '../../../src/domain/index';
+import type { DomainIndex, EventId, NoteRef, Score, Tie } from '../../../src/domain/index';
+import { relationId as makeRelationId, voiceId as makeVoiceId } from '../../../src/domain/index';
 import { loadJcx } from '../../../src/formats/jcx';
 import {
   RENDER_DIAGNOSTIC_CODES,
@@ -141,7 +141,7 @@ describe('buildRenderScore —— UnknownEvent 原位保留（§4.1 A）', () =>
 describe('buildRenderScore —— 五个固定 code 及其 anchor 分支（§0d-3 / §3.0）', () => {
   const { renderScore } = render(MAIN_SOURCE);
 
-  it('五个固定 code 全部出现，且没有第六种 code', () => {
+  it('五个固定 code 全部出现', () => {
     expect(new Set(codesOf(renderScore))).toEqual(
       new Set([
         RENDER_DIAGNOSTIC_CODES.durationUnresolved,
@@ -151,6 +151,15 @@ describe('buildRenderScore —— 五个固定 code 及其 anchor 分支（§0d-
         RENDER_DIAGNOSTIC_CODES.voiceStyleUnknown,
       ]),
     );
+  });
+
+  it('产出的 code 是常量表的子集，且正常输入下不出现 relation.endpoint-missing', () => {
+    const table: readonly string[] = Object.values(RENDER_DIAGNOSTIC_CODES);
+    expect(table).toHaveLength(6);
+    for (const code of codesOf(renderScore)) {
+      expect(table).toContain(code);
+    }
+    expect(codesOf(renderScore)).not.toContain(RENDER_DIAGNOSTIC_CODES.relationEndpointMissing);
   });
 
   it('duration 缺失 → event 级 anchor（L: 不可知，不反推时值）', () => {
@@ -326,7 +335,37 @@ describe('buildRenderScore —— 确定性', () => {
   });
 });
 
-describe('relations —— 端点解析与 B 类悬空（target-missing）', () => {
+/** 手造一条 resolved tie，用来把任意 `NoteRef` 喂给 `resolveRelation`。 */
+function fakeTie(from: NoteRef, to: NoteRef): Tie {
+  return {
+    id: makeRelationId(makeVoiceId(1), 'tie', 9),
+    kind: 'tie',
+    status: 'resolved',
+    origins: [],
+    from,
+    to,
+  };
+}
+
+describe('relations —— 端点解析与 B 类悬空（endpoint-missing）', () => {
+  /** `[CE]` 是一个两成员的 chord，后面跟一个没有 members 的单音。 */
+  const CHORD_SOURCE = '%MUSE2\nX:1\nK:C\nV:1\n[V:1]\n[CE]G\n';
+
+  function chordAndNote(): {
+    readonly index: DomainIndex;
+    readonly chordId: EventId;
+    readonly noteId: EventId;
+  } {
+    const { index, renderScore } = render(CHORD_SOURCE);
+    const items = renderScore.voices[0]?.items ?? [];
+    const chordId = items.find((item) => item.event.kind === 'chord')?.eventId;
+    const noteId = items.find((item) => item.event.kind === 'note')?.eventId;
+    if (chordId === undefined || noteId === undefined) {
+      throw new Error('用例语料应当产生一个 chord 与一个 note');
+    }
+    return { index, chordId, noteId };
+  }
+
   it('正常输入下零悬空端点：A 类恢复状态不进 dangling', () => {
     const { score, index } = render('%MUSE2\nX:1\nK:C\nV:1\n[V:1]\nC-\n(DEF\n');
     const voice = score.voices[0];
@@ -337,7 +376,63 @@ describe('relations —— 端点解析与 B 类悬空（target-missing）', () 
     }
   });
 
-  it('index 里查不到端点时给出 dangling，并发一条 relation.target-missing（warning）', () => {
+  it('memberIndex 合法（chord 的 #0 / #1）→ 全部 resolved，零 dangling（正向对照）', () => {
+    const { index, chordId } = chordAndNote();
+    const resolvedRelation = resolveRelation(
+      index,
+      fakeTie({ eventId: chordId, memberIndex: 0 }, { eventId: chordId, memberIndex: 1 }),
+    );
+    expect(resolvedRelation.dangling).toEqual([]);
+    expect(resolvedRelation.resolved).toHaveLength(2);
+    expect(resolvedRelation.resolved[0]?.event.kind).toBe('chord');
+  });
+
+  it('event 存在但 memberIndex 越界 → dangling，reason 为 member-index-invalid', () => {
+    const { index, chordId } = chordAndNote();
+    const resolvedRelation = resolveRelation(
+      index,
+      fakeTie({ eventId: chordId, memberIndex: 99 }, { eventId: chordId }),
+    );
+    expect(resolvedRelation.dangling).toEqual([
+      { role: 'from', ref: { eventId: chordId, memberIndex: 99 }, reason: 'member-index-invalid' },
+    ]);
+    // 不带 memberIndex 的那一端指整块，照常 resolved。
+    expect(resolvedRelation.resolved.map((endpoint) => endpoint.role)).toEqual(['to']);
+  });
+
+  it('事件本就没有 members 却带 memberIndex → 同样无效，不得当成整块悄悄放行', () => {
+    const { index, noteId } = chordAndNote();
+    const resolvedRelation = resolveRelation(
+      index,
+      fakeTie({ eventId: noteId, memberIndex: 0 }, { eventId: noteId }),
+    );
+    expect(resolvedRelation.dangling.map((endpoint) => endpoint.reason)).toEqual([
+      'member-index-invalid',
+    ]);
+  });
+
+  it('无效 memberIndex 经 buildRenderScore 发出 relation.endpoint-missing（warning）', () => {
+    const { score, index } = loadJcx(CHORD_SOURCE);
+    const voice = score.voices[0];
+    if (voice === undefined) throw new Error('用例语料应当产生一个声部');
+    const chordId = voice.events.find((event) => event.kind === 'chord')?.id;
+    if (chordId === undefined) throw new Error('用例语料应当产生一个 chord');
+
+    const patched: Score = {
+      ...score,
+      voices: [{ ...voice, ties: [fakeTie({ eventId: chordId, memberIndex: 7 }, { eventId: chordId })] }],
+    };
+
+    const hits = buildRenderScore({ score: patched, index }).diagnostics.filter(
+      (diagnostic) => diagnostic.code === RENDER_DIAGNOSTIC_CODES.relationEndpointMissing,
+    );
+    expect(hits).toHaveLength(1);
+    expect(hits[0]?.level).toBe('warning');
+    expect(hits[0]?.anchor.kind).toBe('relation');
+    expect(hits[0]?.message).toContain('成员 #7');
+  });
+
+  it('index 里查不到端点时给出 dangling，并发一条 relation.endpoint-missing（warning）', () => {
     const { score, index } = loadJcx('%MUSE2\nX:1\nK:C\nV:1\n[V:1]\n(3CDE\n');
     const missing = score.voices[0]?.tuplets[0]?.members[0];
     if (missing === undefined) {
@@ -350,7 +445,7 @@ describe('relations —— 端点解析与 B 类悬空（target-missing）', () 
 
     const renderScore = buildRenderScore({ score, index: broken });
     const hits = renderScore.diagnostics.filter(
-      (diagnostic) => diagnostic.code === 'muse.render.relation.target-missing',
+      (diagnostic) => diagnostic.code === RENDER_DIAGNOSTIC_CODES.relationEndpointMissing,
     );
     expect(hits).toHaveLength(1);
     expect(hits[0]?.level).toBe('warning');
