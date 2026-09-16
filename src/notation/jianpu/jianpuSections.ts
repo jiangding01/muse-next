@@ -13,16 +13,21 @@
  * 在归属阶段就被滤掉——它在 parse 层已消耗对齐位却不绑 `target`，照旧画出来就会被当成
  * 「无对齐目标」丢进行尾顺排，正是真实语料里星号堆成矩阵的成因。
  *
- * 依赖方向单向 `layoutJianpu.ts → jianpuSections.ts → jianpuGlyphs.ts`，无环。
+ * tie / slur 的**几何**（弧高、跨行谱切段）在 T5.2-B 进一步拆到 `jianpuArcs.ts`：本文件
+ * 只负责读关系与发诊断，那边只做纯几何。
+ *
+ * 依赖方向单向 `layoutJianpu.ts → jianpuSections.ts → jianpuArcs.ts → jianpuGlyphs.ts`，无环。
  * 尺寸一律取自 `layout/metrics.ts` 的 `JIANPU_METRICS`（尺寸常量唯一来源）。
  */
 
 import type { DomainIndex, KeySignature, LyricSyllable, Meter, VoiceId } from '../../domain';
 import { JIANPU_METRICS } from '../layout/metrics';
+import type { System } from '../layout/primitives';
 import type { TextMeasurer } from '../layout/textMeasurer';
 import { RENDER_DIAGNOSTIC_CODES as CODES } from '../model/diagnostics';
 import { resolveVoiceRelations } from '../model/relations';
 import type { Anchor, RenderVoice } from '../model/types';
+import { arcSystemGeometries, buildArcSegments } from './jianpuArcs';
 import { draftOf, glyph } from './jianpuGlyphs';
 import type {
   DraftSink,
@@ -32,11 +37,6 @@ import type {
   JianpuNode,
   JianpuTupletBracket,
 } from './jianpuGlyphs';
-
-/** 弧线 / 括号的端点一律取列中心，保证两端算法一致。 */
-function centerOf(node: JianpuNode): number {
-  return node.x + node.width / 2;
-}
 
 export interface RelationLayout {
   readonly tuplets: readonly JianpuTupletBracket[];
@@ -52,10 +52,12 @@ export function relationLayout(
   voice: RenderVoice,
   index: DomainIndex,
   nodeByEvent: ReadonlyMap<string, JianpuNode>,
+  systems: readonly System[],
   sink: DraftSink,
 ): RelationLayout {
   const tuplets: JianpuTupletBracket[] = [];
   const arcs: JianpuArc[] = [];
+  const arcGeometries = arcSystemGeometries(systems, nodeByEvent.values());
 
   for (const resolved of resolveVoiceRelations(voice.voice, index)) {
     const relation = resolved.relation;
@@ -108,15 +110,9 @@ export function relationLayout(
 
     const open =
       relation.kind === 'tie' ? relation.status !== 'resolved' : relation.status !== 'closed';
-    arcs.push({
-      anchor,
-      kind: relation.kind,
-      x1: centerOf(first),
-      x2: open ? centerOf(first) + JIANPU_METRICS.arcOpenLength : centerOf(last),
-      y: first.y + JIANPU_METRICS.arcOffsetY,
-      height: JIANPU_METRICS.arcHeight,
-      open,
-    });
+    // 一条关系可能被换行切成多段弧（T5.2-B）：段数是视觉事实，relation 仍只有一条，
+    // 每段共用同一个 `anchor`，下面的恢复状态诊断也只发一次。
+    arcs.push(...buildArcSegments({ anchor, kind: relation.kind, first, last, open }, arcGeometries));
     if (open) {
       sink(
         draftOf(

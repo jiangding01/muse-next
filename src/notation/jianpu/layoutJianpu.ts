@@ -149,7 +149,7 @@ export function layoutJianpu(voice: RenderVoice, ctx: JianpuContext): JianpuLayo
   }
 
   const lastSystem = systems[systems.length - 1];
-  const relations = relationLayout(voice, ctx.index, nodeByEvent, sink);
+  const relations = relationLayout(voice, ctx.index, nodeByEvent, systems, sink);
   const lyrics = buildLyricNodes(
     lyricLines,
     voice.voiceId,

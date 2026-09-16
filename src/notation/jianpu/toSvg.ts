@@ -226,7 +226,12 @@ function tupletToSvg(bracket: JianpuTupletBracket): SvgNode {
   );
 }
 
-/** tie / slur 弧线：二次贝塞尔近似圆弧；`open`（A 类恢复状态）额外虚线 + 降级角标。 */
+/**
+ * tie / slur 弧线：二次贝塞尔近似圆弧；`open`（A 类恢复状态）额外虚线 + 降级角标。
+ *
+ * 跨行谱的关系在布局层已切成多段（`JianpuArc.segment`），这里**逐段**画一个 `g`——
+ * 它们的 `data-anchor-key` 相同（同一条 relation），`data-arc-segment` 说明是哪一段。
+ */
 function arcToSvg(arc: JianpuArc): SvgNode {
   const midX = (arc.x1 + arc.x2) / 2;
   const path = element('path', {
@@ -239,6 +244,7 @@ function arcToSvg(arc: JianpuArc): SvgNode {
     'g',
     {
       class: `jianpu-arc-group${arc.open ? ' jianpu-arc-fallback' : ''}`,
+      'data-arc-segment': arc.segment,
       ...anchorAttrs(arc.anchor),
       ...(arc.open ? { 'data-fallback': 'true' } : {}),
     },

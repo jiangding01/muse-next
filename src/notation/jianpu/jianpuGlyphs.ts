@@ -2,10 +2,8 @@
  * notation/jianpu —— 简谱 layout 的**节点类型**与**字形几何**
  * （M2 方案 v1.1.1 §3.2 / §2.7，T4；自 `layoutJianpu.ts` 拆出）。
  *
- * 拆分理由很实在：`layoutJianpu.ts` 要同时管 measure 切分、换行、事件节点、关系、歌词、
- * 标签与诊断，一个文件必然超过 350 行的工程上限。切口选在**不依赖事件排布结果**的部分：
- * 本文件的几何只认「一个基准点」，歌词行与头部标签另见 `jianpuSections.ts`。
- *
+ * 拆分理由：`layoutJianpu.ts` 管切分 / 换行 / 关系 / 歌词 / 诊断，必超 350 行上限；本文件
+ * 的几何只认「一个基准点」，歌词行与头部标签另见 `jianpuSections.ts`。
  * 这些类型是**简谱自己的** layout model，不继承任何万能基类，也不与 `ChordLayout` /
  * `TabLayout` / `StaffLayout` 互相转换（§2.7）。依赖方向单向 `layoutJianpu.ts →
  * jianpuGlyphs.ts`，无环；尺寸一律取自 `metrics.ts` 的 `JIANPU_METRICS`（唯一来源），
@@ -156,10 +154,12 @@ export interface JianpuTupletBracket {
   readonly complete: boolean;
 }
 
-/** tie / slur 弧线。`open` 为真即 A 类恢复状态（unresolved / unclosed）的单端弧。 */
+/** tie / slur 弧线；`open` = A 类恢复单端弧。跨行谱按行切段（T5.2-B），各段共用同一 `anchor`。 */
 export interface JianpuArc {
   readonly anchor: Anchor;
   readonly kind: 'tie' | 'slur';
+  readonly systemIndex: number;
+  readonly segment: 'whole' | 'start' | 'middle' | 'end';
   readonly x1: number;
   readonly x2: number;
   readonly y: number;

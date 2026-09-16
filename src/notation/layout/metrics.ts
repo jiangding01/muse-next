@@ -166,8 +166,23 @@ export const JIANPU_METRICS = {
   tupletBracketOffsetY: -22,
   /** tuplet 方括号两端竖钩的高度。 */
   tupletBracketHookHeight: 5,
-  /** 连音线 / 圆滑线弧顶相对端点的垂直起伏。 */
+  /**
+   * 连音线 / 圆滑线弧顶相对端点的垂直起伏**基准项**：实际弧高是
+   * `clamp(arcHeight + span × arcHeightFactor, arcHeightMin, arcHeightMax)`。
+   * 这四个数是**产品决定，不是格式事实**——spec 没有规定弧线的形状。
+   */
   arcHeight: 8,
+  /** 弧高随跨度增长的斜率（产品决定，不是格式事实）。 */
+  arcHeightFactor: 0.06,
+  /** 弧高下限：跨度退化到 0 时也还看得出是一条弧（产品决定，不是格式事实）。 */
+  arcHeightMin: 6,
+  /** 弧高上限：长圆滑线不至于顶穿上方行距（产品决定，不是格式事实）。 */
+  arcHeightMax: 24,
+  /**
+   * 跨行谱弧线的续行端相对该行谱**内容边界**的外扩量（产品决定，不是格式事实）：
+   * 续行段拉到内容边界外一点点表示「还没完」，但不拉进行末的整片空白里。
+   */
+  arcContinuationPadding: 6,
   /** 弧线相对基线的垂直偏移（负值 = 上方）。 */
   arcOffsetY: -14,
   /** 单端（unresolved / unclosed）弧线的悬空段长度。 */
