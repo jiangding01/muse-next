@@ -6,7 +6,7 @@
  */
 
 import { readdirSync, readFileSync } from 'node:fs';
-import { relative, resolve } from 'node:path';
+import { relative, resolve, sep } from 'node:path';
 
 import { loadJcx } from '../../../../src/formats/jcx';
 import type { JcxDiagnostic } from '../../../../src/formats/jcx/lexer/diagnostics';
@@ -29,9 +29,14 @@ function listFixtureFiles(dir: string): string[] {
   return found.sort();
 }
 
-/** 相对 `tests/fixtures/jcx` 的路径清单（运行时 glob，数量不写死）。 */
+/**
+ * 相对 `tests/fixtures/jcx` 的路径清单（运行时 glob，数量不写死）。
+ * 分隔符统一为 `/`：Windows 上 `relative` 产出 `encoding\bom-crlf.jcx`，
+ * 会让按名字点名 fixture 的测试与 pinned limitation 名单跨平台不一致
+ * （CI run 35054050143 windows-latest 实测）；`resolve` 两种分隔符都接受。
+ */
 export const fixtureNames: readonly string[] = listFixtureFiles(FIXTURES_DIR).map((full) =>
-  relative(FIXTURES_DIR, full),
+  relative(FIXTURES_DIR, full).split(sep).join('/'),
 );
 
 export function fixtureBytes(name: string): Uint8Array {
