@@ -1,7 +1,7 @@
 # JCX Format Specification
 
 Version: v0.1 (draft)
-Status: 证据固化阶段（M1.3），尚未被 Lexer / Parser 实现验证
+Status: v0.1 证据固化（M1.3）；已被 M1.4–M1.8 的 Lexer / Lossless AST / Parser / Serializer 实现并通过 fixture 矩阵与本地语料 round-trip 验证（实现状态见 HANDOFF §30.1）；本文各条 evidence level 与 UNVERIFIED 判定不因实现而改变。
 Scope of authority: 本文件是 Muse Next 中 `.jcx` Lexer / Parser / Serializer 的**唯一格式依据**。实现与本文冲突时以本文为准；本文与证据冲突时按第 2.3 节的证据优先级修订本文。
 
 ---

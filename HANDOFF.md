@@ -2,8 +2,22 @@
 
 > 面向后续实现 Agent 的项目交接文档  
 > 项目代号：`muse-next`  
-> 当前阶段：**M1.2 已完成，下一步进入 M1.3 `JCX_SPEC.md v0.1`**  
+> 当前阶段：**M0–M1.8 已完成并封板，下一步进入 M2 Notation Rendering**（详见 §30 里程碑表、§69「当前明确的下一任务」）  
 > 核心目标：以现代 TypeScript 技术栈重建已停止维护的 **Muse Pro 2.70** 的核心能力，并优先恢复其 `.jcx` 乐谱格式、谱面渲染、编辑与播放能力。
+
+---
+
+## 文档索引
+
+- [`README.md`](README.md) —— 项目简介、架构管线、公开 API、开发与验证命令、质量护栏摘要
+- [`CHANGELOG.md`](CHANGELOG.md) —— 按里程碑归纳的产品/架构/兼容性变化
+- [`docs/JCX_SPEC.md`](docs/JCX_SPEC.md) —— `.jcx` 格式规格，逐条结论标注 evidence level
+- [`docs/TECHNICAL_PLAN.md`](docs/TECHNICAL_PLAN.md) —— 早期技术方案与架构原则
+- [`docs/VALIDATION.md`](docs/VALIDATION.md) —— 兼容性验证记录
+- [`NOTICE.md`](NOTICE.md) —— 版权、语料与字体策略
+- 本文档内的关键章节：§30 当前 Milestone 总览、§30.1 各里程碑实际状态（文件结构/
+  边界/归一化规则/语料结果的完整快照）、§55–§60 各里程碑 Definition of Done、
+  §69 当前明确的下一任务
 
 ---
 
@@ -31,7 +45,7 @@
    - 15 类正文音乐语法特征
    - **Unknown lines = 0**
    - **Unknown patterns = 0**
-6. 下一步不要继续扩 Scanner；应该正式编写 `docs/JCX_SPEC.md`，然后进入 Lexer → AST → Parser → Serializer → Round-trip。
+6. 下一步不要继续扩 Scanner；应该正式编写 `docs/JCX_SPEC.md`，然后进入 Lexer → AST → Parser → Serializer → Round-trip。（此条为 M0/M1.2 阶段写下的历史记录——这条「下一步」在 M1.3–M1.8 均已完成；当前实际的下一步见 §69。）
 
 ---
 
@@ -2381,6 +2395,10 @@ GitHub Actions run 35054230663（commit 3f578fe）在 macOS/Windows/Ubuntu
 ---
 
 # 31. 下一步：M1.3 `docs/JCX_SPEC.md`
+
+> 历史记录：本节是 M1.2 阶段写下的任务说明，M1.3 已完成
+> （`docs/JCX_SPEC.md` 现已存在）。保留本节是因为 §32–§39 的结构建议/评级规则/
+> 测试策略仍是后续里程碑参照的设计依据；当前实际的下一步见 §69。
 
 这是接手 Agent 应该立即执行的任务。
 

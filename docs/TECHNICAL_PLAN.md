@@ -1,5 +1,15 @@
 # Muse Next — Technical Plan v0.1
 
+> **实施状态说明（对齐 M1.8 封板后的现状）**：本文档是项目早期（M0/M1 起步阶段）
+> 写下的技术方案，架构原则（§2）、模块边界（§4）、渲染/编辑/播放策略（§7–§10）与
+> 非目标（§12）至今仍然有效，未被推翻。但 §5「Current vertical slice」与 §6
+> 「JCX implementation strategy」描述的是 M0 时期的最小实现（`parseJcx()` /
+> `MuseScoreDocument`），已被 M1.4–M1.8 的词法器/无损 AST/Domain/序列化管线取代；
+> §11 的 M1 一栏也只列了立项时的粗粒度目标。实际的当前状态、模块清单与逐里程碑
+> 验收证据以 [`HANDOFF.md`](../HANDOFF.md) §30/§30.1/§55–§60 为准，公开 API 与
+> 管线总览见 [`README.md`](../README.md) §3/§4。下文各节保留原文，仅在描述与现状
+> 不符处追加「现状」说明，不删除原计划文字。
+
 ## 1. Product goal
 
 Rebuild the useful capabilities of legacy Muse Pro as a maintainable, cross-platform TypeScript application while preserving the semantics of existing `.jcx` files. The legacy binary is treated as a behavioral/specification reference, not as source code to translate mechanically.
@@ -81,7 +91,26 @@ The scaffold currently contains the implemented subset of this tree. Directories
 
 ## 5. Current vertical slice
 
-The v0.1 scaffold proves this flow:
+> **现状（M1.8 后）**：下面的流程图是 M0 阶段的最小验证 slice，`parseJcx()` /
+> `MuseScoreDocument` 已在 M1.6 封板时删除（`git log` 提交 `fc3fc9e`），不再存在于
+> 代码库中。实际管线是：
+>
+> ```text
+> Local .jcx file
+>     ↓ Electron file dialog
+> byte buffer
+>     ↓ decodeJcx（UTF-8 优先 / GB18030 回退）
+> Muse 源文本
+>     ↓ lexJcx → buildAst → parseJcxDocument（合称 loadJcx）
+> Score（Domain 模型：voices / events / relations / 已归一化的 header）
+>     ├── %%gchord 定义 → GuitarChord 模型 → React SVG 和弦图（已实现）
+>     └── 其余 voices/events → Jianpu / TAB / Staff 渲染（M2，未开始）
+> ```
+>
+> 反方向的 `serializeJcx`（preserve / canonical 两模式）已在 M1.7–M1.8 实现并通过
+> round-trip 护栏验证，详见 `README.md` §4 与 `HANDOFF.md` §30.1。
+
+The v0.1 scaffold proved this flow (原始 M0 描述，保留供历史参照)：
 
 ```text
 Local .jcx file
@@ -104,6 +133,10 @@ MuseScoreDocument
 This is intentionally a **real compatibility slice**, not a mock UI.
 
 ## 6. JCX implementation strategy
+
+> **现状**：Phase A/B/C 三个阶段规划的能力均已实现并通过 round-trip 护栏验证
+> （M1.4–M1.8），不再是待办事项。原计划文字保留在下面，供理解设计意图使用；
+> 实现细节与验收证据见 `HANDOFF.md` §30.1、公开 API 见 `README.md` §4。
 
 ### Phase A — Structural parser
 
@@ -263,7 +296,22 @@ No generic `execute`, unrestricted filesystem, or arbitrary IPC channel exposed 
 - unknown directive retention
 - all available legal fixtures parse without crash
 
+**现状**：M1 在实施中被拆分为 M1.1–M1.8 子里程碑，全部已完成并封板（详见
+`HANDOFF.md` §30 里程碑表、§55–§60 逐条 DoD 证据）：
+
+- M1.1/M1.2 — 本地语料 Scanner + 首轮发现
+- M1.3 — `docs/JCX_SPEC.md` v0.1（本节列的 inventory / 规格文档目标）
+- M1.4 — 词法器（source spans / 诊断）
+- M1.5 — 无损 AST
+- M1.6 — Parser / Domain Model（unknown 保留、全部语料无崩溃解析）
+- M1.7 — Serializer（preserve / canonical）
+- M1.8 — Round-trip 兼容性护栏（fixture 矩阵 + closure + 三平台 CI）
+
 ### M2 — first real score rendering
+
+**现状：当前进行中的下一阶段**（M1.8 已封板，`HANDOFF.md` §69 明确下一任务是 M2；
+入口要求见 §40/§41/§52：从 `src/domain/` 的 `Score` 画谱面，推荐顺序
+Chord → Jianpu → TAB → Staff，VexFlow 只作 Staff 的 adapter）。
 
 - normalized note/time model
 - staff proof-of-concept
