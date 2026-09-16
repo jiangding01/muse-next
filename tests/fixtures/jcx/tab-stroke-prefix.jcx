@@ -1,0 +1,8 @@
+%MUSE2
+X:1
+T:Tab Stroke Prefix
+M:4/4
+L:1/8
+K:C
+V:1 style=tab clef=standardtab
+[V:1]V[ax/bx/] U[cx/dx/] | B dx/ V |
