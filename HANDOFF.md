@@ -1755,9 +1755,10 @@ Parser / Domain Model
 ✅ M1.7
 Serializer
 
-→ M1.8
-Round-trip compatibility（核心指标已由 M1.7 T7 语料四级回归覆盖，剩余范围见
-§60 后的说明）
+🟡 M1.8
+Round-trip compatibility（本地完成，封板待 CI：fixture 矩阵 + closure + CI
+看板已就绪，见 §30.1「M1.8 实际状态」；本地验收全绿，push 后三平台 Actions
+确认绿即可补 ✅）
 
 → M2
 Notation Rendering
@@ -2243,6 +2244,140 @@ unencodable-replaced` warning；canonical 恒 UTF-8，不受此限制。
 11 条全部可打勾，均有对应实现文件与语料/fixture 证据；无 UNVERIFIED 项被
 虚勾——「Voice aliases」只回写 CONFIRMED 的短别名/全称，不包含 spec 标
 UNVERIFIED 的 `volume=`。
+
+### M1.8 实际状态（Round-trip guardrails，T0–T4，本地完成，封板待 CI）
+
+M1.8 T0–T4 已在本地全部完成（逐条证据见本小节末尾），**但尚未封板**——
+封板条件是 push 后 GitHub Actions 三平台（macOS/Windows/Ubuntu）实际跑绿，
+见本小节末尾「验收边界」与 §60 后「M1.8 实施记录」勾选表的最后一条。CI
+确认绿之后再补一个极小 seal commit，把 §30 milestone 表的 🟡 改成 ✅、
+把 §60 那一条未勾项打勾。**护栏定位**：本里程碑的产出是
+断言、fixture、CI 产物，`src/` 是**零行为变更**——唯一 approved 例外是 T1
+在 `canonical/body.ts` 加的一条谓词：`breaksLineAfter` 把
+`UnknownEvent(tokenKind: 'barline')` 也算作断行点。作用域仅限断行规划，不
+改变任何事件的语义分类；对 11 个真实语料文件，canonical 输出相对
+`8df1aa0`（M1.8 T0，本里程碑改动前的最后一个提交）逐字节不变——真实语料
+从未触发这条断行规则的差异面（该规则只影响限制①命中的畸形输入）。
+
+**fixture 矩阵**（`tests/fixtures/jcx/**/*.jcx`，运行时 glob，实测
+102 个 fixture，全部原始输入无 error 级 diagnostic）：
+
+- L1 parse：原始字节 `loadJcx` 无 error 级 diagnostic。
+- L2 语义：`project(parse(x))` 与 `project(parse(canonical(x)))` 投影相等；
+  唯一豁免 `L2_KNOWN_LIMITATION = { 'unclosed-chord.jcx':
+  '$.voices[0].events[3].tokenKind' }`（单一定义来源见下）。
+- L3 preserve：`preserve` 输出与原字节逐字节相等。
+- 幂等（观测项）：`canonical(parse(canonical(x))) === canonical(x)`。
+- **canonical document closure**（M1.8 T1 新增，零豁免）：把
+  `canon1 = canonical(parse(x))` 当成二级 fixture 再走一遍矩阵——不动点
+  `canonical(parse(canon1)) === canon1`、L2 相等
+  `project(parse(canon1)) === project(parse(canon2))`、L3 闭包
+  `preserve(loadJcx(canon1.bytes)).bytes === canon1.bytes`、reparse clean
+  `loadJcx(canon1.text).diagnostics` 无 error 级——四项对**全部** fixture
+  生效，`unclosed-chord.jcx` 也不例外（它的豁免只作用于「原始 → canon1」
+  这一层，canon1 起就是不动点）。
+- reparse health（M1.8 T0 新增）：原始输入无 error 级的 fixture（clean 组，
+  实测 102/102，`malformedFixtureNames` 为空集）对 canonical 输出重解析
+  设硬门槛（error=0）；若未来出现 malformed fixture，只观测错误数量，不设
+  硬门槛。
+
+**判定逻辑单一来源**（M1.8 T4，方案 §6 固定审查项 10）：
+`tests/unit/jcx/serialize/fixtureMatrix.ts` 是唯一的判断逻辑实现——
+`checkL1`/`checkL2`/`checkL3`/`checkIdempotent`/`checkReparseClean`/
+`checkClosure` 六个函数，加上 `L2_KNOWN_LIMITATION` 常量。
+`roundtrip.test.ts`、`roundtrip.closure.test.ts`（vitest 矩阵）与
+`scripts/jcx/fixture-report.ts`（CI 看板脚本）三处都只 import 并调用这一份
+逻辑，不得各自重新实现；`git grep -n "L2_KNOWN_LIMITATION ="` 只应命中
+`fixtureMatrix.ts` 一处定义。
+
+**语料级指标口径**（`npm run jcx:corpus-test`，11 个本地文件，不写文件名，
+不进 git/CI）：
+
+- T0 起的 round-trip 级五项指标：byte-identical、line-identical、
+  semantic、reparseClean、idempotent；**失败条件是其中三项**
+  byte-identical / semantic / reparseClean（line-identical 与 idempotent
+  只观测，不影响退出码）。
+- T1 新增 closure 一项，同样是失败条件。
+- 上述四项失败条件（byte-identical / semantic / reparseClean / closure）
+  实测 **11/11**。
+- T3 新增 encoding composition（GB18030 → UTF-8 → GB18030 三段往返），
+  **分母是 GB18030 文件数**（11 个语料里 10 个是 GB18030），与上面 11/11
+  分开汇报，不混分母：实测 **10/10**。
+- 11 个 `jcx.serialize.*` diagnostic code（`grep -rhoE
+  "jcx\.serialize\.[a-z-]+" src` 实测全集）全部至少有一条直接正向测试：
+  8 个由 fixture 矩阵/既有单测覆盖，`lyric-range-unresolved` /
+  `unit-length-unrecoverable` / `unit-length-unresolved` 这三个
+  serializer-only defensive branch（parser 不可达）由
+  `canonical.boundary.domain.test.ts` 的手造 `Score` 单测覆盖（M1.8 T2）。
+
+**四条已知限制**（`canonical/body.ts` 文件头①②③ + 本节新增④）：
+
+1. **词法上下文丢失类**：未闭合括号上下文（chord `[` / grace `{` / TAB
+   `[`）之后紧跟一条小节线时，小节线在原文里落在非法词法扫描上下文，
+   parse 层产出 `UnknownEvent(tokenKind: 'barline')`；canonical 原样写回
+   `|` 之后脱离了那个非法上下文，重解析成正常 `barline`——文本一致，只是
+   事件分类漂移。矩阵内唯一实例是 `unclosed-chord.jcx`（`L2_KNOWN_
+   LIMITATION` 钉死差异路径 `$.voices[0].events[3].tokenKind`）。M1.8 T2
+   另外验证了同一类的两种形态——未闭合 `{` 后跟小节线、未闭合 TAB `[`
+   后跟小节线——差异路径同构，按硬规则（L2 豁免名单不得扩大）**未入库**
+   为 fixture，只在 `canonical.boundary.test.ts` 文件头描述形态，不写
+   具体语料内容。
+2. `TabGroupEvent.stroke` parse 层从不填充，`V[ax/bx/]` 的 `V` 前缀与悬空
+   strokePrefix 在 Domain 里没有事实字段，canonical 无从写回（spec
+   §26.4）。
+3. 组级时值后缀 `[CEG]2` 的 `2` 被 parse 落成独立 `UnknownEvent`，
+   canonical 因此输出 `[CEG] 2`（往返一致，但形态与源文本不同）。
+4. **（M1.8 T2 新发现，Domain 级语义丢失，非排版有损）**：`w:` 歌词行绑定
+   到一个零事件声部时，canonical 找不到可挂载的事件区间，发
+   `jcx.serialize.lyric-line-unplaceable` 并把**整条 `LyricLine` 从投影里
+   丢弃**（不是排版细节丢失，是 Domain 语义本身在这条路径上不可逆）。
+   差异表现为 `$.voices[0].lyricLines.length` 不相等，因此**不能**作为
+   矩阵 fixture（会破坏 L2 相等）；`canonical.lyrics.test.ts` 已有直接
+   单测钉住这个 warning + 丢弃行为。**未新增任何 L2 豁免**——这条限制
+   不进 `L2_KNOWN_LIMITATION`，只作为已知限制记录在案，M1.8 T2 的探针
+   验证过一种触发形态并确认现状，未入库为 fixture。
+
+**canonical 有损项**（在 §30.1「M1.7 实际状态」清单基础上新增一条）：
+`w:` 绑定零事件声部时该歌词行被丢弃并发 `jcx.serialize.
+lyric-line-unplaceable`（即上面的已知限制④；两处记录同一件事，互为
+交叉引用）。
+
+**fixture report 与 CI 看板**（M1.8 T4）：新增 `scripts/jcx/fixture-report.ts`
+（`npm run jcx:fixture-report`），复用上面「判定逻辑单一来源」跑 fixture 矩阵
+（不含真实语料，语料指标仍只能本地 `npm run jcx:corpus-test`），stdout 打印
+显式分母的六项指标；若 `GITHUB_STEP_SUMMARY` 环境变量存在（GitHub Actions
+runner 上总是存在）额外追加 Markdown 表格。`.github/workflows/ci.yml` 在
+`npm test` 之后新增一步 `npm run jcx:fixture-report`，三平台
+（macOS/Windows/Ubuntu，见现有 job `strategy.matrix.os`）矩阵各跑一次。
+
+**本地实测数字**（`npm run jcx:fixture-report`，2026-09-16）：
+
+```text
+fixtures: 102
+L1 parse (no error):        102/102
+L2 semantic exact:          101/102   pinned known limitation: 1/102   unexpected: 0
+L3 preserve byte-identical: 102/102
+idempotent (observational): 102/102
+closure (fixed point/L2/L3/reparse): 102/102
+reparse-clean (clean fixtures): 102/102   malformed observed error count: 0 across 0 fixture(s)
+```
+
+**测试数**：`npx vitest run` 实测 47 个测试文件 / 3352 个用例全部通过；
+`npm run typecheck` 无错误。测试时长增量（T1 文件头实测，`npx vitest run
+tests/unit/jcx/serialize` 各跑 3 次取中位数，均为 warm run）：本文件加入前
+536ms（771 用例），加入后 572ms（1140 用例），增量约 +36ms，与同机三次采样
+±50ms 的极差同量级——结论是这一矩阵对整体时长没有可测量的影响，而非一个
+精确数字。
+
+**验收边界（重要）**：以上全部数字来自本地 `npm run typecheck && npx
+vitest run && npm run jcx:corpus-test && npm run jcx:fixture-report` 跑绿，
+**只证明 workflow 配置与脚本本身正确**，不等价于「CI 已跑绿」——本次改动
+未 push，`.github/workflows/ci.yml` 新增的 `jcx:fixture-report` 步骤尚未
+在 GitHub Actions 的 macOS/Windows/Ubuntu 三平台矩阵上实际执行过。**M1.8
+最终封板以 push 后三平台 Actions 全绿为准**；见 §60 DoD 逐条勾选处的
+「待 push 后 CI 确认」标注。
+
+**M1.8 §60 DoD 逐条证据**：见 §60 后的勾选表。
 
 ---
 
@@ -3337,6 +3472,40 @@ semantic round-trip 三项 rate——已经由 `npm run jcx:corpus-test` 第四�
 这些都不是「往返正确性还没做好」，而是「往返正确性已经做好之后，测试基础设施
 和边界覆盖面还能再往前一步」的建议，留给下一位接手 Agent 判断优先级。
 
+**M1.8 实施记录（T0–T4 逐条勾选，2026-09-16，证据见 §30.1「M1.8 实际状态」）**：
+
+DoD 打勾只按最终实际结果给，不支持的条目不勾并写原因；本地跑绿只证明脚本
+与 workflow 配置正确，**不等价于 CI 已跑绿**——见下方「CI 待确认」条目。
+
+- [x] *11/11 corpus parse success* —— `npm run jcx:corpus-test` parse 级
+  11/11 OK（本次未改动 parse 层，沿用 M1.6/M1.7 已证明的现状）。
+- [x] *serialize success* —— round-trip 级 byte-identical 11/11，无
+  `jcx.corpus.roundtrip-uncaught` 命中。
+- [x] *reparse success* —— M1.8 T0 起 reparse-clean 纳入失败条件，实测
+  11/11；canonical 输出自身 diagnostics 无 error 级的契约哨兵
+  （`roundtrip.test.ts` 「契约哨兵」用例）同样全绿。
+- [x] *semantic equality* —— L2 投影相等，语料 11/11（唯一 fixture 级豁免
+  `unclosed-chord.jcx` 不出现在语料，语料本身零豁免）。
+- [x] *byte-identical preserve rate* —— 11/11（含 10 个 GB18030 文件）。
+- [x] *line-identical preserve rate* —— 11/11（观测项，非失败条件）。
+- [x] *semantic round-trip rate* —— 11/11，另加 M1.8 T1 的 canonical
+  document closure 零豁免矩阵 11/11（比 DoD 原定义更强的不变量）。
+- [x] *fixture report 复用同一判断逻辑* —— `tests/unit/jcx/serialize/
+  fixtureMatrix.ts` 单一来源，`roundtrip.test.ts` / `roundtrip.closure.
+  test.ts` / `scripts/jcx/fixture-report.ts` 三处 import 同一份函数；
+  `git grep` 确认 `L2_KNOWN_LIMITATION =` 只有一处定义。
+- [x] *fixture report 显式分母* —— `npm run jcx:fixture-report` 本地实测
+  见 §30.1（102 fixture，known limitation 1/102 单独列出，unexpected 0，
+  exit code 由 unexpected/失败条件驱动）。
+- [x] *HANDOFF 无语料文件名/本地路径* —— 已自查确认本次新增段落不含本地
+  绝对路径与真实语料文件名（fixture 名如 `unclosed-chord.jcx`/
+  `grace-unclosed.jcx` 是自建测试样本，不是语料，允许出现）。
+- [ ] **CI 三平台（macOS/Windows/Ubuntu，见 `.github/workflows/ci.yml`
+  `strategy.matrix.os`）在 `npm run jcx:fixture-report` 步骤上实际跑绿** ——
+  **待 push 后 CI 确认**。本次改动未 push，workflow 文件本身已按方案改好
+  （`npm test` 之后新增一步），但「CI 上真的三平台全绿」这一验收标准无法
+  在本地环境证明，不得直接打勾。
+
 ---
 
 # 61. 后续大阶段规划
@@ -3692,20 +3861,27 @@ JCX
 
 # 69. 当前明确的下一任务
 
-M1.3 / M1.4 / M1.5 / M1.6 / M1.7 已完成（§30.1 有文件结构、Domain 边界、
-归一化规则、evidence 策略、Serializer 模块清单/canonical 规则摘要与语料四级
-回归结果的完整现状快照；§55–§59 DoD 已逐条打勾给证据）。接手后请直接做：
+M1.3 / M1.4 / M1.5 / M1.6 / M1.7 已完成；M1.8 **本地完成，封板待 CI**
+（§30.1 有文件结构、Domain 边界、归一化规则、evidence 策略、Serializer
+模块清单/canonical 规则摘要、语料四级回归结果、以及 M1.8 T0–T4 的 fixture
+矩阵/closure/CI 看板完整现状快照；§55–§59 DoD 已逐条打勾给证据，§60 DoD
+除「CI 三平台实跑」一条待 push 后确认外其余已逐条打勾）。接手后可以直接
+开始 M2，**前提是先确认 M1.8 的 CI 三平台已经跑绿**（push 后看
+GitHub Actions；若还没绿，先处理 CI 失败，不要带着未确认的封板往下走）：
 
 ```text
-M1.8 — Round-trip compatibility（§60 DoD）
+M2 — Notation Rendering（§40）
 ```
 
-衔接点：§60 DoD 要求的「11/11 corpus 的 parse/serialize/reparse/semantic
-equality + byte/line/semantic round-trip rate」核心指标**已经**由 M1.7 T7 的
-`npm run jcx:corpus-test` 第四级覆盖并常驻输出（实测 11/11 全绿，见 §30.1
-「M1.7 实际状态」）。M1.8 剩余范围建议见 §60 DoD 之后新增的「M1.7 T7 现状
-说明」小节（接入持续回归看板/CI、边界 fixture 补齐、幂等性质的单元级证明、
-多编码往返的语料级回归），不要把 M1.8 当成「从零重做一遍 round-trip 测试」。
+**M2 入口要求**（§40/§41/§52）：从 `src/domain/` 的 `Score` 出发画谱面，
+不是从 JCX 文本或 AST 直接画；推荐优先级 Chord → Jianpu → TAB → Staff
+（§40 理由：Chord 已有可借鉴 SVG 实现，Jianpu 是核心差异能力）。VexFlow
+只能作为 Staff 的 adapter，坚持 `Domain Model → Adapter → VexFlow` 单向
+依赖（§41），不得让 `JCX Parser → VexFlow objects` 短路，否则 Jianpu/TAB/
+Chord 会被框架绑死、Playback/Editor 会依赖 renderer。M1.8 对 M2 的唯一
+铺路义务已经兑现：`loadJcx(serializeJcx(...).text)` 这条重建一致快照的
+唯一路径被 fixture 矩阵 + closure 矩阵长期钉住（见 §30.1「M1.8 实际状态」），
+M2 不需要、也不应该再去动 `src/formats/jcx/serialize/**` 的行为。
 
 不要把第一步改成：
 
@@ -3715,7 +3891,7 @@ equality + byte/line/semantic round-trip rate」核心指标**已经**由 M1.7 T
 重构 Electron
 换技术栈
 重写 Scanner
-重新讨论 M1.3–M1.7 已拍板的边界
+重新讨论 M1.3–M1.8 已拍板的边界
 ```
 
 这些都不是当前 critical path。
@@ -3771,6 +3947,7 @@ npm run typecheck
 npm run jcx:scan
 npx vitest run
 npm run jcx:corpus-test
+npm run jcx:fixture-report
 ```
 
 确认 Scanner 输出：
@@ -3781,8 +3958,11 @@ Unknown patterns: 0
 ```
 
 确认 `jcx:corpus-test` 输出四级 OK（Lexer 级 + AST 级 + parse 级 + round-trip
-级，见 §30.1「M1.7 实际状态」）。
+级，见 §30.1「M1.7 实际状态」），`jcx:fixture-report` 输出六项指标且
+`unexpected: 0`（见 §30.1「M1.8 实际状态」）。**确认 push 后 GitHub Actions
+三平台（macOS/Windows/Ubuntu）是否已经跑绿**——本地全绿不等于 CI 已确认，
+见 §60 DoD 逐条勾选表最后一条。
 
-然后阅读 §30.1（M1.4/M1.5 实际状态 + M1.6 实际状态 + M1.7 实际状态）与
-§37 / §38 / §59 / §60，开始 M1.8 Round-trip compatibility：核心指标已由
-M1.7 T7 覆盖，剩余范围见 §60 后的「M1.7 T7 现状说明」与 §69。
+然后阅读 §30.1（M1.4/M1.5 实际状态 + M1.6 实际状态 + M1.7 实际状态 +
+M1.8 实际状态）与 §37 / §38 / §40 / §41 / §59 / §60，开始
+`M2 — Notation Rendering`（§40，入口要求与不要做的架构选择见 §69）。

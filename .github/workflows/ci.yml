@@ -19,3 +19,5 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      - name: JCX fixture matrix report (M1.8 T4, no corpus)
+        run: npm run jcx:fixture-report

@@ -38,10 +38,7 @@ import { describe, expect, it } from 'vitest';
 
 import { loadJcx } from '../../../../src/formats/jcx';
 import { serializeJcx } from '../../../../src/formats/jcx/serialize';
-import {
-  firstProjectionDifference,
-  projectScore,
-} from '../../../../src/formats/jcx/serialize';
+import { projectScore } from '../../../../src/formats/jcx/serialize';
 import {
   canonicalTrip,
   cleanFixtureNames,
@@ -51,16 +48,19 @@ import {
   fixtureNames,
   malformedFixtureNames,
 } from './roundtrip.helpers';
+import {
+  checkIdempotent,
+  checkL1,
+  checkL2,
+  checkL3,
+  checkReparseClean,
+  L2_KNOWN_LIMITATION,
+} from './fixtureMatrix';
 
 /** 对一段 canonical 文本再 canonical 一次（只有已知限制那一例需要看第三趟）。 */
 function canonicalAgain(text: string): string {
   return serializeJcx(loadJcx(text).score, { mode: 'canonical' }).text;
 }
-
-/** 见文件头「L2 的唯一豁免」：值是钉死的差异路径，不是「随便不等都行」。 */
-const L2_KNOWN_LIMITATION: Readonly<Record<string, string>> = {
-  'unclosed-chord.jcx': '$.voices[0].events[3].tokenKind',
-};
 
 const l2Names = fixtureNames.filter((name) => !(name in L2_KNOWN_LIMITATION));
 
@@ -76,8 +76,7 @@ it('reparse health 分组之和等于 fixture 总数（M1.8 T0，防空集）', 
 
 describe.each(fixtureNames)('round-trip 矩阵: %s', (name) => {
   it('L1 parse：无 error 级 diagnostic', () => {
-    const loaded = loadJcx(fixtureBytes(name));
-    expect(loaded.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+    expect(checkL1(name)).toBe(true);
   });
 
   it('L2 前哨：原始投影里没有任何悬空引用（两侧同时悬空不得被判相等）', () => {
@@ -86,14 +85,12 @@ describe.each(fixtureNames)('round-trip 矩阵: %s', (name) => {
   });
 
   it('L3 preserve：bytes 与原字节逐字节相等', () => {
-    const original = fixtureBytes(name);
-    const result = serializeJcx(loadJcx(original), { mode: 'preserve' });
-    expect(Array.from(result.bytes)).toEqual(Array.from(original));
+    expect(checkL3(name)).toBe(true);
   });
 
   it('幂等：canonical(parse(canonical(x))) === canonical(x)', () => {
     const trip = canonicalTrip(name);
-    expect(trip.canonicalTwice).toBe(trip.canonicalText);
+    expect(checkIdempotent(name)).toBe(true);
     if (name in L2_KNOWN_LIMITATION) {
       // 限制①**曾经**的连带后果（M1.8 T1 之前）：第一趟把 `UnknownEvent(barline)`
       // 写成普通 `|` 之后，第二趟才按「小节线后断行」重新切行，所以第 1 → 2 趟
@@ -110,15 +107,14 @@ describe.each(l2Names)('L2 语义 round-trip: %s', (name) => {
   it('project(parse(x)) === project(parse(canonical(parse(x))))', () => {
     const trip = canonicalTrip(name);
     // 先报路径（失败时一眼看到是哪个字段），再用 toEqual 出完整 diff。
-    expect(firstProjectionDifference(trip.before, trip.after)).toBeNull();
+    expect(checkL2(name).diffPath).toBeNull();
     expect(trip.after).toEqual(trip.before);
   });
 });
 
 describe.each(cleanFixtureNames)('reparse health（原始输入无 error 级，硬门槛）: %s', (name) => {
   it('canonical 输出重解析后无 error 级 diagnostic', () => {
-    const trip = canonicalTrip(name);
-    expect(errorDiagnostics(trip.reparsedDiagnostics)).toEqual([]);
+    expect(checkReparseClean(name).ok).toBe(true);
   });
 });
 
@@ -129,8 +125,7 @@ describe.each(malformedFixtureNames)('reparse health（原始输入含 error 级
     // 不断言，it 标题已注明 observed。当前语料/fixture 集合下这一组为空集
     // （`malformedFixtureNames.length === 0`），保留这条 describe.each 是为了
     // 在未来出现 malformed fixture 时自动纳入观测而不需要改动测试结构。
-    const trip = canonicalTrip(name);
-    expect(errorDiagnostics(trip.reparsedDiagnostics).length).toBeGreaterThanOrEqual(0);
+    expect(checkReparseClean(name).errorCount).toBeGreaterThanOrEqual(0);
   });
 });
 
@@ -145,8 +140,9 @@ describe('L2 已知限制（canonical/body.ts 限制①）', () => {
   it.each(Object.entries(L2_KNOWN_LIMITATION))(
     '%s 的投影差异恰好只有一处，且落在记录在案的位置：%s',
     (name, path) => {
-      const trip = canonicalTrip(name);
-      expect(firstProjectionDifference(trip.before, trip.after)).toBe(path);
+      const check = checkL2(name);
+      expect(check.diffPath).toBe(path);
+      expect(check.matchesKnownLimitation).toBe(true);
     },
   );
 

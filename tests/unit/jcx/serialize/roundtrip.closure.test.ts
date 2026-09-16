@@ -35,13 +35,9 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { firstProjectionDifference } from '../../../../src/formats/jcx/serialize';
-import {
-  closureTrip,
-  firstByteDifference,
-  firstTextByteDifference,
-} from './roundtrip.closure.helpers';
-import { errorDiagnostics, fixtureNames } from './roundtrip.helpers';
+import { closureTrip, firstByteDifference, firstTextByteDifference } from './roundtrip.closure.helpers';
+import { fixtureNames } from './roundtrip.helpers';
+import { checkClosure } from './fixtureMatrix';
 
 /** 失败信息只含偏移量、长度与十六进制窗口，不含解码后的原文。 */
 function describeByteDifference(difference: ReturnType<typeof firstByteDifference>): string {
@@ -65,14 +61,13 @@ describe.each(fixtureNames)('canonical document closure: %s', (name) => {
     const trip = closureTrip(name);
     const difference = firstTextByteDifference(trip.canon1Text, trip.canon2Text);
     expect(describeByteDifference(difference)).toBe('no difference');
+    expect(checkClosure(name).fixedPoint).toBe(true);
   });
 
   it('L2 闭包：project(parse(canon1)) === project(parse(canon2))', () => {
     const trip = closureTrip(name);
     // 先报路径（失败时一眼看到是哪个字段），再用 toEqual 出完整 diff。
-    expect(
-      firstProjectionDifference(trip.projectionAfterCanon1, trip.projectionAfterCanon2),
-    ).toBeNull();
+    expect(checkClosure(name).l2).toBe(true);
     expect(trip.projectionAfterCanon2).toEqual(trip.projectionAfterCanon1);
   });
 
@@ -80,13 +75,13 @@ describe.each(fixtureNames)('canonical document closure: %s', (name) => {
     const trip = closureTrip(name);
     const difference = firstByteDifference(trip.preserveOfCanon1Bytes, trip.canon1Bytes);
     expect(describeByteDifference(difference)).toBe('no difference');
+    expect(checkClosure(name).l3).toBe(true);
   });
 
   it('reparse clean：loadJcx(canon1.text).diagnostics 无 error 级', () => {
-    const trip = closureTrip(name);
     // 与 `roundtrip.test.ts` 的 clean 组同门槛，但闭包层对**全部** fixture 生效：
     // canon1 是 canonical 自己产出的文本，本身就应当是一份合法文档，原始输入是否
     // malformed 与它无关。
-    expect(errorDiagnostics(trip.reparsedDiagnostics)).toEqual([]);
+    expect(checkClosure(name).reparseClean).toBe(true);
   });
 });

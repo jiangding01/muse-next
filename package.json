@@ -13,7 +13,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "jcx:scan": "tsx scripts/jcx/scan-corpus.ts",
-    "jcx:corpus-test": "tsx scripts/jcx/corpus-lex-test.ts"
+    "jcx:corpus-test": "tsx scripts/jcx/corpus-lex-test.ts",
+    "jcx:fixture-report": "tsx scripts/jcx/fixture-report.ts"
   },
   "engines": {
     "node": ">=22.12"
