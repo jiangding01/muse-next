@@ -15,9 +15,10 @@ evidence level 以 [`docs/JCX_SPEC.md`](docs/JCX_SPEC.md) 为准。
 
 ### Current milestone
 
-M1.8「Round-trip Guardrails」已完成并于三平台 CI 全绿后封板。下一阶段是 **M2 —
-Notation Rendering**（从 `src/domain/` 的 `Score` 画出谱面，顺序 Chord → Jianpu →
-TAB → Staff）。里程碑总览见 `HANDOFF.md` §30；M2 入口约束见 §40/§41/§52/§69。
+M1.8「Round-trip Guardrails」已封板。**M2 — Notation Rendering 进行中**：T0–T5
+（渲染模型、SVG 基础设施、Chord 图、Jianpu 排布/换行/SVG、React 视图）与 T5.2
+real-world hardening 已完成，下一步 T6 TAB → T7 Staff（VexFlow adapter）→ T8
+render matrix → T9 文档封板。现状与恢复位置见 `HANDOFF.md` §30.1「M2 进行中状态」。
 
 ### Added
 
@@ -36,6 +37,12 @@ TAB → Staff）。里程碑总览见 `HANDOFF.md` §30；M2 入口约束见 §4
 - Preserve / canonical 两种模式的序列化器 `serializeJcx`：preserve 逐字节还原原文
   （保留原编码、字段顺序、别名、注释排版），canonical 输出 Muse Next 标准形态
   （恒 UTF-8、无 BOM、LF、统一字段格式）（M1.7）。
+- Notation 渲染层 `src/notation/`（M2，进行中）：`buildRenderScore` 把 Domain
+  `Score` 投影为纯渲染模型（`RenderDiagnostic` 只有 info/warning，不回写 Domain；
+  `Anchor` 让 SVG 节点与 UI 高亮互指）；无 DOM 依赖的 `SvgNode` 树与序列化器；和弦图
+  布局；简谱布局（C 固定映射 1、只识别 CONFIRMED 的四种小节线、按容器宽度换行、
+  歌词按 system 归属、tie/slur 弧高随跨度并跨行切段、未知事件保守占位 + 诊断）；
+  Electron 渲染进程的 `ScoreView` / 渲染诊断面板。TAB 与五线谱尚未渲染。
 - L2 语义投影 `projectScore` 及配套 round-trip 验证矩阵，用于比较「原始解析结果」与
   「canonical 输出重新解析后的结果」在语义层是否等价（M1.7）。
 - Round-trip 兼容性护栏（M1.8）：

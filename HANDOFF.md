@@ -2,7 +2,7 @@
 
 > 面向后续实现 Agent 的项目交接文档  
 > 项目代号：`muse-next`  
-> 当前阶段：**M0–M1.8 已完成并封板，下一步进入 M2 Notation Rendering**（详见 §30 里程碑表、§69「当前明确的下一任务」）  
+> 当前阶段：**M0–M1.8 已封板；M2 Notation Rendering 进行中（T0–T5 + T5.2 real-world hardening 已提交，T6 TAB 未开始）**（详见 §30 里程碑表、§30.1「M2 进行中状态」、§69「当前明确的下一任务」）  
 > 核心目标：以现代 TypeScript 技术栈重建已停止维护的 **Muse Pro 2.70** 的核心能力，并优先恢复其 `.jcx` 乐谱格式、谱面渲染、编辑与播放能力。
 
 ---
@@ -1774,8 +1774,9 @@ Round-trip compatibility（fixture 矩阵 + closure + CI 看板，见 §30.1「M
 实际状态」；2026-09-16 GitHub Actions run 35054230663 于 macOS/Windows/Ubuntu
 三平台 typecheck / test / fixture report 全绿后封板）
 
-→ M2
-Notation Rendering
+🟡 M2
+Notation Rendering（进行中：T0–T5 已推送并三平台 CI 全绿，T5.2 real-world
+hardening 已提交待推送，T6 TAB 未开始；现状与恢复位置见 §30.1「M2 进行中状态」）
 
 → M3
 Editor Core
@@ -2391,6 +2392,88 @@ GitHub Actions run 35054230663（commit 3f578fe）在 macOS/Windows/Ubuntu
 见 §60 后勾选表最后一条。
 
 **M1.8 §60 DoD 逐条证据**：见 §60 后的勾选表。
+
+### M2 进行中状态（Notation Rendering，T0–T5.2 已提交，未封板）
+
+**恢复位置（2026-09-16，最后一次实跑：typecheck 绿、vitest 58 文件 3907 用例绿、`jcx:corpus-test` 与 `jcx:fixture-report` 未受 M2 影响）**：M2 方案 v1.1.1 已冻结（任务序 T0 模型+守卫 → T1
+`buildRenderScore` → T2 SVG 基础设施+度量 → T3 Chord → T4 排布/换行+Jianpu
+布局 → T5 Jianpu SVG+头部+React → T6 TAB+缩放 → T7 Staff+VexFlow adapter →
+T8 最终 render matrix（契约 C1/C2/C3）→ T9 文档封板）。T0–T5 已推送，
+GitHub Actions run 35087178952 三平台全绿；随后按真实语料（corpus#10，一份
+两声部 TAB+简谱成品）人工 smoke 的发现做了 **T5.2 real-world hardening**
+（四个 fix 提交，见下），**下一步是 T6 TAB**。`src/renderer` 里 TAB 声部目前
+只显示「TAB 六线谱渲染待 T6」占位。
+
+**管线与边界**（已由测试守住）：`loadJcx → {Score, DomainIndex} → RenderInput
+→ src/notation/model（纯函数、flat 投影，不加 Measure）→ src/notation/{chord,
+jianpu}/layout → SvgNode → serializeSvg / React SvgTree`。`src/notation/**`
+零 react/DOM/renderer/formats/vexflow/`node:`/AST import、零 `.tsx`
+（`tests/unit/notation/architecture.test.ts`）；反方向 renderer 不得 import
+AST/parse 内部、不得声明 Domain→presentation helper；尺寸常量唯一来源
+`src/notation/layout/metrics.ts`（守卫扫 `src/notation/**` 的裸数值字面量，
+`// numeric-guard: allow` 白名单）；诊断码唯一来源
+`src/notation/model/diagnostics.ts`（`muse.render.*`，只有 info/warning，
+不回写 Domain）；`Anchor` 判别联合 document/voice/event/relation +
+`anchorKey()`，SVG 节点带 `data-anchor-key` 供 UI 高亮。时值
+`decomposeDuration(Rational) → {base=2^-k, dots≤2, beams, dashes} |
+unrepresentable`，k ∈ [0,10]，判据是精确 `d = base × {1, 3/2, 7/4}`。
+
+**Jianpu 渲染裁决**（产品决定，不是格式事实；spec 未规定谱面外观）：C 固定映射
+1（CONFIRMED BY DOCUMENTATION），显示 `K: <值>` 不生成 `1=X`；小节线只认
+CONFIRMED 四种 `|` `|]` `|:` `:|`，`||`/`::` 等 DOC-ONLY 形态画普通单线 +
+`muse.render.barline.unrecognized`；Z/@ 休止与未知事件保守占位 + 诊断（C1：
+UnknownEvent 恰一个可见节点；C2：fallback 节点至少一条诊断）；tuplet 只画
+括号不缩放；按容器宽度换行（ResizeObserver），SVG 1:1 绘制，
+`cssPixelsPerUnitAtZoom1` 是 renderer 产品常量，**不写 1u≈1px 契约**；
+歌词按列左对齐（居中留作视觉 polish）。
+
+**T5.2 real-world hardening（人工 smoke corpus#10 后的四个 fix）**：
+
+- A `1cba425` 歌词：两趟布局（横向 system 打包 → 歌词三级归属
+  target / 行内最后对齐 / `bodyRange` / 兜底 → 每 system rows →
+  `restackSystems`），`*` skip 不可见不推进 tailX，y 由所属 system 推导；
+  该谱歌词节点 567 → 192，可见 skip 0。
+- B `9f2f1cb` 弧线：`jianpu/jianpuArcs.ts`，弧高
+  `clamp(arcHeight + |span| × arcHeightFactor, arcHeightMin, arcHeightMax)`，
+  跨 system 的 tie/slur 切成 start/middle/end 段，每段 y 取所属 system 几何、
+  弧高取本段跨度，各段共用同一 `anchor`、诊断只发一次；缺 system 几何直接抛错
+  不兜底。该谱 104 relation → 107 段，3 条跨行。
+- C `59b1082` 歌词间距：`lyricFirstOffset` 18 → 30（推导：两个低八度点
+  14.5u + 字号 12u + 余量）；`jianpu.clearance.test.ts` 守「歌词字顶严格低于
+  同行所有减时线/附点/八度点」。
+- D `60fb332` 弧线端点：节点新增 `glyphWidth`（主字形 visual bbox span，非槽位宽），
+  tie/slur 端点改用字形中心，连到全音符/breve 的弧不再落在延音线中间；
+  tuplet 括号与跨行续行端仍用槽位边界。
+
+**已知观察 / 待裁决（不在 T6 范围，恢复时先看）**：
+
+1. duration capability：corpus#10 有 3 处 `2/1`（body `L:1/4` 下 `X8`，
+   二全音符）走 `muse.render.duration.unrepresentable` fallback，只按宽度占位
+   不画延音线。评估结论：延音线规则线性（`dashes = base/(1/4) − 1`），把上限
+   放宽到 k = −1（base = 2）即 7 条延音线，无需新规则；改动限于
+   `model/duration.ts` 上限 + 测试。**等用户裁决**后作为小任务。
+2. 附点位置：现画在数字右侧、延音线之前（`X . _ _ _`）；简谱习惯长音的附点在
+   延音线之后。未核实，属视觉 polish，待与用户确认。
+3. 16 分音符最小槽宽 12u = 减时线长 12u，相邻减时线相连是正确写法，但紧跟小节线
+   时显得拥挤（`12|`）；T4 间距设计，未动。
+4. `[V:1]` 段内 inline `L:` 同时进入两个声部的 `unitLengthChanges`：**非 bug**，
+   parse 诊断 `jcx.parse.unit-length.body-scope` 已按 U06「从该行起生效直到
+   被下一条 L: 覆盖」处理。
+5. T9 需记入文档的债务：头部字号 CSS/metrics 双来源；
+   `ScoreHeaderTextLine.fontSize/width` 无消费方；a11y 未做；
+   `src/renderer/dist` 产物入库待清理；语料时值 `5/8` 2 处 unrepresentable；
+   `syllableKind` 类型可收窄；350 行上限无自动守卫；歌词居中 polish。
+
+**T6 TAB 派发要点（方案 §T6，未变）**：`src/notation/tab/{layoutTab,toSvg}.ts`
++ `ScoreView` 分派 TAB + store zoom + 测试；TabGroup 时值取末音；
+`-S-`/`-H-`/`-P-` relation；`TabNote.stroke` 已填充可用，
+`TabGroupEvent.stroke` 未填充不画（M1.7 已知限制②）；每任务 ≤5 文件
+（metrics/diagnostics/css 另计）。
+
+**工作流约束**（M2 全程）：每轮改动 → typecheck / vitest / corpus → 只读
+`/check` 审查 → 修复复审 → 提交；里程碑 ✅ 只在 push 后三平台 CI 全绿后由
+seal commit 补上；真实语料只以 `corpus#NN` 引用；M2 封板后、M3 前先做 UI
+设计（功能清单 + 设计要求）。
 
 ---
 
@@ -3883,10 +3966,12 @@ M1.3 / M1.4 / M1.5 / M1.6 / M1.7 / M1.8 已完成
 （§30.1 有文件结构、Domain 边界、归一化规则、evidence 策略、Serializer
 模块清单/canonical 规则摘要、语料四级回归结果、以及 M1.8 T0–T4 的 fixture
 矩阵/closure/CI 看板完整现状快照；§55–§60 DoD 已逐条打勾给证据，M1.8 于
-2026-09-16 经 GitHub Actions 三平台全绿封板）。接手后直接开始 M2：
+2026-09-16 经 GitHub Actions 三平台全绿封板）。**M2 已进行到 T5.2**（§30.1
+「M2 进行中状态」有恢复位置、已提交的 T0–T5.2、待裁决事项与 T6 派发要点）。
+接手后从 M2 T6 继续：
 
 ```text
-M2 — Notation Rendering（§40）
+M2 — Notation Rendering（§40）：T6 TAB → T7 Staff/VexFlow → T8 render matrix → T9 文档封板
 ```
 
 **M2 入口要求**（§40/§41/§52）：从 `src/domain/` 的 `Score` 出发画谱面，
