@@ -78,9 +78,12 @@ export function arcSystemGeometries(
   return geometries;
 }
 
-/** 端点一律取列中心，保证两端算法一致。 */
+/**
+ * 端点取**字形中心**而非槽位中心：`width` 是按时值分配的槽位宽（全音符/breve 最宽），
+ * 数字字形本身靠槽左侧绘制，只有 `glyphWidth` 宽——弧线要贴数字，不是贴时值占位。
+ */
 function centerOf(node: JianpuNode): number {
-  return node.x + node.width / 2;
+  return node.x + node.glyphWidth / 2;
 }
 
 /**

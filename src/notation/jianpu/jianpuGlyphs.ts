@@ -1,13 +1,11 @@
 /**
- * notation/jianpu —— 简谱 layout 的**节点类型**与**字形几何**
- * （M2 方案 v1.1.1 §3.2 / §2.7，T4；自 `layoutJianpu.ts` 拆出）。
- *
- * 拆分理由：`layoutJianpu.ts` 管切分 / 换行 / 关系 / 歌词 / 诊断，必超 350 行上限；本文件
- * 的几何只认「一个基准点」，歌词行与头部标签另见 `jianpuSections.ts`。
- * 这些类型是**简谱自己的** layout model，不继承任何万能基类，也不与 `ChordLayout` /
- * `TabLayout` / `StaffLayout` 互相转换（§2.7）。依赖方向单向 `layoutJianpu.ts →
- * jianpuGlyphs.ts`，无环；尺寸一律取自 `metrics.ts` 的 `JIANPU_METRICS`（唯一来源），
- * 单位是 abstract unit（D6，不是像素）。
+ * notation/jianpu —— 简谱 layout 的**节点类型**与**字形几何**（M2 方案 v1.1.1 §3.2 / §2.7，
+ * T4；自 `layoutJianpu.ts` 拆出）。拆分理由：`layoutJianpu.ts` 管切分 / 换行 / 关系 / 歌词 /
+ * 诊断，必超 350 行上限；本文件的几何只认「一个基准点」，歌词行与头部标签另见
+ * `jianpuSections.ts`。这些类型是**简谱自己的** layout model，不继承任何万能基类，也不与
+ * `ChordLayout` / `TabLayout` / `StaffLayout` 互相转换（§2.7）。依赖方向单向
+ * `layoutJianpu.ts → jianpuGlyphs.ts`，无环；尺寸一律取自 `metrics.ts` 的
+ * `JIANPU_METRICS`（唯一来源），单位是 abstract unit（D6，不是像素）。
  */
 
 import type { Accidental, SourceRef } from '../../domain';
@@ -80,6 +78,8 @@ export interface JianpuNodeBase {
   readonly x: number;
   readonly y: number;
   readonly width: number;
+  /** 主字形视觉 bbox 跨度，**不是**槽位宽 `width`；弧线端点用它。零成员 chord/grace 为 0。grace 字形整体相对 `x` 偏移 `±graceOffsetX`，`[x, x+glyphWidth]` 不是它的真实 bbox（grace 不作 tie/slur 端点）。 */
+  readonly glyphWidth: number;
   /** 是否走了降级路径（契约 C2：这类节点至少关联一条 `RenderDiagnostic`）。 */
   readonly fallback: boolean;
 }

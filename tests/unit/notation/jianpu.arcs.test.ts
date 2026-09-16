@@ -166,6 +166,58 @@ describe('jianpu 弧线 —— 切段只增加视觉段，不增加 relation ide
   });
 });
 
+describe('jianpu 弧线 —— 端点对准数字字形而非时值槽位（不是格式事实，回归修复）', () => {
+  it('四分音符 tie 到全音符：末端落在数字字形内，不是槽位中心', () => {
+    const result = layout('C-C4|');
+    expect(result.arcs).toHaveLength(1);
+    const arc = arcOf(result, 0);
+    const lastNode = result.nodes[1];
+    if (lastNode === undefined) throw new Error('全音符节点必须存在');
+    expect(arc.x2).toBeGreaterThanOrEqual(lastNode.x);
+    expect(arc.x2).toBeLessThanOrEqual(lastNode.x + lastNode.glyphWidth);
+    expect(arc.x2).toBeLessThan(lastNode.x + lastNode.width / 2);
+  });
+
+  it('跨行 tie 末段：全音符换行到下一行谱后，末端仍落在数字字形内', () => {
+    const result = layout('CCCC-|C4|', NARROW);
+    expect(result.systems.length).toBeGreaterThanOrEqual(2);
+    expect(result.arcs).toHaveLength(2);
+    const endArc = arcOf(result, 1);
+    expect(endArc.segment).toBe('end');
+    const lastNode = result.nodes.find(
+      (node) => node.systemIndex === endArc.systemIndex && node.kind === 'note',
+    );
+    if (lastNode === undefined) throw new Error('换行后的全音符节点必须存在');
+    expect(endArc.x2).toBeGreaterThanOrEqual(lastNode.x);
+    expect(endArc.x2).toBeLessThanOrEqual(lastNode.x + lastNode.glyphWidth);
+    expect(endArc.x2).toBeLessThan(lastNode.x + lastNode.width / 2);
+  });
+
+  it('零成员 chord 作 slur 端点：glyphWidth 为 0，弧线坐标仍全部有限', () => {
+    const result = layout('([]D) {}C|');
+    const chord = result.nodes.find((node) => node.kind === 'chord');
+    const grace = result.nodes.find((node) => node.kind === 'grace');
+    if (chord === undefined || grace === undefined) throw new Error('fixture 必须含零成员 chord 与 grace');
+    expect(chord.glyphWidth).toBe(0);
+    expect(grace.glyphWidth).toBe(0);
+    expect(result.arcs).toHaveLength(1);
+    const arc = arcOf(result, 0);
+    expect([arc.x1, arc.x2, arc.y, arc.height].every(Number.isFinite)).toBe(true);
+    expect(arc.x1).toBe(chord.x);
+  });
+
+  it('首端为全音符时 x1 也落在数字字形内', () => {
+    const result = layout('C4-C|');
+    expect(result.arcs).toHaveLength(1);
+    const arc = arcOf(result, 0);
+    const firstNode = result.nodes[0];
+    if (firstNode === undefined) throw new Error('全音符节点必须存在');
+    expect(arc.x1).toBeGreaterThanOrEqual(firstNode.x);
+    expect(arc.x1).toBeLessThanOrEqual(firstNode.x + firstNode.glyphWidth);
+    expect(arc.x1).toBeLessThan(firstNode.x + firstNode.width / 2);
+  });
+});
+
 describe('jianpu 弧线 —— A 类恢复状态不受切段影响（§22）', () => {
   it('未解析的 tie 仍是单端一小截弧 + tie.unresolved', () => {
     const result = layout('C-|');
@@ -173,7 +225,8 @@ describe('jianpu 弧线 —— A 类恢复状态不受切段影响（§22）', (
     const arc = arcOf(result, 0);
     expect(arc.open).toBe(true);
     expect(arc.segment).toBe('whole');
-    expect(spanOf(arc)).toBe(JIANPU_METRICS.arcOpenLength);
+    // `x1` 现在从字形中心（含 measurer 度量的浮点宽度）起算，容许浮点误差。
+    expect(spanOf(arc)).toBeCloseTo(JIANPU_METRICS.arcOpenLength);
     expect(result.diagnostics.map((item) => item.code)).toContain(CODES.tieUnresolved);
   });
 
@@ -185,7 +238,7 @@ describe('jianpu 弧线 —— A 类恢复状态不受切段影响（§22）', (
     if (first === undefined) throw new Error('单端弧必须存在');
     expect(first.systemIndex).toBe(0);
     expect(first.segment).toBe('whole');
-    expect(spanOf(first)).toBe(JIANPU_METRICS.arcOpenLength);
+    expect(spanOf(first)).toBeCloseTo(JIANPU_METRICS.arcOpenLength);
     expect(result.diagnostics.map((item) => item.code)).toContain(CODES.slurUnclosed);
   });
 });

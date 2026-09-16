@@ -58,12 +58,14 @@ export function eventAnchor(voiceId: VoiceId, eventId: EventId): Anchor {
   return { kind: 'event', voiceId, eventId };
 }
 
-function baseOf(cursor: Cursor, voiceId: VoiceId, fallback: boolean): JianpuNodeBase {
+function baseOf(
+  cursor: Cursor, voiceId: VoiceId, fallback: boolean, glyphWidth: number,
+): JianpuNodeBase {
   return {
     anchor: eventAnchor(voiceId, cursor.item.eventId), sourceRef: cursor.item.sourceRef,
     slotIndex: cursor.slot.slot.index,
     measureIndex: cursor.measureIndex, systemIndex: cursor.systemIndex,
-    x: cursor.x, y: cursor.y, width: cursor.slot.slot.width, fallback,
+    x: cursor.x, y: cursor.y, width: cursor.slot.slot.width, glyphWidth, fallback,
   };
 }
 
@@ -106,6 +108,14 @@ function memberGlyph(
   };
 }
 
+/**
+ * 空数组的 `Math.max(...[])` 是 `-Infinity`：`[]` / `{}` 这种零成员括号语法可达
+ * （parse 不设成员数下限），字形宽必须退回 0 而不是把 `-Infinity` 带进弧线几何。
+ */
+function maxOrZero(values: readonly number[]): number {
+  return values.length === 0 ? 0 : Math.max(...values);
+}
+
 function textNodeKindOf(event: MusicEvent): JianpuTextNode['kind'] {
   if (event.kind === 'decoration') return 'decoration';
   if (event.kind === 'chordSymbol') return 'chordSymbol';
@@ -130,6 +140,7 @@ function buildTextNode(
   const text = textNodeTextOf(item.event);
   const anchor = eventAnchor(voiceId, item.eventId);
   const size = JIANPU_METRICS.annotationFontSize;
+  const textWidth = measurer.measure(text, { fontSize: size }).width;
   if (kind === 'decoration') {
     sink(draftOf(CODES.decorationPlaceholder, 'info', '装饰记号只画统一文本占位：M2 不做符号字形映射（spec §23 U27–U30）', anchor, item.sourceRef));
   } else if (kind === 'unknown') {
@@ -138,9 +149,9 @@ function buildTextNode(
     sink(draftOf(CODES.jianpuEventOutOfScope, 'info', `事件类型 ${item.event.kind} 不属于简谱渲染范围，画成可见占位，不静默丢弃`, anchor, item.sourceRef));
   }
   return {
-    ...baseOf(cursor, voiceId, kind !== 'chordSymbol'),
+    ...baseOf(cursor, voiceId, kind !== 'chordSymbol', textWidth),
     kind, text: glyph(text, x, y, size),
-    textWidth: measurer.measure(text, { fontSize: size }).width,
+    textWidth,
   };
 }
 
@@ -156,14 +167,16 @@ export function buildNode(
     case 'note': {
       const pitch = pitchToNumber(event.note.pitch, event.note.accidental);
       const duration = durationGlyphsOf(event.note.duration, x, y);
+      const text = glyph(String(pitch.number), x, y, size);
+      const glyphWidth = measurer.measure(text.text, { fontSize: size }).width;
       if (pitch.mixedOctave) {
         sink(draftOf(CODES.jianpuOctaveMixed, 'info', "八度修饰同时含 ' 与 ,（spec §14.2 UNVERIFIED）：只按 register 画基准八度，不实现抵消", anchor, item.sourceRef));
       }
       return {
-        ...baseOf(cursor, voiceId, pitch.mixedOctave || isDurationFallback(event.note.duration, duration)),
+        ...baseOf(cursor, voiceId, pitch.mixedOctave || isDurationFallback(event.note.duration, duration), glyphWidth),
         kind: 'note',
         pitch,
-        text: glyph(String(pitch.number), x, y, size),
+        text,
         pitchGlyphs: buildPitchGlyphs(pitch, x, y),
         duration,
       };
@@ -177,34 +190,49 @@ export function buildNode(
         sink(draftOf(code, 'info', `休止 ${variant} 的语义 UNVERIFIED：按普通休止画 0 并照常占位，既不画多小节休止也不隐藏`, anchor, item.sourceRef));
       }
       const duration = durationGlyphsOf(event.rest.duration, x, y);
+      const text = glyph('0', x, y, size);
+      const glyphWidth = measurer.measure(text.text, { fontSize: size }).width;
       return {
-        ...baseOf(cursor, voiceId, code !== undefined || isDurationFallback(event.rest.duration, duration)),
+        ...baseOf(cursor, voiceId, code !== undefined || isDurationFallback(event.rest.duration, duration), glyphWidth),
         kind: 'rest',
         variant,
-        text: glyph('0', x, y, size),
+        text,
         duration,
       };
     }
     case 'chord': {
       const duration = durationGlyphsOf(event.duration, x, y);
+      const members = event.members.map((member, index) => memberGlyph(member, index, x, y));
+      // 组内各成员各画各的数字：弧线等需要对准的是「最宽那个数字」，不是整组的纵向堆叠范围。
+      const glyphWidth = maxOrZero(
+        members.map((member) => measurer.measure(member.text.text, { fontSize: JIANPU_METRICS.digitFontSize }).width),
+      );
       return {
-        ...baseOf(cursor, voiceId, isDurationFallback(event.duration, duration)),
+        ...baseOf(cursor, voiceId, isDurationFallback(event.duration, duration), glyphWidth),
         kind: 'chord',
-        members: event.members.map((member, index) => memberGlyph(member, index, x, y)),
+        members,
         duration,
       };
     }
     case 'grace': {
       // 倚音**不占时值**（spec §21）：只做水平偏移，列宽仍是 untimed 的固定窄列。
       const offset = event.after ? JIANPU_METRICS.graceOffsetX : -JIANPU_METRICS.graceOffsetX;
+      const texts = event.members.map((member, index) => glyph(
+        'pitch' in member ? String(pitchToNumber(member.pitch).number) : String(member.fret),
+        x + offset + index, y, JIANPU_METRICS.graceFontSize,
+      ));
+      // bbox span：各 text 的 x 因 `offset + index` 各不相同，宽度必须按「最右字形右边界
+      // − 最左字形左边界」算，不能拿各字形宽度直接相加（那会把位移也重复计入一次）。
+      const textRights = texts.map(
+        (t) => t.x + measurer.measure(t.text, { fontSize: JIANPU_METRICS.graceFontSize }).width,
+      );
+      const textLefts = texts.map((t) => t.x);
+      const glyphWidth = texts.length === 0 ? 0 : Math.max(...textRights) - Math.min(...textLefts);
       return {
-        ...baseOf(cursor, voiceId, false),
+        ...baseOf(cursor, voiceId, false, glyphWidth),
         kind: 'grace',
         after: event.after,
-        texts: event.members.map((member, index) => glyph(
-          'pitch' in member ? String(pitchToNumber(member.pitch).number) : String(member.fret),
-          x + offset + index, y, JIANPU_METRICS.graceFontSize,
-        )),
+        texts,
       };
     }
     case 'barline': {
@@ -212,12 +240,18 @@ export function buildNode(
       if (form === 'unrecognized') {
         sink(draftOf(CODES.barlineUnrecognized, 'info', `小节线 ${JSON.stringify(event.raw)} 不在 spec §18 已知形态表内：画普通单线，不推断反复语义`, anchor, item.sourceRef));
       }
+      const glyphs = buildBarlineGlyphs(form, x, y);
+      // bbox span：如实取线组 x 极差，单线时为 0——小节线不是 tie/slur 端点，没有「最小宽度」
+      // 一说；仓库 metrics 里也没有任何线宽常量可用，不为此新增或挪用 `barlineCompositeGap`
+      // （那是复合线的间距，不是宽度）。
+      const lineXs = glyphs.lines.map((line) => line.x1);
+      const glyphWidth = Math.max(...lineXs) - Math.min(...lineXs);
       return {
-        ...baseOf(cursor, voiceId, form === 'unrecognized'),
+        ...baseOf(cursor, voiceId, form === 'unrecognized', glyphWidth),
         kind: 'barline',
         raw: event.raw,
         form,
-        glyphs: buildBarlineGlyphs(form, x, y),
+        glyphs,
       };
     }
     default:
