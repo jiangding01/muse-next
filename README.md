@@ -100,8 +100,11 @@ src/
 
 **读取（bytes/文本 → Domain）**
 
+> 以下示例假定文件位于仓库根目录；`tsconfig.json` 未配置 `baseUrl`/`paths`，
+> 项目也未发布 package exports，请按实际文件位置调整相对路径。
+
 ```ts
-import { loadJcx } from 'src/formats/jcx';
+import { loadJcx } from './src/formats/jcx';
 
 const source = 'M:4/4\nK:C\nCDEF|GABc|\n';
 const result = loadJcx(source); // 也接受 Uint8Array（走 decodeJcx 自动探测编码）
@@ -115,7 +118,7 @@ result.ast;         // 无损 AST（result.ast 配合 printAst 可还原源文�
 **写回（preserve 模式：逐字节还原原文，适合编辑已有文件）**
 
 ```ts
-import { loadJcx, serializeJcx } from 'src/formats/jcx';
+import { loadJcx, serializeJcx } from './src/formats/jcx';
 
 const loaded = loadJcx(source);
 const preserved = serializeJcx(loaded, { mode: 'preserve' });
@@ -126,7 +129,7 @@ const preserved = serializeJcx(loaded, { mode: 'preserve' });
 **写回（canonical 模式：输出 Muse Next 标准形态，适合新建文件）**
 
 ```ts
-import { serializeJcx } from 'src/formats/jcx';
+import { serializeJcx } from './src/formats/jcx';
 
 const canonical = serializeJcx(loaded.score, {
   mode: 'canonical',
@@ -140,8 +143,8 @@ const canonical = serializeJcx(loaded.score, {
 导出），用于把两次解析结果摊平成可比较的语义投影：
 
 ```ts
-import { loadJcx } from 'src/formats/jcx';
-import { projectScore, projectionEquals } from 'src/formats/jcx/serialize';
+import { loadJcx } from './src/formats/jcx';
+import { projectScore, projectionEquals } from './src/formats/jcx/serialize';
 
 const before = projectScore(loadJcx(source).score);
 const roundTripped = loadJcx(serializeJcx(loadJcx(source).score, { mode: 'canonical' }).text);
@@ -196,7 +199,7 @@ npm ci
 |---|---|---|
 | `npm run typecheck` | `tsc --noEmit` 严格类型检查 | 否 |
 | `npm test` | `vitest run` 全量单元测试 | 否 |
-| `npm run jcx:corpus-test` | 对本地 legacy `.jcx` 语料跑四级 round-trip 回归（parse / AST / 语义 / 编码组合） | 是（语料缺失时打印跳过提示并以 exit 0 结束，CI 上直接跳过） |
+| `npm run jcx:corpus-test` | 对本地 legacy `.jcx` 语料跑 Lexer / AST / Parse / Round-trip 四级回归，另含 GB18030 encoding composition 检查 | 是（语料缺失时打印跳过提示并以 exit 0 结束，CI 上直接跳过） |
 | `npm run jcx:fixture-report` | 对 `tests/fixtures/jcx/**` 跑同一套 fixture 矩阵检查，输出显式分母的六项指标 | 否（不含真实语料内容） |
 | `npm run jcx:scan` | 本地语料发现扫描器，生成 `docs/generated/` 下的统计报告 | 是 |
 | `npm run dev` | 启动 Electron + Vite 开发环境 | 否 |

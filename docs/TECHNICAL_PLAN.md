@@ -176,6 +176,10 @@ parse(source) -> AST -> serialize(AST)
 
 must preserve known semantics and retain unknown directives/comments. Canonical formatting and byte-for-byte preservation are separate test modes.
 
+> **实施状态（M1.7/M1.8）**：最终实现拆成两条严格分离的路径——Lossless AST →
+> `preserve`（字节保真）与 Domain `Score` → `canonical`（确定性语义保真），
+> canonical 不是 AST serializer；详见 `README.md` §3/§4 与 `HANDOFF.md` §30.1。
+
 ## 7. Guitar/chord subsystem
 
 `guitar-tabs-editor` is a useful reference for SVG chord geometry and chord-library ideas, but not the application architecture.
@@ -349,7 +353,11 @@ Chord → Jianpu → TAB → Staff，VexFlow 只作 Staff 的 adapter）。
 - bundling the original MAESTRO.TTF or sample songs without rights review
 - byte-for-byte emulation of undocumented bugs
 
-## 13. Next engineering task
+## 13. Historical next task after the M0 scaffold
+
+> **Historical — completed in M1.1–M1.4.** 本节是 M0 脚手架完成时写下的下一步，
+> 已全部落地（scanner → JCX_SPEC → Lexer）。当前真正的下一任务是 M2 Notation
+> Rendering，见 §11 与 `HANDOFF.md` §69。
 
 After this scaffold boots successfully on the developer Mac:
 

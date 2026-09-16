@@ -7,8 +7,9 @@
 >
 > - fixture 矩阵（`npm run jcx:fixture-report`，102 个合成 fixture，六项检查，
 >   见 `README.md` §7）；
-> - 本地语料回归（`npm run jcx:corpus-test`，11 个真实语料文件，四级
->   parse/AST/语义/编码组合检查，git 忽略、CI 上跳过）；
+> - 本地语料回归（`npm run jcx:corpus-test`，11 个真实语料文件，Lexer /
+>   AST / Parse / Round-trip 四级，另含 GB18030 encoding composition 检查；
+>   语料 git 忽略、CI 上跳过）；
 > - 三平台 CI（`.github/workflows/ci.yml`，macOS/Windows/Ubuntu）。
 >
 > 最新实测数字与已知限制以 `README.md` §6/§7 与 `HANDOFF.md` §30.1 为准，不在本文件

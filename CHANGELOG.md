@@ -82,8 +82,8 @@ Canonical 序列化目前有四条已知限制（详见 `HANDOFF.md` §30.1「�
 
 ### Quality
 
-以下数字为对应里程碑封板时的实测结果，最新数字以 `README.md`「开发与验证」一节当次
-实跑为准：
+以下数字为对应里程碑封板时的实测结果，最新封板数字以 `HANDOFF.md` §30.1 /
+M1.8 实施记录为准；`README.md` 只维护使用入口与指标口径：
 
 - Fixture 矩阵（`tests/fixtures/jcx/**`，不含真实语料）：102 个 fixture，
   L1/L3/幂等/closure/reparse-clean 均 102/102，L2 语义 101/102（1 条 pinned known
