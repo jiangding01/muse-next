@@ -5,7 +5,7 @@
  * 结构问题一律以 diagnostic 呈现，见 `SourceInspector` 的诊断列表。
  */
 
-import { ChordDiagram } from '../../notation/chord/ChordDiagram';
+import { ChordDiagram } from './notation/ChordDiagram';
 import { useMuseAppStore } from '../app/store';
 
 export function ScoreWorkspace() {

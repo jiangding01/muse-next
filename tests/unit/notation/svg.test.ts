@@ -6,8 +6,8 @@
  * - `serializeSvg`：属性顺序稳定、转义、数字格式化、幂等/不修改输入；
  * - `node.ts`：tag 白名单拒绝非法 tag；
  * - `textMeasurer`：确定性默认实现——同输入同输出、ASCII/CJK 宽度差异、空串；
- * - **metrics 唯一来源守卫**：`layout/**` 与 `svg/**` 下除 `metrics.ts` 外不得出现
- *   顶层裸数字尺寸常量，含正/反例证明规则既不漏也不过宽。
+ * - **metrics 唯一来源守卫**：`src/notation/**` 下除 `metrics.ts`（与 `model/**`，渲染
+ *   中立模型不含尺寸）外不得出现顶层裸数字尺寸常量，含正/反例证明规则既不漏也不过宽。
  */
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
@@ -196,9 +196,8 @@ describe('metrics —— 尺寸常量唯一来源守卫（§2.8 / §7-19，P2-2 
   /**
    * 规则（本文件选定，见 T2 报告，P1-2 修订为结构化按声明符解析而非单一大正则）：
    * 在 `src/notation/**` 下（排除 `layout/metrics.ts` 本身与 `model/**`——model 是
-   * 渲染中立模型，不含任何尺寸；另排除 `chord/ChordDiagram.tsx`，它是 M1.6 遗留、
-   * T3 会整体迁出 `src/notation/**` 的**唯一**已知例外，与 `architecture.test.ts` 的
-   * `REACT_EXCEPTIONS` 同源——见下面单独钉住该例外不得扩张的用例），任何文件都不得
+   * 渲染中立模型，不含任何尺寸；T3 已把 `chord/ChordDiagram.tsx` 整体迁出
+   * `src/notation/**`，不再有任何例外），任何文件都不得
    * 出现**顶层**（零缩进、不在任何函数体内部）的 `const`/`let` 声明，其声明符
    * （单行可能有多个，用顶层逗号分隔）的右值是一个裸数字字面量：十进制整数/小数
    * （含 `_` 数字分隔符）、十六进制（`0x...`）、科学计数法（`1e3`），可选带一个
@@ -209,14 +208,18 @@ describe('metrics —— 尺寸常量唯一来源守卫（§2.8 / §7-19，P2-2 
    *   不是尺寸）——判定时先剥掉 `as const` 与 `_` 分隔符再比较；
    * - 带 `// numeric-guard: allow` 行尾注释的显式白名单（留给确有理由的例外，
    *   而不是删掉规则）；
-   * - 右值不是「纯数字（可选 `as const`）」的任何其它形式，例如对象/数组字面量、
-   *   函数调用、模板字符串——即便它们内部含数字或逗号（用顶层括号/大括号深度追踪
-   *   来正确拆分同一行的多个声明符，而不是对整行数逗号）。
+   * - 函数体内部/嵌套的字面量（例如 `serializeSvg.ts` 里 `toFixed(4)` 的 `4` 是
+   *   序列化精度、不是布局尺寸，不在本规则的管辖范围）。
    *
-   * 这条规则**故意窄**：它只抓「顶层 const 直接绑定数字」这一种最常见的「悄悄新开
-   * 一个尺寸常量来源」的写法，不逐字符扫描函数体内部的字面量（例如 `serializeSvg.ts`
-   * 里 `toFixed(4)` 的 `4` 是序列化精度、不是布局尺寸，不在本规则的管辖范围——这也是
-   * 为什么下面的反例专门证明「局部/嵌套的数字不会被误伤」）。
+   * **第二条规则（本轮 /check P1 新增）**：除「顶层 const/let = 裸数字」外，还命中
+   * **顶层 `const`/`let` 声明、右值是对象字面量（可选尾随 `as const`）时，该对象内部
+   * 任意一条 `key: <纯数字>` 属性**——`layoutChord.ts` 曾经把一整张几何尺寸表就地
+   * 塞进一个顶层对象常量（`CHORD_GEOMETRY`）绕过了第一条规则（对象字面量右值本身
+   * 不是「纯数字」），这正是本条要堵住的漏洞。多行对象需要跨行解析：从顶层声明的
+   * `{` 开始按括号深度找到匹配的 `}`，再对块内每一行按 `key: value` 判定，同样应用
+   * 结构性白名单与 `// numeric-guard: allow`。**不递归进函数体**：只有顶层声明本身
+   * 是对象字面量才会被扫描，函数内部构造的对象（例如 `element('rect', { x: 1 })`
+   * 这种调用参数）不触发。
    */
   const STRUCTURAL_WHITELIST = new Set(['0', '1', '-1', '2']);
 
@@ -266,7 +269,7 @@ describe('metrics —— 尺寸常量唯一来源守卫（§2.8 / §7-19，P2-2 
     return literal.replace(/\s*as\s+const\s*$/i, '').replace(/_/g, '').trim();
   }
 
-  function findBareNumericConstantViolations(source: string): string[] {
+  function findTopLevelBareNumericViolations(source: string): string[] {
     const offenders: string[] = [];
     for (const rawLine of source.split('\n')) {
       if (/^\s/.test(rawLine)) continue; // 有缩进：不是顶层声明（局部/嵌套 const 不算）。
@@ -289,6 +292,88 @@ describe('metrics —— 尺寸常量唯一来源守卫（§2.8 / §7-19，P2-2 
       }
     }
     return offenders;
+  }
+
+  /** 顶层 `const`/`let NAME = {`（可选类型标注），捕获组 2 是声明行里 `{` 之后的剩余文本。 */
+  const TOP_LEVEL_OBJECT_DECL_RE = /^(?:export\s+)?(?:const|let)\s+([\w$]+)(?:\s*:\s*[^={]+)?\s*=\s*\{(.*)$/;
+
+  /** 对象字面量内一条 `key: <纯数字>` 属性（不要求行尾边界——数字字符类本身就是天然边界）。 */
+  const OBJECT_NUMERIC_PROP_RE = /(['"]?[\w$]+['"]?)\s*:\s*(-?(?:0x[\da-f]+|\d[\d_]*(?:\.\d+)?(?:e[+-]?\d+)?))/gi;
+
+  /** 统计一段文本里 `{`/`}` 的净深度变化，跳过字符串/模板字面量内部的花括号。 */
+  function countBraceDelta(text: string): number {
+    let delta = 0;
+    let quote: string | null = null;
+    for (let i = 0; i < text.length; i += 1) {
+      const ch = text[i] ?? '';
+      if (quote !== null) {
+        if (ch === quote && text[i - 1] !== '\\') quote = null;
+        continue;
+      }
+      if (ch === '"' || ch === "'" || ch === '`') {
+        quote = ch;
+        continue;
+      }
+      if (ch === '{') delta += 1;
+      if (ch === '}') delta -= 1;
+    }
+    return delta;
+  }
+
+  /**
+   * 顶层 `const`/`let X = { ... }`（单行或多行，可选尾随 `as const`）内部的裸数字
+   * 属性。只扫描顶层声明本身是对象字面量的情况，不递归进函数体（P1，本轮 /check）。
+   */
+  function findTopLevelObjectLiteralNumericViolations(source: string): string[] {
+    const lines = source.split('\n');
+    const offenders: string[] = [];
+    let i = 0;
+    while (i < lines.length) {
+      const rawLine = lines[i] ?? '';
+      if (/^\s/.test(rawLine)) {
+        i += 1;
+        continue; // 有缩进：不是顶层声明。
+      }
+      const declMatch = TOP_LEVEL_OBJECT_DECL_RE.exec(stripTrailingLineComment(rawLine).code.trimEnd());
+      if (declMatch === null) {
+        i += 1;
+        continue;
+      }
+
+      const firstLineRest = declMatch[2] ?? '';
+      const blockLines = [firstLineRest];
+      let depth = 1 + countBraceDelta(firstLineRest); // 声明行已吃掉开头的 `{`。
+      let j = i;
+      while (depth > 0 && j + 1 < lines.length) {
+        j += 1;
+        const nextLine = lines[j] ?? '';
+        blockLines.push(nextLine);
+        depth += countBraceDelta(nextLine);
+      }
+
+      for (const blockLine of blockLines) {
+        const { code: lineCode, comment } = stripTrailingLineComment(blockLine);
+        const isExplicitlyAllowed = /numeric-guard:\s*allow/.test(comment);
+        for (const match of lineCode.matchAll(OBJECT_NUMERIC_PROP_RE)) {
+          const key = (match[1] ?? '').replace(/^['"]|['"]$/g, '');
+          const value = match[2] ?? '';
+          const isStructural = STRUCTURAL_WHITELIST.has(normalizeForWhitelist(value));
+          if (!isStructural && !isExplicitlyAllowed) {
+            offenders.push(`${key}: ${value}`);
+          }
+        }
+      }
+
+      i = j + 1;
+    }
+    return offenders;
+  }
+
+  function findBareNumericConstantViolations(source: string): string[] {
+    return [
+      ...findTopLevelBareNumericViolations(source),
+      ...findTopLevelObjectLiteralNumericViolations(source),
+    ];
   }
 
   it('反例（应命中）：顶层 const 直接绑定非结构性数字（十进制/小数/负数）', () => {
@@ -332,14 +417,41 @@ describe('metrics —— 尺寸常量唯一来源守卫（§2.8 / §7-19，P2-2 
     ).toEqual([]);
   });
 
-  it('反例（不应命中，P1-2）：`as const` 的对象字面量不是「纯数字」右值', () => {
+  it('反例（应命中，本轮 /check P1）：单行顶层 `as const` 对象字面量内的裸数字属性', () => {
+    // 这条曾经是「不应命中」——`layoutChord.ts` 的 `CHORD_GEOMETRY` 正是靠这个漏洞
+    // 绕过了守卫（对象字面量右值本身不是「纯数字」）。新规则堵住它：对象内部每条
+    // `key: 数字` 都单独判定。
     expect(
       findBareNumericConstantViolations('export const TABLE = { fontSize: 12, lineHeight: 14 } as const;'),
-    ).toEqual([]);
+    ).toEqual(['fontSize: 12', 'lineHeight: 14']);
   });
 
-  it('反例（不应命中）：多行对象/类型字面量内部的属性不是「顶层 const = 数字」', () => {
-    const source = ['export const TABLE = {', '  fontSize: 12,', '  lineHeight: 14,', '} as const;'].join(
+  it('反例（应命中，本轮 /check P1）：多行顶层对象字面量内的裸数字属性（如 `stringGap: 16`）', () => {
+    const source = [
+      'export const TABLE = {',
+      '  stringGap: 16,',
+      '  fretGap: 20,',
+      '} as const;',
+    ].join('\n');
+    expect(findBareNumericConstantViolations(source)).toEqual(['stringGap: 16', 'fretGap: 20']);
+  });
+
+  it('反例（不应命中）：对象属性是字符串或结构性数字（0/1/-1/2）时不命中', () => {
+    const source = ["const CONFIG = {", "  kind: 'x',", '  count: 1,', '} as const;'].join('\n');
+    expect(findBareNumericConstantViolations(source)).toEqual([]);
+  });
+
+  it('反例（不应命中）：函数体内部构造的对象字面量不是顶层声明，不触发新规则', () => {
+    const source = [
+      'function toAttrs() {',
+      "  return { x: 1, width: 10 };",
+      '}',
+    ].join('\n');
+    expect(findBareNumericConstantViolations(source)).toEqual([]);
+  });
+
+  it('反例（不应命中）：带白名单注释的对象属性豁免', () => {
+    const source = ['export const TABLE = {', '  magic: 42, // numeric-guard: allow 这不是尺寸', '} as const;'].join(
       '\n',
     );
     expect(findBareNumericConstantViolations(source)).toEqual([]);
@@ -352,14 +464,6 @@ describe('metrics —— 尺寸常量唯一来源守卫（§2.8 / §7-19，P2-2 
 
   describe('真实文件扫描（P2-2：范围扩大到 src/notation/** 全部）', () => {
     const notationDir = join(import.meta.dirname, '../../../src/notation');
-
-    /**
-     * `chord/ChordDiagram.tsx` 是本守卫**唯一**的已知例外：M1.6 遗留组件，T3 会把它
-     * 整体迁出 `src/notation/**`（与 `architecture.test.ts` 的 React 例外是同一份迁移
-     * 计划），迁出后本例外与下面锁定它的用例一并删除。它确实含裸数字（弦数/品数），
-     * 但那是 T3 的职责范围，不是 T2 能动的 5 个文件之一。
-     */
-    const KNOWN_EXCEPTIONS: readonly string[] = ['chord/ChordDiagram.tsx'];
 
     function collect(dir: string): string[] {
       const out: string[] = [];
@@ -383,12 +487,7 @@ describe('metrics —— 尺寸常量唯一来源守卫（§2.8 / §7-19，P2-2 
       const rel = relPath(file);
       if (rel === 'layout/metrics.ts') return false;
       if (rel.startsWith('model/')) return false;
-      if (KNOWN_EXCEPTIONS.includes(rel)) return false;
       return true;
-    });
-
-    it('例外名单不得扩张：只有迁移期的 ChordDiagram.tsx 一项', () => {
-      expect(KNOWN_EXCEPTIONS).toEqual(['chord/ChordDiagram.tsx']);
     });
 
     it('扫描范围非空，守卫不能因为「没扫到文件」而假绿', () => {

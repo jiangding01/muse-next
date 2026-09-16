@@ -12,17 +12,6 @@ import { describe, expect, it } from 'vitest';
 const NOTATION_DIR = join(import.meta.dirname, '../../../src/notation');
 const MODEL_DIR = join(NOTATION_DIR, 'model');
 
-/**
- * T3 迁出前的**唯一**已知例外：`ChordDiagram.tsx` 是 React 组件，T3 会把它迁到
- * `src/renderer/components/notation/`。**T3 完成后连同这份名单一起删除。**
- *
- * 注意：它当前实际上**并不需要**豁免——`jsx: "react-jsx"` 下 JSX 不需要显式
- * `import React`，该文件只 import 了 `type { GuitarChord }`。名单在这里是为了让
- * 「为什么 notation 下还躺着一个 .tsx」这件事有据可查，而不是为了放宽规则：下面
- * 「例外名单不得扩张」一条用例把它钉死在一项，`vexflow` 一条则完全没有名单。
- */
-const REACT_EXCEPTIONS: readonly string[] = ['chord/ChordDiagram.tsx'];
-
 /** §2.1 禁止边（`vexflow` 单列，见下）。 */
 const FORBIDDEN_IMPORTS: readonly { readonly label: string; readonly re: RegExp }[] = [
   { label: 'formats/', re: /(^|\/)formats(\/|$)/ },
@@ -88,8 +77,9 @@ describe('notation 架构守卫 —— 扫描范围', () => {
     expect(files.length).toBeGreaterThanOrEqual(modelFiles.length);
   });
 
-  it('例外名单不得扩张：只有 T3 待迁出的 ChordDiagram.tsx', () => {
-    expect(REACT_EXCEPTIONS).toEqual(['chord/ChordDiagram.tsx']);
+  it('src/notation/** 下零 .tsx 文件（T3 已迁出 ChordDiagram.tsx，无剩余例外）', () => {
+    const tsxFiles = files.filter((file) => file.endsWith('.tsx'));
+    expect(tsxFiles).toEqual([]);
   });
 });
 
@@ -103,9 +93,6 @@ describe('notation 架构守卫 —— 依赖方向（§2.1）', () => {
   it.each(files)('%s 不 import react / react-dom（含 type-only 与动态 import）', (file) => {
     const specs = collectSpecifiers(readFileSync(file, 'utf8'));
     const bad = specs.filter((spec) => REACT_IMPORTS.some((re) => re.test(spec)));
-    if (REACT_EXCEPTIONS.includes(rel(file))) {
-      return; // T3 迁出后删除本分支与名单。
-    }
     expect(bad).toEqual([]);
   });
 
