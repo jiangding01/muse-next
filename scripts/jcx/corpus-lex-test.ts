@@ -32,6 +32,15 @@
  * semantic < 100%、reparseClean < 100%、closure < 100%；line-identical、
  * 幂等、reparse warning 数只汇报数字，不影响退出码。
  *
+ * **encoding composition 级**（M1.8 T3，逻辑在 `lib/encodingComposition.ts`）：
+ * 只对 `encoding === 'gb18030'` 的语料计算 GB18030 → UTF-8 → GB18030 三段
+ * 往返（`serializeJcx(..., {mode:'preserve', encoding:'utf-8'})` 另存、重新
+ * `loadJcx`、再 `serializeJcx(..., {mode:'preserve', encoding:'gb18030'})`
+ * 另存回去），断言字节与原文逐字节相等，外加 UTF-8 中间态的编码检测/BOM/L2
+ * 投影三项校验。**分母是 GB18030 文件数**（实测 10/11，与上面 4 项 11/11 分开
+ * 汇报，不混分母）。先 rehearsal 实测 10/10 exact，**第五项失败条件**：
+ * encoding composition < 100%（分母 10）。
+ *
  * 语料**不进 git**（HANDOFF §39.1 / §51），因此 CI 上目录必然缺失：
  * 目录不存在或没有 `.jcx` 时打印跳过并 `exit 0`，只有真正的断言失败才 `exit 1`。
  *
@@ -49,6 +58,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { checkFile, crashedFileReport, type FileReport } from './lib/checkCorpusFile';
 import {
+  printEncodingCompositionSection,
   printParseSection,
   printResidualLeafSection,
   printRoundtripSection,
@@ -175,6 +185,7 @@ function main(): void {
   printResidualLeafSection(reports);
   printParseSection(reports, nameWidth);
   printRoundtripSection(reports, nameWidth);
+  printEncodingCompositionSection(reports, nameWidth);
 
   if (failedFiles > 0 || crashed > 0) {
     console.log('');

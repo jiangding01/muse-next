@@ -27,6 +27,10 @@ import {
 } from './astInvariants';
 import { runParseChecks, type ParseSummary } from './parseInvariants';
 import { runRoundtripChecks, type RoundtripSummary } from './roundtripInvariants';
+import {
+  runEncodingCompositionCheck,
+  type EncodingCompositionSummary,
+} from './encodingComposition';
 
 export interface FileReport {
   /** 匿名编号（如 `#3`），不是真实文件名——见文件头「匿名边界」。 */
@@ -52,6 +56,13 @@ export interface FileReport {
   readonly diagnosticCodes: readonly string[];
   /** `undefined` 仅当 round-trip 链路抛出未捕获异常。 */
   readonly roundtripSummary: RoundtripSummary | undefined;
+  /**
+   * M1.8 T3：GB18030→UTF-8→GB18030 多编码往返。只对 `encoding === 'gb18030'`
+   * 的文件计算，其余情况（含 UTF-8 语料、异常兜底）恒为 `undefined`——分母由
+   * 调用方按 `encoding === 'gb18030'` 过滤后统计，不与 `roundtripSummary` 那
+   * 11/11 分母混同。
+   */
+  readonly encodingComposition: EncodingCompositionSummary | undefined;
 }
 
 /**
@@ -75,6 +86,7 @@ export function crashedFileReport(label: string, errorCode: string): FileReport 
     unknownEventTokenKinds: [],
     diagnosticCodes: [],
     roundtripSummary: undefined,
+    encodingComposition: undefined,
   };
 }
 
@@ -177,6 +189,14 @@ export function checkFile(
   failures.push(...roundtripRun.failures);
   const roundtripSummary = roundtripRun.summary;
 
+  // M1.8 T3：多编码往返，只对 GB18030 语料计算（见 `lib/encodingComposition.ts`）。
+  let encodingComposition: EncodingCompositionSummary | undefined;
+  if (ast.encoding === 'gb18030') {
+    const encodingCompositionRun = runEncodingCompositionCheck(bytes);
+    failures.push(...encodingCompositionRun.failures);
+    encodingComposition = encodingCompositionRun.summary;
+  }
+
   return {
     label,
     encoding: result.encoding,
@@ -193,5 +213,6 @@ export function checkFile(
     unknownEventTokenKinds,
     diagnosticCodes,
     roundtripSummary,
+    encodingComposition,
   };
 }

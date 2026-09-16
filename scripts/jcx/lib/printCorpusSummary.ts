@@ -1,19 +1,22 @@
 /**
- * JCX 语料回归 —— AST 级 / parse 级 / round-trip 级 stdout 输出
- * （M1.5 T6 / M1.6 T10a / M1.7 T7）。
+ * JCX 语料回归 —— AST 级 / parse 级 / round-trip 级 / encoding composition 级
+ * stdout 输出（M1.5 T6 / M1.6 T10a / M1.7 T7 / M1.8 T3）。
  *
  * 从 `scripts/jcx/corpus-lex-test.ts` 抽出，避免主脚本超过 §0 固定审查项的
  * 350 行上限。纯打印，不做任何断言——断言逻辑分别在 `astInvariants.ts` /
- * `parseInvariants.ts` / `roundtripInvariants.ts`，已经通过 `report.failures`
- * 影响退出码；这里的清单（残留通用叶子、diagnostic code 直方图、
- * `UnknownEvent.tokenKind` 去重清单、round-trip 的 T0 五指标 + T1 新增
- * closure）都只是观测指标或
- * （round-trip 的 byte-identical / semantic / reparseClean / closure 四项）
- * 已经在别处判过失败的复述。
+ * `parseInvariants.ts` / `roundtripInvariants.ts` / `encodingComposition.ts`，
+ * 已经通过 `report.failures` 影响退出码；这里的清单（残留通用叶子、
+ * diagnostic code 直方图、`UnknownEvent.tokenKind` 去重清单、round-trip 的
+ * T0 五指标 + T1 新增 closure、encoding composition 四项）都只是观测指标或
+ * （round-trip 的 byte-identical / semantic / reparseClean / closure 四项，
+ * encoding composition 一项）已经在别处判过失败的复述。**encoding
+ * composition 的分母是 GB18030 文件数**，与其余项的 11/11 分母分开汇报，
+ * 打印时严格不混算。
  */
 
 import type { ParseSummary } from './parseInvariants';
 import type { RoundtripSummary } from './roundtripInvariants';
+import type { EncodingCompositionSummary } from './encodingComposition';
 
 /** `checkFile` 产出的 `FileReport` 结构性满足这个形状即可，避免循环 import。 */
 export interface ParseSectionReport {
@@ -30,6 +33,14 @@ export interface RoundtripSectionReport {
   /** 匿名编号（如 `#3`），不是真实文件名。 */
   readonly label: string;
   readonly roundtripSummary: RoundtripSummary | undefined;
+}
+
+/** encoding composition 汇总所需的最小形状（M1.8 T3）。 */
+export interface EncodingCompositionSectionReport {
+  /** 匿名编号（如 `#3`），不是真实文件名。 */
+  readonly label: string;
+  readonly encoding: string;
+  readonly encodingComposition: EncodingCompositionSummary | undefined;
 }
 
 function pad(value: string | number, width: number, left = false): string {
@@ -213,5 +224,50 @@ export function printRoundtripSection(
   );
   console.log(
     `reparse warnings: ${reparseWarningTotal} total across ${withSummary} file(s) with a summary (observational only, not a failure condition)`,
+  );
+}
+
+/**
+ * encoding composition 级汇总（M1.8 T3）：GB18030→UTF-8→GB18030 三段往返，只对
+ * `encoding === 'gb18030'` 的文件计算，分母与上面的 round-trip 11/11 分开——
+ * 不满足 `report.encoding === 'gb18030'` 的文件（如唯一的 UTF-8 语料）直接跳过，
+ * 既不进分子也不进分母。
+ */
+export function printEncodingCompositionSection(
+  reports: readonly EncodingCompositionSectionReport[],
+  nameWidth: number,
+): void {
+  const applicable = reports.filter((r) => r.encoding === 'gb18030');
+  if (applicable.length === 0) {
+    console.log('');
+    console.log('encoding composition (gb18030->utf-8->gb18030): no GB18030 corpus file(s) — skipped');
+    return;
+  }
+
+  console.log('');
+  console.log('encoding composition level (M1.8 T3): GB18030 -> UTF-8 -> GB18030 byte roundtrip');
+  console.log('');
+  console.log(
+    `${pad('no.', nameWidth)}  ${pad('utf8-detect', 11)}  ${pad('bom', 5)}  ${pad('projection', 10)}  ${pad('bytes', 5)}`,
+  );
+
+  let ok = 0;
+  for (const report of applicable) {
+    const s = report.encodingComposition;
+    if (s === undefined) {
+      console.log(`${pad(report.label, nameWidth)}  (encoding composition threw — see failures above)`);
+      continue;
+    }
+    const allOk =
+      s.utf8DetectedAsUtf8 && s.utf8BomMatchesOriginal && s.utf8ProjectionEqual && s.bytesRoundtrip;
+    if (allOk) ok += 1;
+    console.log(
+      `${pad(report.label, nameWidth)}  ${pad(s.utf8DetectedAsUtf8 ? 'OK' : 'FAIL', 11)}  ${pad(s.utf8BomMatchesOriginal ? 'OK' : 'FAIL', 5)}  ${pad(s.utf8ProjectionEqual ? 'OK' : 'FAIL', 10)}  ${pad(s.bytesRoundtrip ? 'OK' : 'FAIL', 5)}`,
+    );
+  }
+
+  console.log('');
+  console.log(
+    `encoding composition (gb18030->utf-8->gb18030): ${ok}/${applicable.length} (failure condition, must be 100%)`,
   );
 }
