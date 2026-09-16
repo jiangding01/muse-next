@@ -155,7 +155,10 @@ describe('buildRenderScore —— 五个固定 code 及其 anchor 分支（§0d-
 
   it('产出的 code 是常量表的子集，且正常输入下不出现 relation.endpoint-missing', () => {
     const table: readonly string[] = Object.values(RENDER_DIAGNOSTIC_CODES);
-    expect(table).toHaveLength(6);
+    // 常量表是**唯一来源**且后续任务按需追加（T4 已追加 layout 层的 code），
+    // 所以这里只钉「表里至少有 T1 的六条」而不是钉死总数——钉死总数等于禁止追加。
+    expect(table.length).toBeGreaterThanOrEqual(6);
+    expect(new Set(table).size).toBe(table.length);
     for (const code of codesOf(renderScore)) {
       expect(table).toContain(code);
     }
