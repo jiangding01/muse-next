@@ -1,45 +1,43 @@
 /**
  * canonical 序列化 —— body 区（M1.7 T4，方案 v1.1 §3 / 决策 2、3 / §8 拍板 F）。
  *
- * 一个声部的 body = `[V:n]` 行 + 若干「事件行」，其间按事实插入 `L:` 行。
- * 事件文本见 `bodyEvents.ts`，relation marker 的落位见 `bodyRelations.ts`，
- * 本文件只管**行**：在哪里断行、`L:` 插在哪里（`ignoredFields` 的重放见 `bodyFields.ts`）。
+ * 一个声部的 body = `[V:n]` 行 + 若干「事件行」，其间按事实插入 `L:` 行。事件文本见
+ * `bodyEvents.ts`，relation marker 落位见 `bodyRelations.ts`，`ignoredFields` 重放见
+ * `bodyFields.ts`；本文件只管**行**：在哪里断行、`L:` 插在哪里。
  *
  * ## 行边界（决策 2 + 2026-09-15 用户裁决①）
  *
  * Domain 不建模「源文本的行」，能恢复行边界的事实只有两条，优先级如下：
  *
  * 1. **`unitLengthChanges[].beforeEventId` 是强制断行点**（裁决①）：`L: raw`
- *    必须紧贴写在该事件之前、且该事件必须另起一行。否则 `L:` 会连带改写同一行里
- *    排在它前面的事件的单位音长——那是**改变语义**，不是「没还原原行」。
- *    这条优先级高于歌词行边界：真被迫切开一条 `w:` 覆盖的正文时发 warning
- *    （`jcx.serialize.lyric-line-split`），让调用方知道音节对齐会漂移。
+ *    必须紧贴写在该事件之前、且该事件必须另起一行，否则 `L:` 会连带改写同一行里
+ *    排在它前面的事件的单位音长——那是**改变语义**。这条优先级高于歌词行边界：
+ *    真被迫切开一条 `w:` 覆盖的正文时发 `jcx.serialize.lyric-line-split` warning。
  * 2. **`LyricLine.bodyRange` 覆盖的事件区间独占一行**：`w:` 绑定「上一条正文行」，
- *    行切错了音节 target 就会漂移。多个 verse 共用同一 range（`lyrics.ts`
- *    `bodyRangeOf` 对同一条正文的每条 `w:` 都产出相同的首尾 id），**先按
- *    `first#last` 去重再规划断行**（裁决④），一条正文只产生一条事件行。
+ *    行切错了音节 target 就会漂移。多个 verse 共用同一 range，**先按 `first#last`
+ *    去重再规划断行**（裁决④），一条正文只产生一条事件行。
  * 3. 其余区间在**小节线之后**断行（无歌词区间的默认规则）。
  *
- * `w:` 行本身由 T5 插入：本模块在每条事件行上带出它覆盖的事件区间
- * （`CanonicalBodyLine.range`）与「哪条 `LyricBodyRange` 在此收尾」
- * （`lyricRangeEnd`），T5 据此把 `w:` 放到正确的行后面。
+ * `w:` 行本身由 T5 插入：本模块在每条事件行上带出它覆盖的区间（`CanonicalBodyLine.range`）
+ * 与「哪条 `LyricBodyRange` 在此收尾」（`lyricRangeEnd`），T5 据此把 `w:` 放到行后。
  *
  * ## `L:` 重放（决策 3）
  *
- * `Voice.unitLengthChanges` 是 voice-local 的 effective transition，
- * 直接按 `raw` 重放即可。但 canonical 把各声部的 body **顺序排开**
- * （voice1 全部行 → voice2 全部行），而源文本里 `L:` 是**文档级**的：
- * voice1 末尾生效的 `L:` 会一路漏到 voice2 的开头。因此每个声部开头都要检查
- * 「上一个声部留下的生效值」与「本声部第一个事件应有的生效值」是否一致，
- * 不一致就补一行 `L:`（`incomingUnitLength` / `outgoingUnitLength` 就是为此
- * 在声部之间传递的）。描述头没有 `L:`（`headerUnitLength` 为 `undefined`）
- * 却需要补写时无值可写，发 `jcx.serialize.unit-length-unrecoverable` warning。
+ * `Voice.unitLengthChanges` 是 voice-local 的 effective transition，直接按 `raw` 重放
+ * 即可。但 canonical 把各声部 body **顺序排开**（voice1 全部行 → voice2 全部行），而
+ * 源文本里 `L:` 是**文档级**的：voice1 末尾生效的 `L:` 会漏到 voice2 开头。因此每个
+ * 声部开头都要检查「上一个声部留下的生效值」与「本声部第一个事件应有的生效值」是否
+ * 一致，不一致就补一行 `L:`（`incomingUnitLength` / `outgoingUnitLength` 为此在声部间
+ * 传递）。描述头没有 `L:`（`headerUnitLength` 为 `undefined`）却需补写时无值可写，发
+ * `jcx.serialize.unit-length-unrecoverable` warning。
  *
  * ## 已知限制（M1.7 T4 实测，T7 落 HANDOFF）
  *
  * 1. 深度畸形输入不保留词法扫描上下文：未闭合 `[` 里的 `|` 在原文里是
  *    `UnknownEvent`，canonical 原样写回后脱离了那个非法上下文，重解析成
  *    `barline`（文本一致，只是分类变；fixture `unclosed-chord.jcx`）。
+ *    该 tokenKind 漂移**仍在**，`roundtrip.test.ts` 的 `L2_KNOWN_LIMITATION` 保留；
+ *    被修掉的只是断行（`breaksLineAfter`），故 **canon1 起即为不动点**。
  * 2. `TabGroupEvent.stroke` parse 层从不填充，`V[ax/bx/]` 的 `V` 与悬空
  *    strokePrefix 在 Domain 里没有事实，canonical 无从写回（§26.4）。
  * 3. 组级时值后缀 `[CEG]2` 的 `2` 被 parse 落成独立 `UnknownEvent`，
@@ -151,6 +149,16 @@ function collectRanges(
   return { startAt, endAt };
 }
 
+/**
+ * 该事件之后是否断行。`UnknownEvent(tokenKind:'barline')` 也算：它写出的 `|` 在输出
+ * 文本里就是合法小节线，行规划不与之一致则 canon1 不是不动点（限制①）。
+ * **M1.8 T1 approved exception**：M1.8 唯一获准的 `src/` 行为变更，作用域仅断行规划，
+ * 不得扩展到事件文本 / relation / `L:` / parser / Domain / 其他 canonical 行为。
+ */
+function breaksLineAfter(event: MusicEvent | undefined): boolean {
+  return event?.kind === 'barline' || (event?.kind === 'unknown' && event.tokenKind === 'barline');
+}
+
 function planLines(
   voice: Voice,
   indexOf: ReadonlyMap<EventId, number>,
@@ -169,7 +177,7 @@ function planLines(
       end = i;
       // 小节线收尾；中途遇到强制断行点 / 歌词行起点 / 上一条歌词行的结尾则提前收。
       while (end < events.length - 1) {
-        if (events[end]?.kind === 'barline' || endAt.has(end)) {
+        if (breaksLineAfter(events[end]) || endAt.has(end)) {
           break;
         }
         const next = end + 1;

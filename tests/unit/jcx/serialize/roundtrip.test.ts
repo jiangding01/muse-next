@@ -20,8 +20,13 @@
  * canonical 原样写回 `|` 后脱离了那个非法上下文，重解析成正常 `barline`。
  * 文本一致、事件个数一致，只是分类变了。
  *
- * 同一条限制还有一个连带后果：分类变了之后断行规则跟着变，所以这一个 fixture 的
- * 幂等是「从第二趟起稳定」而不是「第一趟就稳定」，矩阵里对它单独这么断言。
+ * **限制①本身仍然成立**：原始 → canon1 的 `tokenKind` 分类漂移没有被修掉，下面的
+ * `L2_KNOWN_LIMITATION` 继续钉着那一处差异路径。被修掉的是它**曾经**的连带后果：
+ * 分类变了之后断行规则跟着变，这一个 fixture 的幂等一度是「从第二趟起稳定」。
+ * M1.8 T1 起 `canonical/body.ts` 的 `breaksLineAfter`（唯一 approved 的 src 例外）
+ * 把 `UnknownEvent(tokenKind:'barline')` 也算作断行点，canon1 起即为不动点，幂等
+ * 那一格已与其余 fixture 同一条断言（见 `roundtrip.closure.test.ts` 的闭包矩阵）。
+ * 两件事不要混为一谈：L2 豁免还在，不动点问题已消失。
  *
  * 豁免用**点名 + 钉死差异位置**的方式表达（下面的用例断言「差异恰好只有那一处」），
  * 而不是放宽投影：放宽投影会让**所有** fixture 的同类差异一起消失，等于把一处已知
@@ -88,16 +93,16 @@ describe.each(fixtureNames)('round-trip 矩阵: %s', (name) => {
 
   it('幂等：canonical(parse(canonical(x))) === canonical(x)', () => {
     const trip = canonicalTrip(name);
-    if (name in L2_KNOWN_LIMITATION) {
-      // 限制①的连带后果：第一趟把 `UnknownEvent(barline)` 写成普通 `|` 之后，
-      // 第二趟才按「小节线后断行」的规则重新切行，所以第 1 → 2 趟不相等。
-      // 事实从第二趟起就稳定了，断言「从第二趟起幂等」——这是此处真实成立的
-      // 性质，不是把失败降级成通过。
-      expect(trip.canonicalTwice).not.toBe(trip.canonicalText);
-      expect(canonicalAgain(trip.canonicalTwice)).toBe(trip.canonicalTwice);
-      return;
-    }
     expect(trip.canonicalTwice).toBe(trip.canonicalText);
+    if (name in L2_KNOWN_LIMITATION) {
+      // 限制①**曾经**的连带后果（M1.8 T1 之前）：第一趟把 `UnknownEvent(barline)`
+      // 写成普通 `|` 之后，第二趟才按「小节线后断行」重新切行，所以第 1 → 2 趟
+      // 不相等，这里原先断言的是「从第二趟起稳定」。`canonical/body.ts` 的
+      // `breaksLineAfter` 把这类 `UnknownEvent` 也算作断行点之后，canon1 起就是
+      // 不动点，因此这一例改用与其余 fixture 相同的断言，并额外把第三趟也钉住
+      // ——收紧，不是放宽。
+      expect(canonicalAgain(trip.canonicalTwice)).toBe(trip.canonicalText);
+    }
   });
 });
 

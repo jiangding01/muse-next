@@ -26,9 +26,18 @@
  * `reparsed.diagnostics`，理论上 canonical 可能输出「投影相等但重解析报
  * error」的文本而全绿）。warning 级只计数进 summary，不影响判定。
  *
- * 失败条件共三条（M1.8 T0 起）：byte-identical < 100%、semantic < 100%、
- * reparseClean < 100%。line-identical 与幂等只汇报数字，不影响退出码。语料
- * 三项失败条件门槛恒为 100%——本文件不引入、也不允许调用方引入任何语料级
+ * **T1 新增指标 `closure`（M1.8 T1，在 T0 的 5 项之外）**：canonical 输出必须是
+ * 一份闭合的合法 JCX 文档——`loadJcx(canon1.bytes)` 再 preserve 另存必须逐字节回到 canon1 的字节
+ * （canonical 文本能原样进入 Lossless AST / preserve 路径），**且** canonical
+ * 再跑一趟必须回到同一份文本（不动点）。语料是生产样本，闭包必须成立，因此这一项
+ * 是失败条件（口径上算作「T0 的 5 项全语料指标 + T1 新增 closure」，不与 T3 的
+ * GB18030 encoding composition 混分母）。注意它与上面的「幂等观测」语义不同：
+ * 幂等只看 `canon2 === canon1` 的文本比较且只观测；closure 在此之上额外要求 preserve 闭包，且纳入退出码。
+ *
+ * 失败条件共四条（M1.8 T1 起）：byte-identical < 100%、semantic < 100%、
+ * reparseClean < 100%、closure < 100%。line-identical 与幂等只汇报数字，不影响
+ * 退出码。语料
+ * 四项失败条件门槛恒为 100%——本文件不引入、也不允许调用方引入任何语料级
  * 豁免名单（豁免只存在于 fixture 级 `roundtrip.test.ts` 的 `unclosed-chord.jcx`
  * 一例，且只作用于原始输入本身无 error 级 diagnostic 的那一侧）。
  *
@@ -63,6 +72,13 @@ export interface RoundtripSummary {
   readonly reparseClean: boolean;
   /** canonical 文本重解析后 diagnostics 中 warning 级的数量（仅观测，不影响判定）。 */
   readonly reparseWarningCount: number;
+  /**
+   * canonical document closure（M1.8 T1，失败条件之一）：canonical 字节经
+   * `loadJcx` → preserve 另存后逐字节回到原字节，**且** canonical 不动点成立。
+   */
+  readonly closure: boolean;
+  /** closure 的 preserve 那一半是否成立（closure 失败时区分两半用，观测）。 */
+  readonly canonicalPreserveClosure: boolean;
 }
 
 export interface RoundtripRunResult {
@@ -129,7 +145,8 @@ export function runRoundtripChecks(
 
     const parsedBefore = parseJcxDocument(ast);
     const before = projectScore(parsedBefore.score);
-    const canonicalText = serializeJcx(parsedBefore.score, { mode: 'canonical' }).text;
+    const canonical = serializeJcx(parsedBefore.score, { mode: 'canonical' });
+    const canonicalText = canonical.text;
     const reparsed = loadJcx(canonicalText);
     const after = projectScore(reparsed.score);
     const semanticDiffPath = firstProjectionDifference(before, after);
@@ -137,6 +154,14 @@ export function runRoundtripChecks(
 
     const canonicalTwice = serializeJcx(reparsed.score, { mode: 'canonical' }).text;
     const canonicalIdempotent = canonicalTwice === canonicalText;
+
+    // closure 复用上面已经算好的 canon2 文本（不重复跑一趟 canonical），但判定口径
+    // 比幂等观测更严：还要求 canonical 字节能原样走完 preserve 这条路。
+    const canonicalPreserveClosure = bytesEqual(
+      serializeJcx(loadJcx(canonical.bytes), { mode: 'preserve' }).bytes,
+      canonical.bytes,
+    );
+    const closure = canonicalPreserveClosure && canonicalIdempotent;
 
     const reparseErrorDiagnostics = reparsed.diagnostics.filter((d) => d.severity === 'error');
     const reparseClean = reparseErrorDiagnostics.length === 0;
@@ -160,6 +185,12 @@ export function runRoundtripChecks(
       failures.push(`jcx.corpus.reparse-error count=${reparseErrorDiagnostics.length} ${codeSummary}`);
     }
 
+    if (!closure) {
+      failures.push(
+        `jcx.corpus.roundtrip-closure preserve=${canonicalPreserveClosure ? 'ok' : 'fail'} fixedPoint=${canonicalIdempotent ? 'ok' : 'fail'}`,
+      );
+    }
+
     return {
       failures,
       summary: {
@@ -170,6 +201,8 @@ export function runRoundtripChecks(
         canonicalIdempotent,
         reparseClean,
         reparseWarningCount,
+        closure,
+        canonicalPreserveClosure,
       },
     };
   } catch (error) {
