@@ -187,8 +187,15 @@ export const JIANPU_METRICS = {
   arcOffsetY: -14,
   /** 单端（unresolved / unclosed）弧线的悬空段长度。 */
   arcOpenLength: 12,
-  /** 第一行歌词基线相对数字基线的垂直偏移。 */
-  lyricFirstOffset: 18,
+  /**
+   * 第一行歌词基线相对数字基线的垂直偏移（产品决定，不是格式事实：spec 未规定歌词与
+   * 下方装饰的间距）。下限由几何推导：必须 ≥ 最深的下方装饰底边 + 歌词字形高度 + 余量——
+   * 最深装饰是两个低八度点（`octaveDotFirstOffset + octaveDotGap + octaveDotRadius`
+   * = 9 + 4 + 1.5 = 14.5u，比三条减时线的 `beamFirstOffset + 2 × beamGap` = 11u 更深），
+   * 字形顶部保守按 `lyricFontSize`（12u）估算，故下限 = 14.5 + 12 = 26.5u；取 30 留出
+   * 余量，修复真实语料人工 smoke 发现的「歌词首行与数字下方装饰重叠」（T5.2-C）。
+   */
+  lyricFirstOffset: 30,
   /** 相邻两段歌词（verse）的行距。 */
   lyricLineGap: 14,
   /** 同一行内相邻两个歌词音节之间的最小间距（无对齐目标的音节顺序排布时用）。 */
