@@ -89,8 +89,18 @@ export const SCORE_VIEW_METRICS = {
    * 这不是把「1u ≈ 1px」写成 layout 层的契约（D6 明确禁止的是那种写法）：本常量
    * 只活在 `ScoreView`（renderer 层）用真实 `ResizeObserver` 宽度换算
    * `availableWidth` 这一处，`notation/**` 内部仍然只谈 abstract unit，换算比例
-   * 可以随时调整（T6 的 `zoom` 落地后大概率会替换成 `zoom` 参与的公式），
-   * 不影响任何 layout 数值的语义。
+   * 可以随时调整，不影响任何 layout 数值的语义。T6.4 起参与 `zoom` 换算的公式，
+   * 见 `zoomMin`/`zoomMax`/`zoomStep` 与 `renderer/components/notation/voiceRender.ts`
+   * 的 `computeAvailableWidthUnits`。
    */
   cssPixelsPerUnitAtZoom1: 1,
+  /**
+   * 缩放范围与步进（T6.4 新增，**产品决定**）：只作用于 renderer 层的外层像素换算
+   * （容器 CSS 宽 ÷ (`cssPixelsPerUnitAtZoom1` × zoom) 得到 `availableWidth`，
+   * 谱面画布 CSS 宽 = `layout.width × cssPixelsPerUnitAtZoom1 × zoom`），不改任何
+   * `notation/**` 内部的 layout 数值（D6）。
+   */
+  zoomMin: 0.5,
+  zoomMax: 3,
+  zoomStep: 0.25,
 } as const;

@@ -21,6 +21,7 @@ import { create } from 'zustand';
 import type { DomainIndex, Score } from '../../domain';
 import type { JcxDiagnostic } from '../../formats/jcx';
 import { loadJcx } from '../../formats/jcx';
+import { SCORE_VIEW_METRICS } from '../../notation/layout/metrics';
 
 const demoSource = `%MUSE2
 T: Muse Next Demo
@@ -72,15 +73,26 @@ interface MuseAppState extends ParsedSource {
   filePath: string | null;
   source: string;
   encoding: 'utf8' | 'gb18030' | null;
+  /** 谱面缩放比例（T6.4，D6：只影响 renderer 层像素换算，不改任何 layout 数值）。 */
+  zoom: number;
   openScore(): Promise<void>;
   setSource(source: string): void;
   reparse(): void;
+  /** 设置缩放比例，clamp 到 `SCORE_VIEW_METRICS.zoomMin/zoomMax`。 */
+  setZoom(zoom: number): void;
+}
+
+/** 非有限值（NaN / Infinity）不进 store：`Math.min/max` 会透传 NaN，下游会算出 `NaNpx`。 */
+function clampZoom(zoom: number): number {
+  if (!Number.isFinite(zoom)) return 1;
+  return Math.min(SCORE_VIEW_METRICS.zoomMax, Math.max(SCORE_VIEW_METRICS.zoomMin, zoom));
 }
 
 export const useMuseAppStore = create<MuseAppState>((set, get) => ({
   filePath: null,
   source: demoSource,
   encoding: 'utf8',
+  zoom: 1,
   ...parse(demoSource),
 
   async openScore() {
@@ -101,5 +113,9 @@ export const useMuseAppStore = create<MuseAppState>((set, get) => ({
 
   reparse() {
     set(parse(get().source));
+  },
+
+  setZoom(zoom) {
+    set({ zoom: clampZoom(zoom) });
   },
 }));

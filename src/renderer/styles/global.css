@@ -21,9 +21,12 @@ button { cursor: pointer; }
 .brand-mark { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 9px; background: #242923; color: white; font-family: Georgia, serif; font-size: 22px; }
 .brand strong, .brand small { display: block; }
 .brand small, .file-status small { color: var(--ink-muted); margin-top: 2px; }
-.toolbar-actions { display: flex; justify-content: center; gap: 8px; -webkit-app-region: no-drag; }
+.toolbar-actions { display: flex; justify-content: center; align-items: center; gap: 8px; -webkit-app-region: no-drag; }
 .toolbar button { border: 1px solid #21493e; border-radius: 8px; padding: 8px 13px; background: var(--accent); color: white; }
 .toolbar button.secondary { background: transparent; color: #2f463f; border-color: #b9b1a4; }
+.zoom-controls { display: flex; align-items: center; gap: 4px; margin-left: 4px; }
+.zoom-button { padding: 8px 11px; line-height: 1; }
+.zoom-reset { min-width: 52px; text-align: center; font-variant-numeric: tabular-nums; }
 .file-status { text-align: right; overflow: hidden; }
 .file-status span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
@@ -74,6 +77,13 @@ button { cursor: pointer; }
 .score-voice.render-anchor-highlighted { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 4px; }
 .score-voice-jianpu .jianpu-canvas { max-width: 100%; }
 .score-voice-jianpu svg { width: 100%; height: auto; display: block; }
+/* TAB 画布（`notation/tab/toSvg.ts` 产出的 `tab-*` class）：与简谱同一条规则——
+   `.tab-canvas` 的 CSS 宽度已在 ScoreView 按 layout.width × cssPixelsPerUnitAtZoom1 ×
+   zoom 算好（D7：换行由 layout 层按 `availableWidth` 决定，不是 CSS 拉伸决定；
+   `svg { width: 100% }` 只是让 svg 的渲染尺寸跟随这个**已经算好**的画布宽度同步
+   缩放——这正是 zoom 的「外层像素换算」实现本身，不是另一套响应式拉伸）。 */
+.score-voice-tab .tab-canvas { max-width: 100%; }
+.score-voice-tab svg { width: 100%; height: auto; display: block; }
 .score-voice-pending, .score-voice-fallback { padding: 14px 16px; border: 1px dashed #cbc4b7; border-radius: 8px; background: rgba(249,247,241,.6); }
 .score-voice-pending-label { margin: 0; color: var(--ink-muted); font-size: 12px; }
 .score-voice-fallback-label { margin: 0 0 6px; font-size: 11px; font-weight: 650; color: #8b6a1f; text-transform: uppercase; letter-spacing: .04em; }
@@ -104,6 +114,29 @@ button { cursor: pointer; }
 .render-anchor-highlighted .jianpu-unknown-box,
 .render-anchor-highlighted .jianpu-tuplet-bracket,
 .render-anchor-highlighted .jianpu-arc { stroke: var(--accent); }
+
+/* TAB SVG（`notation/tab/toSvg.ts` 产出的 `tab-*` class）。 */
+.tab-svg { overflow: visible; }
+.tab-string-line { stroke: #b9b1a4; stroke-width: 1; }
+.tab-fret-backdrop { fill: var(--paper); }
+.tab-fret-text, .tab-rest { font-family: ui-sans-serif, system-ui; fill: #23211d; }
+.tab-grace-out-of-scope { font-family: ui-sans-serif, system-ui; fill: #6b6459; }
+.tab-text { font-family: ui-sans-serif, system-ui; fill: #45413a; }
+.tab-text-unknown, .tab-text-outOfScope { fill: #a34632; }
+.tab-stem, .tab-beam, .tab-dash, .tab-barline-line { stroke: #23211d; stroke-width: 1.4; }
+.tab-barline-thick { stroke-width: 3; }
+.tab-augmentation-dot, .tab-repeat-dot { fill: #23211d; }
+.tab-unknown-box { fill: none; stroke: #a34632; stroke-width: 1; stroke-dasharray: 3 2; }
+.tab-fallback-marker { fill: #c98a2c; }
+.tab-relation-line { fill: none; stroke: #6b6459; stroke-width: 1.2; }
+.tab-relation-label { fill: #6b6459; }
+.tab-stroke-text { fill: #6b6459; }
+.render-anchor-highlighted .tab-fret-text,
+.render-anchor-highlighted .tab-rest,
+.render-anchor-highlighted .tab-text,
+.render-anchor-highlighted .tab-stroke-text { fill: var(--accent); }
+.render-anchor-highlighted .tab-unknown-box,
+.render-anchor-highlighted .tab-relation-line { stroke: var(--accent); }
 
 /* 渲染诊断列表（右下角，与 `.source-inspector` 的 `.diagnostic-list` 同源但独立） */
 .render-diagnostics { border-top: 1px dashed var(--line); }
