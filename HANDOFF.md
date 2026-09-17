@@ -4023,12 +4023,17 @@ M1.3 / M1.4 / M1.5 / M1.6 / M1.7 / M1.8 已完成
 （§30.1 有文件结构、Domain 边界、归一化规则、evidence 策略、Serializer
 模块清单/canonical 规则摘要、语料四级回归结果、以及 M1.8 T0–T4 的 fixture
 矩阵/closure/CI 看板完整现状快照；§55–§60 DoD 已逐条打勾给证据，M1.8 于
-2026-09-16 经 GitHub Actions 三平台全绿封板）。**M2 已进行到 T5.2**（§30.1
-「M2 进行中状态」有恢复位置、已提交的 T0–T5.2、待裁决事项与 T6 派发要点）。
-接手后从 M2 T6 继续：
+2026-09-16 经 GitHub Actions 三平台全绿封板）。**M2 已完成到 T6，TAB 六线谱已于
+2026-09-17 封板**（§30.1「M2 进行中状态」有 T0–T6 完整状态、T6 visual debt、
+待裁决事项与 T7 派发要点）。**当前项目在 T6 后主动暂停，不自动启动 T7。**
+
+恢复时：
 
 ```text
-M2 — Notation Rendering（§40）：T6 TAB → T7 Staff/VexFlow → T8 render matrix → T9 文档封板
+1. 先阅读 §30.1 的 T6 完整状态与 visual debt；
+2. 若决定继续 M2，再从 T7 Staff / VexFlow 的前置规划开始
+   （T7 Staff/VexFlow → T8 render matrix → T9 文档封板 → M2 seal）；
+3. 当前不要继续 T7。
 ```
 
 **M2 入口要求**（§40/§41/§52）：从 `src/domain/` 的 `Score` 出发画谱面，
