@@ -18,6 +18,11 @@
  *   （dots=0 → ×1；dots=1 → ×3/2；dots=2 → ×7/4）
  * 减时线 beams  = log2( (1/4) / base )   当 base < 1/4
  * 延音线 dashes = base / (1/4) − 1       当 base > 1/4
+ *
+ * **例外（BREVE_EXPONENT，产品决定非格式事实）**：`base = 2/1`（二全音符）且 `dots = 0`
+ * 单点放行，`dashes = 2/1 ÷ (1/4) − 1 = 7`。证据仅有真实语料中未附点的 `2/1`（body
+ * `L:1/4` 下的 `X8`，corpus#10 共 3 处）；`3/1`（附点 breve）、`7/2`（复附点 breve）、`4/1`（k = −2）
+ * 及更大的一律仍 fallback —— 没有证据支持，不因算法可以泛化就顺带放行。
  * ```
  *
  * 分解不成立的判据是**「找不到这样的 `(base, dots)` 组合」**，而**不是**「分母不是
@@ -38,7 +43,10 @@ export type DurationDots = 0 | 1 | 2;
 /** 分解成功：`duration === base × (2 − 2^-dots)`。 */
 export interface DurationGlyph {
   readonly kind: 'glyph';
-  /** `2^-k`（k ≥ 0），如 `1` / `1/4` / `1/8`。 */
+  /**
+   * `2^-k`（k ≥ 0），如 `1` / `1/4` / `1/8`；唯一例外是 `2/1`（二全音符，
+   * 仅当 `dots === 0` 时可能出现，见 BREVE_EXPONENT）。
+   */
   readonly base: Rational;
   readonly dots: DurationDots;
   /** 减时线条数（`base < 1/4` 时为正，否则 0）。 */
@@ -67,13 +75,23 @@ const QUARTER_EXPONENT = -2;
 /**
  * `base = 2^-k` 的合理范围：**`k ∈ [0, 10]`，两端闭区间**。
  *
- * - `k = 0` → `base = 1`（全音符，三条延音线）：记谱上限，**不支持二全音符**（`2/1` 走 fallback）；
+ * - `k = 0` → `base = 1`（全音符，三条延音线）：常规记谱上限；
  * - `k = 10` → `base = 1/1024`（八条减时线）：**仍然成立**；`1/2048`（k = 11）才走 fallback。
  *   再细已无法画出可辨的减时线，与其画一堆线不如显式降级 + 诊断。
  *
  * 这是**产品决定，不是格式事实**：spec 未规定可渲染的时值上下界。
  */
 const MAX_BASE_EXPONENT = 10;
+
+/**
+ * `base = 2^1 = 2/1`（二全音符 / breve）的单点例外指数，**仅当 `dots === 0`** 时放行。
+ *
+ * 这不是把上限泛化成 `k ∈ [-1, 10]`：`3/1`（附点 breve，dots=1）、`7/2`（复附点
+ * breve，dots=2）、`4/1`（k = −2）及更大的时值依旧 `unrepresentable`。放行 `2/1`
+ * 是**产品决定**，依据是真实语料 corpus#10（body `L:1/4` 下的 `X8`，3 处确认存在）；附点 breve
+ * 没有语料证据，不因算法能力顺带支持。
+ */
+const BREVE_EXPONENT = 1;
 
 function gcdBig(a: bigint, b: bigint): bigint {
   let x = a < 0n ? -a : a;
@@ -117,8 +135,14 @@ function baseExponent(num: bigint, den: bigint, dots: DurationDots): number | un
   return undefined;
 }
 
-/** 前提：`exponent ∈ [-MAX_BASE_EXPONENT, 0]`，即 `base = 2^exponent ≤ 1`。 */
+/**
+ * 前提：`exponent ∈ [-MAX_BASE_EXPONENT, 0]`（`base = 2^exponent ≤ 1`），
+ * 或 `exponent === BREVE_EXPONENT`（`base = 2/1`，二全音符单点例外）。
+ */
 function baseFromExponent(exponent: number): Rational {
+  if (exponent === BREVE_EXPONENT) {
+    return fromParts(2, 1);
+  }
   return exponent === 0 ? fromParts(1, 1) : fromParts(1, Number(1n << BigInt(-exponent)));
 }
 
@@ -140,7 +164,13 @@ export function decomposeDuration(duration: Rational): DurationDecomposition {
 
   for (const dots of DOTS) {
     const exponent = baseExponent(num, den, dots);
-    if (exponent === undefined || exponent > 0 || exponent < -MAX_BASE_EXPONENT) {
+    if (exponent === undefined) {
+      continue;
+    }
+    // 常规范围 `[-MAX_BASE_EXPONENT, 0]`，外加 `2/1` 且 `dots === 0` 的单点例外
+    // （BREVE_EXPONENT）；`3/1`/`7/2`（dots > 0 的 breve）与 `4/1` 及更大的一律拒绝。
+    const isBreve = exponent === BREVE_EXPONENT && dots === 0;
+    if (!isBreve && (exponent > 0 || exponent < -MAX_BASE_EXPONENT)) {
       continue;
     }
     const beams = exponent < QUARTER_EXPONENT ? QUARTER_EXPONENT - exponent : 0;

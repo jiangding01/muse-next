@@ -118,9 +118,30 @@ describe('decomposeDuration —— 不可表示时走 fallback', () => {
     });
     expect(decomposeDuration(fromParts(1, 2048)).kind).toBe('unrepresentable');
   });
+});
 
-  it('上界之外同样 fallback：2（二全音符）不在记谱范围内', () => {
-    expect(decomposeDuration(fromParts(2, 1)).kind).toBe('unrepresentable');
+describe('decomposeDuration —— 2/1（二全音符 / breve）单点例外', () => {
+  it('2/1 → base 2/1、dots 0、7 条延音线，且两次调用结果 toEqual（确定性）', () => {
+    const duration = fromParts(2, 1);
+    const expected = {
+      kind: 'glyph',
+      base: fromParts(2, 1),
+      dots: 0,
+      beams: 0,
+      dashes: 7,
+    };
+    expect(decomposeDuration(duration)).toEqual(expected);
+    expect(decomposeDuration(duration)).toEqual(decomposeDuration(duration));
+  });
+
+  it('附点 breve 无证据，故意不支持：3/1（附点）与 7/2（复附点）仍 unrepresentable', () => {
+    expect(decomposeDuration(fromParts(3, 1)).kind).toBe('unrepresentable');
+    expect(decomposeDuration(fromParts(7, 2)).kind).toBe('unrepresentable');
+  });
+
+  it('附点 breve 无证据，故意不支持：4/1、8/1 也不因 2/1 放行而被顺带支持', () => {
+    expect(decomposeDuration(fromParts(4, 1)).kind).toBe('unrepresentable');
+    expect(decomposeDuration(fromParts(8, 1)).kind).toBe('unrepresentable');
   });
 });
 

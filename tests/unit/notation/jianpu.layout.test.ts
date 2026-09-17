@@ -274,6 +274,16 @@ describe('时值装饰 —— 走 T0 的 {base, dots}（§2.6.1，用例中不�
     expect(node?.kind === 'note' && node.duration.beams).toHaveLength(0);
     expect(node?.fallback).toBe(true);
   });
+
+  it('绝对音长 2/1（二全音符）→ 不再 unrepresentable，7 条延音线、非 fallback 节点', () => {
+    const prepared = prepare(header('C8|'));
+    const node = layoutJianpu(prepared.voice, prepared.ctx).nodes.find((item) => item.kind === 'note');
+    expect(node?.kind === 'note' && node.duration.unrepresentable).toBe(false);
+    expect(node?.fallback).toBe(false);
+    expect(node?.kind === 'note' && node.duration.dashes).toHaveLength(7);
+    const score = buildRenderScore({ score: prepared.score, index: prepared.index });
+    expect(score.diagnostics.map((d) => d.code)).not.toContain(CODES.durationUnrepresentable);
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -45,6 +45,7 @@ import type {
 } from './jianpuGlyphs';
 import { buildNode, eventAnchor } from './jianpuEventNodes';
 import type { Cursor, Placed } from './jianpuEventNodes';
+import { widenForJianpuGlyphs } from './jianpuSlotWidths';
 import {
   assignLyricSyllables,
   buildHeaderLabels,
@@ -96,7 +97,9 @@ function lyricBandHeight(rows: number): number {
  */
 export function layoutJianpu(voice: RenderVoice, ctx: JianpuContext): JianpuLayout {
   const measures = splitMeasures(voice.items);
-  const spacings = measures.map((measure) => spaceItems(measure.items, measure.startIndex));
+  const spacings = measures.map((measure) =>
+    widenForJianpuGlyphs(spaceItems(measure.items, measure.startIndex), measure.items),
+  );
   const geometry = {
     availableWidth: ctx.availableWidth,
     systemHeight: JIANPU_METRICS.systemHeight,
