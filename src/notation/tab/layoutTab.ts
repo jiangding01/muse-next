@@ -12,7 +12,7 @@
  * UNVERIFIED 一律**保守呈现 + 诊断**，从不静默：pitch 模式事件落进 TAB 声部画可见
  * 文本占位（不猜弦品）、`UnknownEvent` **恰好一个**可见节点、`Z` / `@` 照常占位、
  * 表外小节线画普通单线。`H` 前缀的「延长 vs 敲击」消歧（spec §26.4 `INFERRED`）
- * **不进本步的布局行为**——它随 `-S-/-H-/-P-` 连线一起留给 T6.3。
+ * 由 `tabStrokes.ts` 在 T6.3 处理（按「延长」解释 + info 诊断）。
  *
  * **两趟布局**（T6.2 追加，写法照搬 `jianpu/layoutJianpu.ts` 按歌词行数回填行高的
  * 手法）：`layoutSystems` 先只做横向打包（哪个 measure 落在第几行谱、行内 x 多少）
@@ -24,7 +24,12 @@
  * 常量兜底，而是按实际深度补高——绝大多数行谱因此不必为极端情形平白留出空白。
  * 两趟都是纯函数，合起来仍然确定性。
  *
- * 本步**不做**：关系连线、stroke 方向记号、`toSvg`、renderer 接入（T6.3–T6.4）。
+ * **关系连线 / stroke 记号**（T6.3 追加）：节点建好、`systems` 回填之后，分别交给
+ * `tabRelations.ts`（`-S-`/`-H-`/`-P-`）与 `tabStrokes.ts`（单音拨弦/扫弦方向）——
+ * 两者都只消费「节点的位置」这一个已算好的结果，不参与事件排布，因此放在节点循环
+ * 之后一次性调用即可，不影响两趟布局本身。
+ *
+ * 本步**不做**：`toSvg`、renderer 接入（T6.4）。
  */
 
 import type { DomainIndex, VoiceId } from '../../domain';
@@ -43,7 +48,11 @@ import { buildStaffLines } from './tabGlyphs';
 import type { DraftSink, TabNode, TabStaffLines } from './tabGlyphs';
 import { buildTabNode } from './tabEventNodes';
 import type { Cursor } from './tabEventNodes';
+import { buildTabRelations } from './tabRelations';
+import type { TabRelationLine } from './tabRelations';
 import { durationOf, widenForTabGlyphs } from './tabSlotWidths';
+import { buildTabStrokes } from './tabStrokes';
+import type { TabStrokeMark } from './tabStrokes';
 
 /**
  * 布局输入。`measurer` **显式注入**：无模块级单例、无全局兜底（§2.8）。
@@ -66,6 +75,10 @@ export interface TabLayout {
   readonly slots: readonly SpacedSlot[];
   readonly nodes: readonly TabNode[];
   readonly staffLines: readonly TabStaffLines[];
+  /** `-S-`/`-H-`/`-P-` 关系连线（T6.3，spec §26.6）。 */
+  readonly relations: readonly TabRelationLine[];
+  /** 单音 stroke 记号（T6.3，spec §26.4）。 */
+  readonly strokes: readonly TabStrokeMark[];
   readonly width: number;
   readonly height: number;
   readonly diagnostics: readonly RenderDiagnostic[];
@@ -116,6 +129,7 @@ export function layoutTab(voice: RenderVoice, ctx: TabContext): TabLayout {
   const systems = restackSystems(packed.systems, extraHeights, geometry);
 
   const nodes: TabNode[] = [];
+  const nodeByEvent = new Map<string, TabNode>();
   const slots: SpacedSlot[] = [];
   const drafts: RenderDiagnosticDraft[] = [];
   const sink: DraftSink = (draft) => {
@@ -142,9 +156,16 @@ export function layoutTab(voice: RenderVoice, ctx: TabContext): TabLayout {
         x: placement.x + slot.slot.x,
         staffTop,
       };
-      nodes.push(buildTabNode(cursor, voice.voiceId, ctx.measurer, sink));
+      const node = buildTabNode(cursor, voice.voiceId, ctx.measurer, sink);
+      nodes.push(node);
+      nodeByEvent.set(item.eventId, node);
     }
   }
+
+  // 关系连线 / stroke 记号都只消费「节点已经建好」这一个结果，用回填后的 `systems`
+  // 与刚建好的 `nodeByEvent`——与节点构造本身顺序无关，放在节点循环之后即可。
+  const { lines: relations } = buildTabRelations(voice, ctx.index, nodeByEvent, systems, sink);
+  const { strokes } = buildTabStrokes(voice, nodeByEvent, sink);
 
   const lastSystem = systems[systems.length - 1];
   return {
@@ -154,6 +175,8 @@ export function layoutTab(voice: RenderVoice, ctx: TabContext): TabLayout {
     slots,
     nodes,
     staffLines: systems.map((system) => buildStaffLines(system)),
+    relations,
+    strokes,
     width: systems.reduce((max, system) => Math.max(max, system.box.width), 0),
     height: lastSystem === undefined
       ? TAB_METRICS.headerHeight

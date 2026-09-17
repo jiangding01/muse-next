@@ -117,6 +117,21 @@ export const RENDER_DIAGNOSTIC_CODES = {
    * `textBlocks`，因此不存在与别处重复发诊断的风险（§4.2「同一件事只由一层报告一次」）。
    */
   textBlockUnclosed: 'muse.render.text-block.unclosed',
+  /**
+   * T6.3 追加（`notation/tab/tabStrokes.ts`）：独立 `H` 前缀按「延长」解释是 spec
+   * §26.4 的 `INFERRED`（I15）位置消歧——H 既可能是「敲击」也可能是「延长」，本层
+   * 保守取「延长」这一解释并如实标注，不静默。
+   */
+  tabStrokeHoldInferred: 'muse.render.tab.stroke-hold-inferred',
+  /** stroke 字符不在 help 符号表（`V`/`U`/`A`/`B`/`P`/`H`/`'`/`S`/`T`）内：仍画原字符（可见），不猜语义。 */
+  tabStrokeUnrecognized: 'muse.render.tab.stroke-unrecognized',
+  /**
+   * 每个 TAB 声部恰好一条（anchor 为 voice）：M2 的 TAB 渲染支持单音级的扫弦/拨弦
+   * 方向记号（`TabNote.stroke`，parse 层已填充），不支持组级的方向记号
+   * （`TabGroupEvent.stroke`，parse 层从不填充，M1.8 已知限制②）；组级前缀
+   * （如 `V[...]`）在谱面上不显示。
+   */
+  tabGroupStrokeNotModeled: 'muse.render.tab.group-stroke-not-modeled',
 } as const satisfies Record<string, RenderDiagnosticCode>;
 
 /** 纯构造：给定 draft 与序号，得到最终诊断。`ordinal` 只参与 id，不参与语义。 */

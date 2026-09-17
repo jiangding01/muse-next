@@ -51,10 +51,19 @@ export interface TabTextGlyph {
  *
  * - `text` 是**整体一个**文本：`12` 是「第 12 品」这一个数，不是 `1` 和 `2` 两个字形；
  * - `fret` 为 `'x'` 时显示 `x`（spec §26.3：由和弦图决定品位的右手拨弦，`CONFIRMED`）；
- * - `backdrop` 是遮住弦线的白底矩形——品位数字正画在线上，不挖底就会被线穿过。
+ * - `backdrop` 是遮住弦线的白底矩形——品位数字正画在线上，不挖底就会被线穿过；
+ * - `memberIndex` 是该字形在 **Domain 原始成员数组**里的下标（`TabGroupEvent.members` /
+ *   `GraceEvent.members` 的原始顺序，**不是**按 `stringIndex` 排序之后的显示顺序）；
+ *   `tabNote`（单音，非组合事件）没有「成员数组」，固定记 `0`（与 `NoteRef` 省略
+ *   `memberIndex` 时「指整个事件」的语义一致，调用方按「无成员，恒 0」理解，不需要
+ *   反查）。T6.3 加它是为了给 `-S-`/`-H-`/`-P-` 关系连线一个**显式**的身份查找口：
+ *   `resolveVoiceRelations` 给出的 `NoteRef.memberIndex` 恒按 Domain 原始下标解释，
+ *   而 `frets` 数组本身是按 `stringIndex` 重排过的显示顺序——两者不是同一个下标空间，
+ *   靠「重放排序算法」去反推容易在两处实现分叉时悄悄错位，显式存一份最直接。
  */
 export interface TabFretGlyph {
   readonly stringIndex: TabStringIndex;
+  readonly memberIndex: number;
   readonly text: TabTextGlyph;
   readonly backdrop: Box;
 }
@@ -234,6 +243,7 @@ export function buildFretGlyph(
   staffTop: number,
   fontSize: number,
   measurer: TextMeasurer,
+  memberIndex: number,
 ): TabFretGlyph {
   const text = String(fret);
   const lineY = stringY(staffTop, stringIndex);
@@ -241,6 +251,7 @@ export function buildFretGlyph(
   const pad = TAB_METRICS.fretBackdropPadding;
   return {
     stringIndex,
+    memberIndex,
     text: glyph(text, x, baselineOf(lineY, fontSize), fontSize),
     backdrop: {
       origin: { x: x - pad, y: lineY - fontSize / 2 - pad },

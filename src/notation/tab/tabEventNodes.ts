@@ -12,8 +12,9 @@
  * `tabEventOutOfScope`：音高与「哪根弦第几品」之间没有可逆映射（同一个音高在六线上
  * 有多个可弹位置），猜一个位置画出来就是在编造作者没写的指法。
  *
- * 本步**不做**：`-S-/-H-/-P-` 连线、stroke 方向记号（spec §26.4；且
- * `TabGroupEvent.stroke` 在 parse 层从不填充，M1.8 已知限制②），它们属于 T6.3–T6.4。
+ * `-S-/-H-/-P-` 连线（`tabRelations.ts`）与 stroke 方向记号（`tabStrokes.ts`，spec
+ * §26.4；`TabGroupEvent.stroke` 在 parse 层从不填充，M1.8 已知限制②）都是独立于单个
+ * 事件节点构造的段落，T6.3 追加在 `layoutTab.ts` 里节点建好之后调用，不在本文件内。
  * 时值**来源**只透传不解释（`durationValue`）；时值**装饰**（符干 / 减时线 / 延音
  * 短横线 / 附点，T6.2）由 `tabDurationGlyphs.ts` 的 `buildTabDurationGlyphs` 构造，
  * 挂在节点的 `duration` 字段上。
@@ -191,20 +192,23 @@ function buildGraceNode(
   // 整组只做**一次**水平偏移，组内与 `tabGroup` 同构：同一列纵向按弦分行。逐成员再错开
   // 1u 只会让字形几乎重叠却又对不齐任何一根弦，既看不出是几个音，也读不出在第几弦。
   const memberX = x + offset;
-  const tabMembers: TabNote[] = [];
-  for (const member of members) {
+  // `memberIndex` 必须是 `members`（Domain 原始、pitch 与 TAB 混排）里的下标，不是
+  // 「仅 TAB 成员」子序列的下标——`resolveVoiceRelations` 给出的 `NoteRef.memberIndex`
+  // 恒按 Domain 原始数组解释（T6.3 关系连线的端点查找依赖这一点，见 `tabRelations.ts`）。
+  const tabMembers: { readonly member: TabNote; readonly memberIndex: number }[] = [];
+  members.forEach((member, memberIndex) => {
     if ('pitch' in member) {
       sink(draftOf(CODES.tabEventOutOfScope, 'warning', '倚音成员是 pitch 模式音符，不属于 TAB 渲染范围：画成可见文本占位，不猜弦品（spec §26.10 差异汇总）', anchor, item.sourceRef));
       outOfScopeTexts.push(centeredGlyph(summarizePitch(member.pitch), memberX, staffCenterY(staffTop), size));
-      continue;
+      return;
     }
-    tabMembers.push(member);
-  }
-  for (const member of [...tabMembers].sort((a, b) => a.stringIndex - b.stringIndex)) {
-    frets.push(buildFretGlyph(member.stringIndex, member.fret, memberX, staffTop, size, measurer));
+    tabMembers.push({ member, memberIndex });
+  });
+  for (const { member, memberIndex } of [...tabMembers].sort((a, b) => a.member.stringIndex - b.member.stringIndex)) {
+    frets.push(buildFretGlyph(member.stringIndex, member.fret, memberX, staffTop, size, measurer, memberIndex));
   }
 
-  const duplicateString = hasDuplicateString(tabMembers);
+  const duplicateString = hasDuplicateString(tabMembers.map(({ member }) => member));
   if (duplicateString) sinkDuplicateString(item, anchor, sink);
 
   // bbox span：所有成员同一 x，跨度就是最宽的那个字形。
@@ -236,7 +240,9 @@ export function buildTabNode(
   switch (event.kind) {
     case 'tabNote': {
       const note = event.note;
-      const fret = buildFretGlyph(note.stringIndex, note.fret, x, staffTop, size, measurer);
+      // `tabNote` 不是组合事件，没有「成员数组」：`memberIndex` 固定记 0（`TabFretGlyph`
+      // 文档已注明这一约定），与 `NoteRef` 省略 `memberIndex` 时指「整个事件」同构。
+      const fret = buildFretGlyph(note.stringIndex, note.fret, x, staffTop, size, measurer, 0);
       // `duration === undefined`（`L:` 不可知）是时值上的降级路径：固定宽占位已由
       // `spacing.ts` 给出（§2.6.1 R4），对应的 `muse.render.duration.unresolved` /
       // `muse.render.duration.unrepresentable` 诊断**已由 T1 的 `buildRenderScore` 在
@@ -253,10 +259,13 @@ export function buildTabNode(
     }
     case 'tabGroup': {
       // 同一列纵向排开，按弦号升序（第 1 弦最上）；组时值取末音已由 Domain 解算（§26.8），
-      // 时值装饰按这同一份末音时值推导，不逐成员各画一套。
-      const ordered = [...event.members].sort((a, b) => a.stringIndex - b.stringIndex);
-      const frets = ordered.map((member) =>
-        buildFretGlyph(member.stringIndex, member.fret, x, staffTop, size, measurer),
+      // 时值装饰按这同一份末音时值推导，不逐成员各画一套。`memberIndex` 记 `event.members`
+      // 的原始下标（排序前），不是排序后的显示位置——T6.3 关系连线端点查找依赖这一点。
+      const ordered = event.members
+        .map((member, memberIndex) => ({ member, memberIndex }))
+        .sort((a, b) => a.member.stringIndex - b.member.stringIndex);
+      const frets = ordered.map(({ member, memberIndex }) =>
+        buildFretGlyph(member.stringIndex, member.fret, x, staffTop, size, measurer, memberIndex),
       );
       const glyphWidth = maxOrZero(frets.map((fret) => fretTextWidth(fret, measurer)));
       const duplicateString = hasDuplicateString(event.members);

@@ -1,6 +1,6 @@
 /**
- * notation/tab —— 品位数字 / 时值装饰的槽宽兜底（M2 方案 §3.3，T6.1 品位文本、
- * T6.2 追加时值装饰延展）。
+ * notation/tab —— 品位数字 / 时值装饰 / stroke 记号的槽宽兜底（M2 方案 §3.3，
+ * T6.1 品位文本、T6.2 追加时值装饰延展、T6.3 追加 stroke 记号延展）。
  *
  * 背景与 `jianpu/jianpuSlotWidths.ts` 同构，但**起因不同**：`layout/spacing.ts` 的
  * 槽宽只按字面 `duration` 加权，它不认识任何一种记谱，因此也不知道 TAB 的品位数字
@@ -57,6 +57,36 @@ function widestFretTextWidth(item: RenderItem, measurer: TextMeasurer): number {
 }
 
 /**
+ * 一个渲染项要画的 stroke 文本（拼接后的整体，与 `tabStrokes.ts` 的画法同一份拼接
+ * 顺序：成员按原始顺序、组级排在最后）；不画 stroke 的事件返回空串。**两处各自写
+ * 一遍是有意的**（同文件开头「两处各自写一遍」的一贯做法）——一处改动不会悄悄改变
+ * 另一处。`TabGroupEvent.stroke` 分支当前不可达（parse 层从不填充，见
+ * `tabStrokes.ts` 文件头），写在这里只是不让两处的拼接规则将来走岔。
+ */
+function strokeTextOf(item: RenderItem): string {
+  const event = item.event;
+  if (event.kind === 'tabNote') return event.note.stroke ?? '';
+  if (event.kind === 'tabGroup') {
+    let text = '';
+    for (const member of event.members) text += member.stroke ?? '';
+    if (event.stroke !== undefined) text += event.stroke;
+    return text;
+  }
+  return '';
+}
+
+/**
+ * stroke 记号的槽宽下界：多成员各带 stroke 时（`[Va0/Ub2]` 实测可达，parse 层逐成员
+ * 填充）拼接文本可能比槽宽本身还宽，不核实会画出槽外。
+ */
+function requiredStrokeSlotWidth(item: RenderItem, measurer: TextMeasurer): number {
+  const text = strokeTextOf(item);
+  if (text === '') return 0;
+  const width = measurer.measure(text, { fontSize: TAB_METRICS.strokeFontSize }).width;
+  return width + 2 * TAB_METRICS.fretPaddingX;
+}
+
+/**
  * 一个渲染项的时值——判据与 `tabEventNodes.ts` 同源同一份取法（`tabNote` →
  * `event.note.duration`、`tabGroup` → `event.duration`【末音】、`rest` →
  * `event.rest.duration`）；两处各自按 Domain 定义写一遍是有意的（见
@@ -87,7 +117,11 @@ function requiredDurationSlotWidth(item: RenderItem): number {
 function requiredSlotWidth(item: RenderItem, measurer: TextMeasurer): number {
   const textWidth = widestFretTextWidth(item, measurer);
   const fretRequirement = textWidth === 0 ? 0 : textWidth + 2 * TAB_METRICS.fretPaddingX;
-  return Math.max(fretRequirement, requiredDurationSlotWidth(item));
+  return Math.max(
+    fretRequirement,
+    requiredStrokeSlotWidth(item, measurer),
+    requiredDurationSlotWidth(item),
+  );
 }
 
 /**
