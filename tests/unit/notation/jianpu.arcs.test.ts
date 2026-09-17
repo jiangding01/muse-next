@@ -178,7 +178,11 @@ describe('jianpu 弧线 —— 端点对准数字字形而非时值槽位（不�
     expect(arc.x2).toBeLessThan(lastNode.x + lastNode.width / 2);
   });
 
-  it('跨行 tie 末段：全音符换行到下一行谱后，末端仍落在数字字形内', () => {
+  // T6.5 起，跨行末段的终点**不再**夹在字形 bbox 内：目标是行首第一个数字时
+  // `[内容左界, 字形中心]` 只剩几个单位，弧会退化成尖角（人工复验发现）。末段因此
+  // 保证 `arcContinuationMinSpan` 的最小可见跨度——它仍从字形中心起算，只是允许向右
+  // 越过字形；同行谱内的整条弧（`whole`）不受影响，见上一条用例。
+  it('跨行 tie 末段：全音符换行到下一行谱后，末端从数字起算并保证最小可见跨度', () => {
     const result = layout('CCCC-|C4|', NARROW);
     expect(result.systems.length).toBeGreaterThanOrEqual(2);
     expect(result.arcs).toHaveLength(2);
@@ -189,7 +193,7 @@ describe('jianpu 弧线 —— 端点对准数字字形而非时值槽位（不�
     );
     if (lastNode === undefined) throw new Error('换行后的全音符节点必须存在');
     expect(endArc.x2).toBeGreaterThanOrEqual(lastNode.x);
-    expect(endArc.x2).toBeLessThanOrEqual(lastNode.x + lastNode.glyphWidth);
+    expect(spanOf(endArc)).toBeGreaterThanOrEqual(JIANPU_METRICS.arcContinuationMinSpan);
     expect(endArc.x2).toBeLessThan(lastNode.x + lastNode.width / 2);
   });
 
@@ -240,5 +244,74 @@ describe('jianpu 弧线 —— A 类恢复状态不受切段影响（§22）', (
     expect(first.segment).toBe('whole');
     expect(spanOf(first)).toBeCloseTo(JIANPU_METRICS.arcOpenLength);
     expect(result.diagnostics.map((item) => item.code)).toContain(CODES.slurUnclosed);
+  });
+});
+
+describe('jianpu 弧线 —— 跨行谱续行段的最小可见跨度（T6.5，产品决定）', () => {
+  /** 该行谱的 box 左右界；找不到就直接失败，不拿 0 兜底。 */
+  function boxOf(result: JianpuLayout, systemIndex: number): { left: number; right: number } {
+    const system = result.systems.find((item) => item.index === systemIndex);
+    if (system === undefined) throw new Error(`第 ${String(systemIndex)} 行谱必须存在`);
+    return { left: system.box.origin.x, right: system.box.origin.x + system.box.width };
+  }
+
+  it('跨 2 行谱的 tie：start 与 end 两段都至少有 arcContinuationMinSpan 的跨度', () => {
+    // 末端是下一行谱的**第一个**数字：修复前 `[内容左界, 字形中心]` 只剩几个单位。
+    const result = layout('CCCC-|C|', NARROW);
+    expect(result.arcs).toHaveLength(2);
+    for (const [index, segment] of (['start', 'end'] as const).entries()) {
+      const arc = arcOf(result, index);
+      expect(arc.segment).toBe(segment);
+      expect(spanOf(arc)).toBeGreaterThanOrEqual(JIANPU_METRICS.arcContinuationMinSpan);
+    }
+  });
+
+  it('跨 3 行谱的 slur：三段都不反向、都落在各自行谱的 box 内，续行两段满足最小跨度', () => {
+    const result = layout('(CDEF|GABC|d)|', NARROW);
+    expect(result.arcs).toHaveLength(3);
+    for (const arc of result.arcs) {
+      const box = boxOf(result, arc.systemIndex);
+      expect(Number.isFinite(arc.x1)).toBe(true);
+      expect(Number.isFinite(arc.x2)).toBe(true);
+      expect(arc.x1).toBeLessThanOrEqual(arc.x2);
+      expect(arc.x1).toBeGreaterThanOrEqual(box.left);
+      expect(arc.x2).toBeLessThanOrEqual(box.right);
+    }
+    for (const arc of result.arcs.filter((item) => item.segment !== 'middle')) {
+      expect(spanOf(arc)).toBeGreaterThanOrEqual(JIANPU_METRICS.arcContinuationMinSpan);
+    }
+  });
+
+  it('极窄 system（box 比最小跨度还窄）允许退化：夹在 box 内、仍 finite、不反向', () => {
+    // `availableWidth = 1` → 每个 measure 独占一行谱，行谱 box 宽 = 该 measure 宽；
+    // 末行谱只有一个十六分音符、又没有收尾小节线，box 只有一个 `minSlotWidth` 宽，
+    // 比 `arcContinuationMinSpan` 还窄——此时末段只能退化到 box 右界，不许越界。
+    const result = layout('CCCC-|C/16', 1);
+    expect(result.systems.length).toBeGreaterThanOrEqual(2);
+    expect(result.arcs).toHaveLength(2);
+    const endArc = arcOf(result, 1);
+    const endBox = boxOf(result, endArc.systemIndex);
+    expect(endBox.right - endBox.left).toBeLessThan(JIANPU_METRICS.arcContinuationMinSpan);
+    expect(spanOf(endArc)).toBeLessThan(JIANPU_METRICS.arcContinuationMinSpan);
+    for (const arc of result.arcs) {
+      const box = boxOf(result, arc.systemIndex);
+      expect(Number.isFinite(arc.x1)).toBe(true);
+      expect(Number.isFinite(arc.x2)).toBe(true);
+      expect(Number.isFinite(arc.height)).toBe(true);
+      expect(arc.x1).toBeLessThanOrEqual(arc.x2);
+      expect(arc.x1).toBeGreaterThanOrEqual(box.left);
+      expect(arc.x2).toBeLessThanOrEqual(box.right);
+    }
+  });
+
+  it('同一行谱内的 whole 弧几何不受影响：两端仍精确等于各自的字形中心', () => {
+    const result = layout('(CD)|');
+    expect(result.arcs).toHaveLength(1);
+    const arc = arcOf(result, 0);
+    expect(arc.segment).toBe('whole');
+    const [first, last] = [result.nodes[0], result.nodes[1]];
+    if (first === undefined || last === undefined) throw new Error('fixture 必须有两个音符节点');
+    expect(arc.x1).toBe(first.x + first.glyphWidth / 2);
+    expect(arc.x2).toBe(last.x + last.glyphWidth / 2);
   });
 });

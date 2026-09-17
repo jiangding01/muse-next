@@ -25,7 +25,7 @@
  */
 
 import type { Rational } from '../../domain';
-import { TAB_METRICS } from '../layout/metrics';
+import { SLOT_SPACING_METRICS, TAB_METRICS } from '../layout/metrics';
 import type { MeasureSpacing, SpacedSlot } from '../layout/spacing';
 import type { TimeSlot } from '../layout/primitives';
 import type { TextMeasurer } from '../layout/textMeasurer';
@@ -143,6 +143,9 @@ export function widenForTabGlyphs(
   measurer: TextMeasurer,
 ): MeasureSpacing {
   const effectiveWidths = spacing.slots.map((spacedSlot, offset) => {
+    // overlay 列恒零宽（`layout/spacing.ts` 的 `SpacedSlot` 语义）：加宽它就等于把
+    // 和弦符号重新变回一个占位列，正是 T6.5 要消掉的空档。
+    if (spacedSlot.widthKind === 'overlay') return SLOT_SPACING_METRICS.overlaySlotWidth;
     const item = items[offset];
     const required = item === undefined ? 0 : requiredSlotWidth(item, measurer);
     return Math.max(spacedSlot.slot.width, required);

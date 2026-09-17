@@ -18,7 +18,7 @@
  * （唯一来源），单位是 abstract unit（D6，不是像素）。
  */
 
-import { JIANPU_METRICS } from '../layout/metrics';
+import { JIANPU_METRICS, SLOT_SPACING_METRICS } from '../layout/metrics';
 import type { MeasureSpacing, SpacedSlot } from '../layout/spacing';
 import type { TimeSlot } from '../layout/primitives';
 import { decomposeDuration } from '../model/duration';
@@ -100,6 +100,9 @@ export function widenForJianpuGlyphs(
   items: readonly RenderItem[],
 ): MeasureSpacing {
   const effectiveWidths = spacing.slots.map((spacedSlot, offset) => {
+    // overlay 列恒零宽（`layout/spacing.ts` 的 `SpacedSlot` 语义）：加宽它就等于把
+    // 和弦符号重新变回一个占位列，正是 T6.5 要消掉的空档。
+    if (spacedSlot.widthKind === 'overlay') return SLOT_SPACING_METRICS.overlaySlotWidth;
     const item = items[offset];
     const extent = item === undefined ? 0 : requiredSlotWidth(dashesOf(item));
     return Math.max(spacedSlot.slot.width, extent);

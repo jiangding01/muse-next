@@ -16,6 +16,7 @@
  */
 
 import type { EventId, MusicEvent, Note, Rational, Rest, VoiceId } from '../../domain';
+import { chordSymbolDisplayText } from '../layout/chordSymbolDisplay';
 import { JIANPU_METRICS } from '../layout/metrics';
 import type { SpacedSlot } from '../layout/spacing';
 import type { TextMeasurer } from '../layout/textMeasurer';
@@ -126,7 +127,7 @@ function textNodeTextOf(event: MusicEvent): string {
   if (event.kind === 'decoration') {
     return event.decoration.form === 'simple' ? event.decoration.name : event.decoration.raw;
   }
-  if (event.kind === 'chordSymbol') return event.symbol.raw;
+  if (event.kind === 'chordSymbol') return chordSymbolDisplayText(event.symbol.raw);
   if (event.kind === 'unknown') return event.raw;
   return event.kind;
 }

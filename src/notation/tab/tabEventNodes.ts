@@ -24,6 +24,7 @@
  */
 
 import type { EventId, Note, TabNote, VoiceId } from '../../domain';
+import { chordSymbolDisplayText } from '../layout/chordSymbolDisplay';
 import { summarizeEvent, summarizePitch } from '../layout/fallbackSummary';
 import { TAB_METRICS } from '../layout/metrics';
 import type { SpacedSlot } from '../layout/spacing';
@@ -118,7 +119,7 @@ function textNodeTextOf(item: RenderItem): string {
   if (event.kind === 'decoration') {
     return event.decoration.form === 'simple' ? event.decoration.name : event.decoration.raw;
   }
-  if (event.kind === 'chordSymbol') return event.symbol.raw;
+  if (event.kind === 'chordSymbol') return chordSymbolDisplayText(event.symbol.raw);
   // `unknown` 与 pitch 模式越界事件都走 `summarizeEvent`：原样转述，不假装是任何一种记谱。
   return summarizeEvent(event);
 }

@@ -106,6 +106,36 @@ function systemBoundsOf(systems: readonly System[], nodes: Iterable<TabNode>): R
   return bounds;
 }
 
+/**
+ * 续行段的「最小可见跨度 + clamp」（T6.5）——与 `jianpuArcs.ts` 的
+ * `continuationSpan` 同一思路，**独立实现**（§2.7 / 不 import jianpu）。
+ *
+ * `anchored` 是关系那一端的字形坐标（`start` 段的源字形右缘 + gap / `end` 段的目标
+ * 字形左缘 − gap），`boundary` 是本行谱的续行边界（内容边界 + padding）。人工复验
+ * 里两者贴得很近时线段短到几乎看不见，于是：`end` 段向右扩到 `x1 + minSpan`、
+ * `start` 段向左扩到 `x2 − minSpan`。
+ *
+ * 夹取基准是 `system.box`（`bounds`），**不是**内容边界——最小跨度的目的就是越过内容
+ * 边界那点 padding，拿内容边界去夹等于没做。box 比 `minSpan` 还窄时结果退化成更短的
+ * 一段（宁可短，不可越界），但 `x1 ≤ x2` 恒成立，不产出反向线段。
+ */
+function continuationSpan(
+  anchored: number,
+  boundary: number,
+  bounds: SystemBounds,
+  segment: 'start' | 'end',
+): { readonly x1: number; readonly x2: number } {
+  const minSpan = TAB_METRICS.relationContinuationMinSpan;
+  if (segment === 'end') {
+    const x1 = clampToBounds(boundary, bounds);
+    const x2 = clampToBounds(Math.max(anchored, x1 + minSpan), bounds);
+    return { x1: Math.min(x1, x2), x2 };
+  }
+  const x2 = clampToBounds(boundary, bounds);
+  const x1 = clampToBounds(Math.min(anchored, x2 - minSpan), bounds);
+  return { x1, x2: Math.max(x1, x2) };
+}
+
 /** 线段中点上方的标签；`y` 取两端里更靠上（更小）的一个，避免标签落在线段下方。 */
 function labelAt(text: string, x1: number, y1: number, x2: number, y2: number): TabTextGlyph {
   return glyph(text, (x1 + x2) / 2, Math.min(y1, y2) + TAB_METRICS.relationLabelOffsetY, TAB_METRICS.relationLabelFontSize);
@@ -177,11 +207,14 @@ export function buildTabRelations(
 
     // `start` 段：起点是源字形（+ gap），终点是本行谱内容右界 + 续行 padding，两者都
     // 显式夹回 `fromBox`；`end` 段对称，起点是下一行谱内容左界 − 续行 padding，终点是
-    // 目标字形（− gap），都夹回 `toBox`。同一个「宁可零长、不可反向」的决定。
-    const startX1 = clampToBounds(fromX, fromBox);
-    const startX2 = clampToBounds(Math.max(startX1, fromContent.right), fromBox);
-    const endX2 = clampToBounds(toX, toBox);
-    const endX1 = clampToBounds(Math.min(toContent.left, endX2), toBox);
+    // 目标字形（− gap），都夹回 `toBox`。同一个「宁可零长、不可反向」的决定；两段另外
+    // 保证 `relationContinuationMinSpan` 的最小可见跨度（T6.5）。
+    const start = continuationSpan(fromX, fromContent.right, fromBox, 'start');
+    const end = continuationSpan(toX, toContent.left, toBox, 'end');
+    const startX1 = start.x1;
+    const startX2 = start.x2;
+    const endX1 = end.x1;
+    const endX2 = end.x2;
 
     lines.push({
       anchor,

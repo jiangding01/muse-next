@@ -132,6 +132,16 @@ export const TAB_METRICS = {
   relationEndGap: 2,
   /** 跨行谱关系续行段相对本行谱内容边界的外扩量（产品决定，与 `JIANPU_METRICS.arcContinuationPadding` 同一思路）。 */
   relationContinuationPadding: 6,
+  /**
+   * 跨行谱关系连线**续行段**的最小可见跨度（产品决定，不是格式事实，与
+   * `JIANPU_METRICS.arcContinuationMinSpan` 同一思路、各自独立取值）。
+   *
+   * 人工复验发现：`end` 段的目标品位若是本行谱的第一个音，`[内容左界, 字形左缘 − gap]`
+   * 只剩几个单位，画出来是一小截几乎看不见的横线；`start` 段在源品位是行末最后一个音时
+   * 对称退化。续行段因此保证至少 `minSpan` 长，再夹回本行谱的 `system.box`——box 比它
+   * 还窄时允许退化（宁可短，不可越界），但永不反向。
+   */
+  relationContinuationMinSpan: 16,
 
   // -------------------------------------------------------------------------
   // 单音 stroke 记号（T6.3 追加，spec §26.4）。help 符号表只规定字符含义，从未规定

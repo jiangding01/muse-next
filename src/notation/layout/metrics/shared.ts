@@ -47,6 +47,18 @@ export const SLOT_SPACING_METRICS = {
   untimedSlotWidth: 12,
   /** 某 measure 内出现不可解事件后，该 measure 整体退等距时的统一列宽。 */
   equidistantSlotWidth: 24,
+  /**
+   * **overlay 列**（`SlotWidthKind === 'overlay'`）的列宽：恒为 0。
+   *
+   * 和弦符号（spec §25）标注的是「此处开始是这个和弦」，它不消费任何节奏时间，也不
+   * 该在主谱行（简谱数字行 / TAB 六线）里挤出一个空档——人工复验里 TAB 每小节的
+   * `"C"` 都在六线和节奏带上撕开一道 12u 的口子（`|||| ||||`）。零宽列让和弦符号
+   * 贴在**后续第一个有实际列宽的事件**左缘上（列宽为 0 → 累计 x 不前进 → 下一列的
+   * x 与它相同），位于 measure 末尾时则贴在该 measure 的末端，两种情形都不推宽。
+   *
+   * 写成常量而不是字面 0：`notation/**` 的尺寸只有 `metrics.ts` 一个来源。
+   */
+  overlaySlotWidth: 0,
 } as const;
 
 /**

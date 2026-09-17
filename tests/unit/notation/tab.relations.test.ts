@@ -552,3 +552,70 @@ describe('TAB stroke —— tabGroup 成员级 stroke（[Va0/Ub2] 实测可达�
     expect(group.members.every((member) => member.stroke === undefined)).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// ⑧ 跨行谱续行段的最小可见跨度（T6.5，产品决定）
+// ---------------------------------------------------------------------------
+
+describe('TAB 关系连线 —— 跨行谱续行段的最小可见跨度（T6.5，产品决定）', () => {
+  /** `-S-` 写成独立 marker 才可能把两端分到不同 measure，进而被换行拆到不同行谱。 */
+  const CROSS = tabHeader('a5 -S- | a7 |');
+
+  function boxOf(result: TabLayout, systemIndex: number): { left: number; right: number } {
+    const system = result.systems[systemIndex];
+    if (system === undefined) throw new Error(`第 ${String(systemIndex)} 行谱必须存在`);
+    return { left: system.box.origin.x, right: system.box.origin.x + system.box.width };
+  }
+
+  it('正常跨行：start / end 两段都至少有 relationContinuationMinSpan 的跨度', () => {
+    const result = layout(CROSS, 40);
+    expect(result.systems.length).toBeGreaterThan(1);
+    expect(result.relations).toHaveLength(2);
+    for (const line of result.relations) {
+      expect(line.x2 - line.x1).toBeGreaterThanOrEqual(TAB_METRICS.relationContinuationMinSpan);
+      const box = boxOf(result, line.systemIndex);
+      expect(line.x1).toBeGreaterThanOrEqual(box.left);
+      expect(line.x2).toBeLessThanOrEqual(box.right);
+    }
+    const [start, end] = result.relations;
+    if (start === undefined || end === undefined) throw new Error('缺少切段');
+    expect(start.segment).toBe('start');
+    expect(end.segment).toBe('end');
+    // label 仍只在 start 段（续行段没有对端可标注）。
+    expect(start.label).toBeDefined();
+    expect(end.label).toBeUndefined();
+  });
+
+  it('极窄 box（比最小跨度还窄）允许退化：夹在 box 内、仍 finite、不反向', () => {
+    // `availableWidth = 1` → 每个 measure 独占一行谱；末行谱只有一个十六分音符、
+    // 又没有收尾小节线，box 比 `relationContinuationMinSpan` 还窄。
+    const result = layout(tabHeader('a5 -S- | a7/16'), 1);
+    expect(result.relations).toHaveLength(2);
+    const end = result.relations[1];
+    if (end === undefined) throw new Error('缺少 end 段');
+    const endBox = boxOf(result, end.systemIndex);
+    expect(endBox.right - endBox.left).toBeLessThan(TAB_METRICS.relationContinuationMinSpan);
+    expect(end.x2 - end.x1).toBeLessThan(TAB_METRICS.relationContinuationMinSpan);
+    for (const line of result.relations) {
+      const box = boxOf(result, line.systemIndex);
+      expect(Number.isFinite(line.x1)).toBe(true);
+      expect(Number.isFinite(line.x2)).toBe(true);
+      expect(line.x1).toBeLessThanOrEqual(line.x2);
+      expect(line.x1).toBeGreaterThanOrEqual(box.left);
+      expect(line.x2).toBeLessThanOrEqual(box.right);
+    }
+  });
+
+  it('同一行谱的 whole 关系不受影响：两端仍精确等于字形边缘 ± relationEndGap', () => {
+    const result = layout(tabHeader('a5-S-a7 |'));
+    expect(result.relations).toHaveLength(1);
+    const line = result.relations[0];
+    if (line === undefined) throw new Error('缺少关系线');
+    expect(line.segment).toBe('whole');
+    const notes = nodesOfKind(result, 'tabNote');
+    const [from, to] = notes;
+    if (from === undefined || to === undefined) throw new Error('fixture 必须有两个 tabNote');
+    expect(line.x1).toBe(from.fret.backdrop.origin.x + from.fret.backdrop.width + TAB_METRICS.relationEndGap);
+    expect(line.x2).toBe(to.fret.backdrop.origin.x - TAB_METRICS.relationEndGap);
+  });
+});

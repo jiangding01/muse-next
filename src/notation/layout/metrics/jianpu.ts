@@ -74,6 +74,20 @@ export const JIANPU_METRICS = {
    * 续行段拉到内容边界外一点点表示「还没完」，但不拉进行末的整片空白里。
    */
   arcContinuationPadding: 6,
+  /**
+   * 跨行谱弧线**续行段**的最小可见跨度（产品决定，不是格式事实）。
+   *
+   * 人工复验发现：末段（`end`）的目标字形若是本行谱的第一个数字，`[内容左界, 字形
+   * 中心]` 只剩几个单位，画出来是一个贴着数字的尖角，看不出「这是上一行那条弧的
+   * 续行」。首段（`start`）在源字形是行末最后一个数字时对称地退化。于是给续行段一个
+   * 最小跨度：`end` 段向右扩到 `x1 + minSpan`、`start` 段向左扩到 `x2 − minSpan`，
+   * 再夹回本行谱的 `system.box`。box 本身就比 `minSpan` 还窄时允许退化（宁可短，
+   * 不可越界），但永不反向。
+   *
+   * 取 16 是产品决定：约等于一个数字字形宽（`digitFontSize` 量级）的一倍半，足以让
+   * 弧顶（`arcHeightFor` 在此跨度上仍取 `arcHeightMin` 附近）看出弧形。
+   */
+  arcContinuationMinSpan: 16,
   /** 弧线相对基线的垂直偏移（负值 = 上方）。 */
   arcOffsetY: -14,
   /** 单端（unresolved / unclosed）弧线的悬空段长度。 */

@@ -29,10 +29,16 @@ import type { System } from '../layout/primitives';
 import type { Anchor } from '../model/types';
 import type { JianpuArc, JianpuNode } from './jianpuGlyphs';
 
-/** 一行谱里与弧线有关的三个量：可画区左右界、以及该行谱自己的弧线基准 y。 */
+/**
+ * 一行谱里与弧线有关的几个量：续行可画区左右界（内容边界 + padding，已夹回 box）、
+ * 该行谱 `system.box` 自身的左右界（续行段最小跨度外扩时的**最终**夹取基准），
+ * 以及该行谱自己的弧线基准 y。
+ */
 export interface ArcSystemGeometry {
   readonly left: number;
   readonly right: number;
+  readonly boxLeft: number;
+  readonly boxRight: number;
   readonly y: number;
 }
 
@@ -72,6 +78,8 @@ export function arcSystemGeometries(
     geometries.set(system.index, {
       left: bounds === undefined ? boxLeft : Math.max(boxLeft, bounds.left - padding),
       right: bounds === undefined ? boxRight : Math.min(boxRight, bounds.right + padding),
+      boxLeft,
+      boxRight,
       y: box.origin.y + JIANPU_METRICS.baselineOffset + JIANPU_METRICS.arcOffsetY,
     });
   }
@@ -99,6 +107,36 @@ function geometryOf(
     throw new Error(`jianpu arc: no system geometry for systemIndex ${String(systemIndex)}`);
   }
   return geometry;
+}
+
+/**
+ * 续行段的「最小可见跨度 + clamp」（T6.5）。
+ *
+ * - `end` 段（有对端在上一行）：`x2 = clamp(max(字形中心, x1 + minSpan), …, boxRight)`；
+ * - `start` 段（有对端在下一行）：`x1 = clamp(min(字形中心, x2 − minSpan), boxLeft, …)`；
+ * - `middle` / `whole`：不参与，原样按 min/max 归正。
+ *
+ * 夹取基准是 `system.box`，**不是**内容边界——最小跨度的整个目的就是越过内容边界那点
+ * padding，再拿内容边界去夹等于没做。box 比 `minSpan` 还窄时结果退化成更短的一段
+ * （宁可短，不可越界），但两个 `Math.min`/`Math.max` 保证 `x1 ≤ x2` 恒成立。
+ */
+function continuationSpan(
+  geometry: ArcSystemGeometry,
+  x1: number,
+  x2: number,
+  isStart: boolean,
+  isEnd: boolean,
+): { readonly x1: number; readonly x2: number } {
+  const minSpan = JIANPU_METRICS.arcContinuationMinSpan;
+  if (isEnd && !isStart) {
+    const widened = Math.min(geometry.boxRight, Math.max(x2, x1 + minSpan));
+    return { x1: Math.min(x1, widened), x2: widened };
+  }
+  if (isStart && !isEnd) {
+    const widened = Math.max(geometry.boxLeft, Math.min(x1, x2 - minSpan));
+    return { x1: widened, x2: Math.max(x2, widened) };
+  }
+  return { x1: Math.min(x1, x2), x2: Math.max(x1, x2) };
 }
 
 export interface ArcRequest {
@@ -164,14 +202,20 @@ export function buildArcSegments(
     const geometry = geometryOf(geometries, index);
     const isStart = index === startSystem;
     const isEnd = index === endSystem;
-    const x1 = isStart ? centerOf(first) : geometry.left;
-    const x2 = isEnd ? centerOf(last) : geometry.right;
-    // 端点已经在续行边界之外时（列中心落在 padding 外）夹一下，免得画出反向的一段。
+    // 端点已经在续行边界之外时（列中心落在 padding 外）夹一下，免得画出反向的一段；
+    // 续行段另外保证最小可见跨度，不退化成贴着字形的尖角（T6.5）。
+    const span = continuationSpan(
+      geometry,
+      isStart ? centerOf(first) : geometry.left,
+      isEnd ? centerOf(last) : geometry.right,
+      isStart,
+      isEnd,
+    );
     segments.push(arcAt(
       request,
       index,
-      Math.min(x1, x2),
-      Math.max(x1, x2),
+      span.x1,
+      span.x2,
       geometry.y,
       isStart ? 'start' : isEnd ? 'end' : 'middle',
     ));

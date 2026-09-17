@@ -30,14 +30,25 @@ import type { TimeSlot } from './primitives';
  * 一列宽度的来源，用于让上层（诊断关联、测试）看清这列是怎么算出来的。
  *
  * - `timed`：按字面 `duration` 加权；
- * - `untimed`：该事件在记谱上本就不带时值（小节线 / 装饰 / 和弦符号 / 倚音 / 未知），
- *   取固定窄列，**不是降级**，不关联诊断；
+ * - `untimed`：该事件在记谱上本就不带时值（小节线 / 装饰 / 倚音 / 未知），取固定窄列，
+ *   **不是降级**，不关联诊断；
+ * - `overlay`：该事件是**贴在别的列上的标注**（当前只有和弦符号），零宽、不占节奏
+ *   位置，**不是降级**；
  * - `fallback`：`duration` 应有而缺失（`L:` 不可知），取固定占位宽——**降级**；
  * - `equidistant`：所在 measure 因出现 `fallback` 而整体退等距——**降级**。
  */
-export type SlotWidthKind = 'timed' | 'untimed' | 'fallback' | 'equidistant';
+export type SlotWidthKind = 'timed' | 'untimed' | 'overlay' | 'fallback' | 'equidistant';
 
-/** 一列：几何部分是 `TimeSlot`（primitive），来源部分是本层的解释。 */
+/**
+ * 一列：几何部分是 `TimeSlot`（primitive），来源部分是本层的解释。
+ *
+ * **overlay 列的语义**（`widthKind === 'overlay'`）：`slot.width` 恒为 0，`slot.x`
+ * 因此与**后续第一个有实际列宽的列**的 `x` 相等（累计 x 不前进）；该列位于段末时
+ * `slot.x` 等于整段的宽度，即 measure 末端。它不贡献任何段宽，也**不参与**等距降级
+ * （见 `spaceItems`）——退等距是「时值不可知，只好让每列一样宽」，overlay 列压根没有
+ * 时值可言，统一改宽只会把空档换个地方长出来。消费方（`jianpuSlotWidths.ts` /
+ * `tabSlotWidths.ts` 的重累计、`layoutSystems`）必须保持这两条不变量。
+ */
 export interface SpacedSlot {
   readonly slot: TimeSlot;
   readonly widthKind: SlotWidthKind;
@@ -60,6 +71,10 @@ export interface MeasureSpacing {
  * 本就没有时值字段），而不是互相推断。两处各自按 Domain 定义写一遍是有意的：
  * 让一处改动不会悄悄改变另一处的语义，`switch` 的穷尽性检查会在 Domain 新增事件类型
  * 时同时点亮两个文件。
+ *
+ * `chordSymbol` 分支在 `itemSlotWidth` 里已经被 overlay 判定先行截住，走不到这里；
+ * 仍然列出来是为了保住 `switch` 的穷尽性检查——删掉它会让「Domain 新增事件类型」
+ * 这件事在本文件失去报警。
  */
 function timedDurationOf(
   event: MusicEvent,
@@ -105,8 +120,19 @@ export function timedSlotWidth(duration: Rational): number {
   );
 }
 
-/** 单个事件的列宽与来源（未考虑所在 measure 是否退等距）。 */
+/**
+ * 单个事件的列宽与来源（未考虑所在 measure 是否退等距）。
+ *
+ * **overlay 判定只此一处**（`spaceItems` 只负责按 `kind` 累计，不再重复判事件类型）：
+ * 和弦符号（spec §25）标注「此处开始是这个和弦」，不消费节奏时间，因此取零宽 overlay
+ * 列贴在后续列上，而不是像装饰 / 小节线那样占一个 `untimedSlotWidth` 的窄列——人工
+ * 复验里它在 TAB 六线与节奏带上撕开的空档正来自后者。装饰（`decoration`）**保持
+ * `untimed` 不变**：它画的是一个独立占位文本，不是贴在别人身上的标注。
+ */
 export function itemSlotWidth(item: RenderItem): { readonly width: number; readonly kind: SlotWidthKind } {
+  if (item.event.kind === 'chordSymbol') {
+    return { width: SLOT_SPACING_METRICS.overlaySlotWidth, kind: 'overlay' };
+  }
   const timing = timedDurationOf(item.event);
   if (!timing.timed) {
     return { width: SLOT_SPACING_METRICS.untimedSlotWidth, kind: 'untimed' };
@@ -136,10 +162,13 @@ export function spaceItems(
   const slots: SpacedSlot[] = [];
   let x = 0;
   for (const [offset, entry] of measured.entries()) {
-    const width = equidistant ? SLOT_SPACING_METRICS.equidistantSlotWidth : entry.width;
+    // overlay 列不参与等距降级：它零宽、不占节奏位置，统一改成 `equidistantSlotWidth`
+    // 只会把空档换个地方长出来（见 `SpacedSlot` 的 overlay 语义说明）。
+    const overlay = entry.kind === 'overlay';
+    const width = overlay ? entry.width : equidistant ? SLOT_SPACING_METRICS.equidistantSlotWidth : entry.width;
     slots.push({
       slot: { index: firstSlotIndex + offset, x, width },
-      widthKind: equidistant ? 'equidistant' : entry.kind,
+      widthKind: overlay ? 'overlay' : equidistant ? 'equidistant' : entry.kind,
     });
     x += width;
   }
