@@ -2453,7 +2453,7 @@ UnknownEvent 恰一个可见节点；C2：fallback 节点至少一条诊断）�
   共享 `spacing.ts` 与 `maxSlotWidth = 96` 未动，`3/2`/`7/4` 槽宽不变。corpus#10：
   `unrepresentable` 3 → 0，仅 3 个 breve 槽变宽，之前节点无漂移。
 
-**T6 TAB 六线谱（T6.1–T6.5 全部完成，用户逐步封板）**：
+**T6 TAB 六线谱（T6.1–T6.5 全部完成，✅ 2026-09-17 封板：8f58fcb 推送后 GitHub Actions run 35192708064 macOS/Ubuntu/Windows 三平台 typecheck / test / fixture-report 全绿）**：
 
 - T6.1 `7b99950` 地基：`src/notation/tab/{tabGlyphs,tabEventNodes,tabSlotWidths,layoutTab}.ts`
   + `TAB_METRICS`（`stringCount: 6` 是唯一格式事实，其余产品决定）。`RenderVoice →
