@@ -2401,7 +2401,7 @@ GitHub Actions run 35054230663（commit 3f578fe）在 macOS/Windows/Ubuntu
 T8 最终 render matrix（契约 C1/C2/C3）→ T9 文档封板）。T0–T5 已推送，
 GitHub Actions run 35087178952 三平台全绿；随后按真实语料（corpus#10，一份
 两声部 TAB+简谱成品）人工 smoke 的发现做了 **T5.2 real-world hardening**
-（四个 fix 提交，见下），**下一步是 T6 TAB**。`src/renderer` 里 TAB 声部目前
+（四个 fix 提交 + 一个 breve 时值能力提交，见下），**下一步是 T6 TAB**。`src/renderer` 里 TAB 声部目前
 只显示「TAB 六线谱渲染待 T6」占位。
 
 **管线与边界**（已由测试守住）：`loadJcx → {Score, DomainIndex} → RenderInput
@@ -2416,7 +2416,9 @@ AST/parse 内部、不得声明 Domain→presentation helper；尺寸常量唯�
 不回写 Domain）；`Anchor` 判别联合 document/voice/event/relation +
 `anchorKey()`，SVG 节点带 `data-anchor-key` 供 UI 高亮。时值
 `decomposeDuration(Rational) → {base=2^-k, dots≤2, beams, dashes} |
-unrepresentable`，k ∈ [0,10]，判据是精确 `d = base × {1, 3/2, 7/4}`。
+unrepresentable`，k ∈ [0,10]，判据是精确 `d = base × {1, 3/2, 7/4}`；唯一例外是
+`2/1`（breve，仅 dots=0，`BREVE_EXPONENT`，corpus#10 有证据）→ 7 条延音线，
+`3/1`/`7/2`/`4/1` 仍 unrepresentable（T5.2-E）。
 
 **Jianpu 渲染裁决**（产品决定，不是格式事实；spec 未规定谱面外观）：C 固定映射
 1（CONFIRMED BY DOCUMENTATION），显示 `K: <值>` 不生成 `1=X`；小节线只认
@@ -2427,7 +2429,7 @@ UnknownEvent 恰一个可见节点；C2：fallback 节点至少一条诊断）�
 `cssPixelsPerUnitAtZoom1` 是 renderer 产品常量，**不写 1u≈1px 契约**；
 歌词按列左对齐（居中留作视觉 polish）。
 
-**T5.2 real-world hardening（人工 smoke corpus#10 后的四个 fix）**：
+**T5.2 real-world hardening（人工 smoke corpus#10 后的四个 fix + E）**：
 
 - A `1cba425` 歌词：两趟布局（横向 system 打包 → 歌词三级归属
   target / 行内最后对齐 / `bodyRange` / 兜底 → 每 system rows →
@@ -2444,14 +2446,15 @@ UnknownEvent 恰一个可见节点；C2：fallback 节点至少一条诊断）�
 - D `60fb332` 弧线端点：节点新增 `glyphWidth`（主字形 visual bbox span，非槽位宽），
   tie/slur 端点改用字形中心，连到全音符/breve 的弧不再落在延音线中间；
   tuplet 括号与跨行续行端仍用槽位边界。
+- E `de23124` breve：`duration.ts` 单点放行 `2/1`（dots=0）→ 7 条延音线；
+  新 `jianpu/jianpuSlotWidths.ts` 让简谱槽宽 ≥ `requiredDashExtent + dashGap`
+  （7 条 = 120u + 6u），在 `layoutSystems` 前重累计 slot.x/width/measure.width；
+  共享 `spacing.ts` 与 `maxSlotWidth = 96` 未动，`3/2`/`7/4` 槽宽不变。corpus#10：
+  `unrepresentable` 3 → 0，仅 3 个 breve 槽变宽，之前节点无漂移。
 
 **已知观察 / 待裁决（不在 T6 范围，恢复时先看）**：
 
-1. duration capability：corpus#10 有 3 处 `2/1`（body `L:1/4` 下 `X8`，
-   二全音符）走 `muse.render.duration.unrepresentable` fallback，只按宽度占位
-   不画延音线。评估结论：延音线规则线性（`dashes = base/(1/4) − 1`），把上限
-   放宽到 k = −1（base = 2）即 7 条延音线，无需新规则；改动限于
-   `model/duration.ts` 上限 + 测试。**等用户裁决**后作为小任务。
+1. ~~duration capability（breve）~~ 已由 T5.2-E `de23124` 解决（见上）。
 2. 附点位置：现画在数字右侧、延音线之前（`X . _ _ _`）；简谱习惯长音的附点在
    延音线之后。未核实，属视觉 polish，待与用户确认。
 3. 16 分音符最小槽宽 12u = 减时线长 12u，相邻减时线相连是正确写法，但紧跟小节线

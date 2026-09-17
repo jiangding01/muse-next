@@ -41,7 +41,8 @@ render matrix → T9 文档封板。现状与恢复位置见 `HANDOFF.md` §30.1
   `Score` 投影为纯渲染模型（`RenderDiagnostic` 只有 info/warning，不回写 Domain；
   `Anchor` 让 SVG 节点与 UI 高亮互指）；无 DOM 依赖的 `SvgNode` 树与序列化器；和弦图
   布局；简谱布局（C 固定映射 1、只识别 CONFIRMED 的四种小节线、按容器宽度换行、
-  歌词按 system 归属、tie/slur 弧高随跨度并跨行切段、未知事件保守占位 + 诊断）；
+  歌词按 system 归属、tie/slur 弧高随跨度并跨行切段、二全音符 `2/1` 画 7 条延音线且
+  槽宽随之加宽、未知事件保守占位 + 诊断）；
   Electron 渲染进程的 `ScoreView` / 渲染诊断面板。TAB 与五线谱尚未渲染。
 - L2 语义投影 `projectScore` 及配套 round-trip 验证矩阵，用于比较「原始解析结果」与
   「canonical 输出重新解析后的结果」在语义层是否等价（M1.7）。
