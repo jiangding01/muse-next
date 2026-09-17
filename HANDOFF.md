@@ -2,7 +2,7 @@
 
 > 面向后续实现 Agent 的项目交接文档  
 > 项目代号：`muse-next`  
-> 当前阶段：**M0–M1.8 已封板；M2 Notation Rendering 进行中（T0–T5 + T5.2 real-world hardening 已提交，T6 TAB 未开始）**（详见 §30 里程碑表、§30.1「M2 进行中状态」、§69「当前明确的下一任务」）  
+> 当前阶段：**M0–M1.8 已封板；M2 Notation Rendering 进行中（T0–T6 已完成：Chord / Jianpu / TAB 三种记谱可渲染，T7 Staff + VexFlow 未开始）**（详见 §30 里程碑表、§30.1「M2 进行中状态」、§69「当前明确的下一任务」）  
 > 核心目标：以现代 TypeScript 技术栈重建已停止维护的 **Muse Pro 2.70** 的核心能力，并优先恢复其 `.jcx` 乐谱格式、谱面渲染、编辑与播放能力。
 
 ---
@@ -1775,8 +1775,8 @@ Round-trip compatibility（fixture 矩阵 + closure + CI 看板，见 §30.1「M
 三平台 typecheck / test / fixture report 全绿后封板）
 
 🟡 M2
-Notation Rendering（进行中：T0–T5 已推送并三平台 CI 全绿，T5.2 real-world
-hardening 已提交待推送，T6 TAB 未开始；现状与恢复位置见 §30.1「M2 进行中状态」）
+Notation Rendering（进行中：T0–T6 已推送，Chord / Jianpu / TAB 可渲染；T7 Staff +
+VexFlow → T8 render matrix → T9 文档封板未开始；现状与恢复位置见 §30.1「M2 进行中状态」）
 
 → M3
 Editor Core
@@ -2401,8 +2401,8 @@ GitHub Actions run 35054230663（commit 3f578fe）在 macOS/Windows/Ubuntu
 T8 最终 render matrix（契约 C1/C2/C3）→ T9 文档封板）。T0–T5 已推送，
 GitHub Actions run 35087178952 三平台全绿；随后按真实语料（corpus#10，一份
 两声部 TAB+简谱成品）人工 smoke 的发现做了 **T5.2 real-world hardening**
-（四个 fix 提交 + 一个 breve 时值能力提交，见下），**下一步是 T6 TAB**。`src/renderer` 里 TAB 声部目前
-只显示「TAB 六线谱渲染待 T6」占位。
+（四个 fix 提交 + 一个 breve 时值能力提交，见下）；随后 **T6 TAB 六线谱 T6.1–T6.5 全部完成**（见下），
+**下一步是 T7 Staff + VexFlow adapter**。`src/renderer` 里只剩五线谱声部显示「五线谱渲染待 T7」占位。
 
 **管线与边界**（已由测试守住）：`loadJcx → {Score, DomainIndex} → RenderInput
 → src/notation/model（纯函数、flat 投影，不加 Measure）→ src/notation/{chord,
@@ -2410,7 +2410,8 @@ jianpu}/layout → SvgNode → serializeSvg / React SvgTree`。`src/notation/**`
 零 react/DOM/renderer/formats/vexflow/`node:`/AST import、零 `.tsx`
 （`tests/unit/notation/architecture.test.ts`）；反方向 renderer 不得 import
 AST/parse 内部、不得声明 Domain→presentation helper；尺寸常量唯一来源
-`src/notation/layout/metrics.ts`（守卫扫 `src/notation/**` 的裸数值字面量，
+`src/notation/layout/metrics/`（目录：`shared.ts` / `chord.ts` / `jianpu.ts` / `tab.ts` +
+`index.ts` 汇总，外部仍 `import ... from '../layout/metrics'`；守卫扫 `src/notation/**` 的裸数值字面量，
 `// numeric-guard: allow` 白名单）；诊断码唯一来源
 `src/notation/model/diagnostics.ts`（`muse.render.*`，只有 info/warning，
 不回写 Domain）；`Anchor` 判别联合 document/voice/event/relation +
@@ -2452,7 +2453,56 @@ UnknownEvent 恰一个可见节点；C2：fallback 节点至少一条诊断）�
   共享 `spacing.ts` 与 `maxSlotWidth = 96` 未动，`3/2`/`7/4` 槽宽不变。corpus#10：
   `unrepresentable` 3 → 0，仅 3 个 breve 槽变宽，之前节点无漂移。
 
-**已知观察 / 待裁决（不在 T6 范围，恢复时先看）**：
+**T6 TAB 六线谱（T6.1–T6.5 全部完成，用户逐步封板）**：
+
+- T6.1 `7b99950` 地基：`src/notation/tab/{tabGlyphs,tabEventNodes,tabSlotWidths,layoutTab}.ts`
+  + `TAB_METRICS`（`stringCount: 6` 是唯一格式事实，其余产品决定）。`RenderVoice →
+  layoutTab → TabLayout`，与 jianpu **平行独立**（不共享节点类型、互不 import）。
+  第 1 弦最上；多位品位一个 text；品位白底遮弦线；小节线只认 CONFIRMED 四形态；
+  pitch 事件 / grace 的 pitch 成员落入 TAB → outOfScope 可见占位 + warning（不猜弦品）；
+  UnknownEvent 恰一可见节点；同弦重复成员全部照画 + fallback + warning
+  （`tab.group-duplicate-string`）。实测：TAB 模式下大写字母是 UnknownEvent、
+  混排 grace 不可达、`V[...]` 组级前缀不回填。
+- metrics 拆分 `eb26103`：`layout/metrics.ts` → `layout/metrics/` 目录，九个导出逐字
+  相等，numeric-guard 排除改目录前缀，architecture 守卫按文件枚举多出 24 条通过用例。
+- T6.2 `ef5eb3a` 时值装饰：`tabDurationGlyphs.ts`，由 `decomposeDuration` 推导，画在
+  第 6 弦下方（base ≤ 1/4 符干 + 减时线；1/2 短符干；≥ 1 延音短横线；附点），组时值用
+  Domain 已算好的末音值不重算；unrepresentable 不画 + fallback（诊断由 buildRenderScore
+  发，不重发）；`requiredDurationExtent`（含附点 + 留白）并入 TAB-local 槽宽；
+  `layoutTab` 两趟布局，按 `requiredSystemDepth` 用 `restackSystems` 逐行补高
+  （`systemHeight` 92 覆盖到十六分音符）。
+- T6.3 `44431ba` 关系与 stroke：`tabRelations.ts`（`-S-/-H-/-P-` **同弦**关系线，
+  跨弦由 parse 判 `jcx.parse.tab-relation.cross-string` 不建关系、渲染层不重报；端点
+  按 `TabFretGlyph.memberIndex` 身份查找，不重放排序；`relationEndGap` 留白且 x1 ≤ x2；
+  跨行 start/end 段同 anchor、label 只在 start）；`tabStrokes.ts`（`TabNote.stroke`
+  原字符画第 1 弦上方不二次解释；`H` 前缀按「延长」附 info `tab.stroke-hold-inferred`
+  （spec §26.4 INFERRED）；表外字符仍画 + warning `tab.stroke-unrecognized`；多成员拼接
+  并入槽宽）。**能力边界**：M2 的 TAB 渲染支持单音级的扫弦/拨弦方向记号
+  （`TabNote.stroke`，parse 层已填充），不支持组级的方向记号（`TabGroupEvent.stroke`，
+  parse 层从不填充，M1.8 已知限制②）——每 TAB 声部一条 info
+  `tab.group-stroke-not-modeled`，措辞不得写成「扫弦方向不可用」。
+- T6.4 `7d711d8` SVG 与 renderer：`tab/toSvg.ts`（与 jianpu 同约定：每节点一个 `<g>`
+  带 `data-anchor-key`、fallback 角标、unknown 虚线框）；`renderer/components/notation/
+  voiceRender.ts` 分派 tab；store `zoom`（clamp 到 `SCORE_VIEW_METRICS.zoomMin/Max`，
+  非有限值拒绝）+ Toolbar 控件；**zoom 只作用渲染层像素换算**：画布宽 =
+  `layout.width × cssPixelsPerUnitAtZoom1 × zoom`，`availableWidth = 容器像素 ÷
+  (cssPixelsPerUnitAtZoom1 × zoom)`，layout 数值不变（D6），换行随之调整（D7）。
+- T6.5 `57670e2` hardening（人工复验真实语料后）：① jianpu 跨行 tie/slur 续行段最小
+  可见跨度 `arcContinuationMinSpan`（末段曾退化成 4u 尖角）；② TAB 关系续行段同规则
+  `relationContinuationMinSpan`；③ **和弦符号不再占时间槽**：`SlotWidthKind` 新增
+  `'overlay'`（width 0，x 贴后续第一个有宽度列或段末；等距降级下仍 0；decoration
+  等策略未动）——真实语料 277 个和弦符号 12u → 0，TAB 每行多放一小节；④ 显示时去掉
+  和弦符号外层一对 JCX 引号（`chordSymbolDisplayText`，Domain/serializer 不动）。
+  全语料只读 smoke：无和弦符号的声部逐节点相同、同行弧线不变、诊断集合不变。
+- 测试：tab.layout 27 / tab.duration 23 / tab.relations 25+3 / tab.toSvg 12 /
+  scoreView.voiceRender 7 / spacing.overlay 12 / chordSymbolDisplay 9；全量 4140。
+
+**已知观察 / 待裁决 / visual debt（恢复时先看）**：
+
+0. TAB visual debt：`x` 品位字形比数字矮，按 `fretBaselineRatio` 定位后略高于弦线
+   （可给 `x` 单独基线比例）；相邻减时线不做 beam grouping（连续八分音符各画各的
+   减时线，不合并成横梁）；休止画 `z`/`Z`/`@` 原字符不用休止符号；单音级 stroke 在
+   语料里 0 次、组级 `V[`/`U[`/`B[` 不显示（限制②）。
 
 1. ~~duration capability（breve）~~ 已由 T5.2-E `de23124` 解决（见上）。
 2. 附点位置（**记为 debt，用户 2026-09-17 裁决**）：现画在数字右侧、延音线之前
@@ -2468,11 +2518,14 @@ UnknownEvent 恰一个可见节点；C2：fallback 节点至少一条诊断）�
    `src/renderer/dist` 产物入库待清理；语料时值 `5/8` 2 处 unrepresentable；
    `syllableKind` 类型可收窄；350 行上限无自动守卫；歌词居中 polish。
 
-**T6 TAB 派发要点（方案 §T6，未变）**：`src/notation/tab/{layoutTab,toSvg}.ts`
-+ `ScoreView` 分派 TAB + store zoom + 测试；TabGroup 时值取末音；
-`-S-`/`-H-`/`-P-` relation；`TabNote.stroke` 已填充可用，
-`TabGroupEvent.stroke` 未填充不画（M1.7 已知限制②）；每任务 ≤5 文件
-（metrics/diagnostics/css 另计）。
+**T7 Staff + VexFlow 派发要点（方案 §T7，未变）**：`notation/staff/layoutStaff.ts`
+（纯数据，不碰 vexflow）+ `renderer/integrations/vexflow/renderStaff.ts`（全仓唯一
+import vexflow）+ `ScoreView` staff 分派 + `package.json`（`vexflow@5.0.0`）+
+`tests/unit/notation/staff.layout.test.ts`；必须真实渲染出五线谱；T0 的 vexflow 守卫
+仍绿；`M:` 为 raw 时不喂 VexFlow；clef 未解析回退 treble + 诊断；范围外事件可见占位
++ 诊断；完成前本地 Electron 人工 smoke；`package-lock.json` 不计文件预算但
+`grep -c artifactory package-lock.json` 必须为 0。然后 T8 最终 render matrix（Opus）
+→ T9 文档封板。
 
 **工作流约束**（M2 全程）：每轮改动 → typecheck / vitest / corpus → 只读
 `/check` 审查 → 修复复审 → 提交；里程碑 ✅ 只在 push 后三平台 CI 全绿后由
