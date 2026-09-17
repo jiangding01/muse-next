@@ -92,6 +92,25 @@ export const RENDER_DIAGNOSTIC_CODES = {
   /** body 内 `L:` 变化点：画一个细标记；渲染直接用已解算好的 `duration`，不重新解释作用域（§3.2）。 */
   unitLengthChanged: 'muse.render.unit-length.changed',
   /**
+   * T6.1 追加（`notation/tab/**`）：pitch 模式事件（`note` / `chord`）出现在 TAB 声部里
+   * —— 画可见文本占位，**不静默丢弃**，也不把音高猜成某根弦的某个品位（spec §26.10：
+   * TAB 模式下小写字母是弦号、前置大写字母是拨弦方向，音高与弦品之间没有可逆映射）。
+   *
+   * 与简谱侧的 `jianpuEventOutOfScope` **分列两条**：两者是两个方向的越界，合并成一条
+   * 就无法从诊断本身看出是哪种记谱收到了不属于它的事件。
+   *
+   * 注：**没有**对应的「弦号越界」code——`TabNote.stringIndex` 在 Domain 里就是
+   * `1 | 2 | 3 | 4 | 5 | 6` 的字面量联合，1..6 由类型保证，防御性 code 不可达。
+   */
+  tabEventOutOfScope: 'muse.render.tab.event-out-of-scope',
+  /**
+   * T6.1 追加：同一个 `tabGroup` / TAB 倚音里有**多个成员落在同一根弦上**
+   * （如 `[a0/a3/]`）。一根弦在同一时刻只发得出一个音，这组写法在演奏上无法实现；
+   * 但哪一个「有效」没有任何依据（spec §26 未描述这种写法，语料也未观察到），
+   * 因此**全部照画**（视觉上会重叠）+ 一条 warning，不静默丢弃、也不挑一个留下。
+   */
+  tabGroupDuplicateString: 'muse.render.tab.group-duplicate-string',
+  /**
    * T5 追加（`notation/layout/scoreHeader.ts`，document 级）：`Score.textBlocks`
    * 里 `closed === false` 的文本块——照常渲染已捕获的内容，不截断也不报错。**只有
    * 头部布局报告这件事**：任何记谱类型的头部标签（如简谱的 `K:`/拍号）都不覆盖
