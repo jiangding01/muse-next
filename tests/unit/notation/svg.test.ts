@@ -195,7 +195,7 @@ describe('textMeasurer —— 确定性', () => {
 describe('metrics —— 尺寸常量唯一来源守卫（§2.8 / §7-19，P2-2 扩大扫描范围）', () => {
   /**
    * 规则（本文件选定，见 T2 报告，P1-2 修订为结构化按声明符解析而非单一大正则）：
-   * 在 `src/notation/**` 下（排除 `layout/metrics.ts` 本身与 `model/**`——model 是
+   * 在 `src/notation/**` 下（排除 `layout/metrics/` 目录本身与 `model/**`——model 是
    * 渲染中立模型，不含任何尺寸；T3 已把 `chord/ChordDiagram.tsx` 整体迁出
    * `src/notation/**`，不再有任何例外），任何文件都不得
    * 出现**顶层**（零缩进、不在任何函数体内部）的 `const`/`let` 声明，其声明符
@@ -485,7 +485,7 @@ describe('metrics —— 尺寸常量唯一来源守卫（§2.8 / §7-19，P2-2 
     const allFiles = collect(notationDir);
     const relevant = allFiles.filter((file) => {
       const rel = relPath(file);
-      if (rel === 'layout/metrics.ts') return false;
+      if (rel.startsWith('layout/metrics/')) return false;
       if (rel.startsWith('model/')) return false;
       return true;
     });
