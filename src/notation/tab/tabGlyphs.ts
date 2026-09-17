@@ -1,6 +1,6 @@
 /**
  * notation/tab —— TAB（吉他六线谱）layout 的**节点类型**与**字形几何**
- * （M2 方案 §3.3，T6.1）。
+ * （M2 方案 §3.3，T6.1；时值装饰节点字段 T6.2 追加，几何构造见 `tabDurationGlyphs.ts`）。
  *
  * 与 `notation/jianpu/**` **平行且独立**：本文件不 import 任何 jianpu 文件、不继承
  * 它的节点类型、不与之互相转换（§2.7 —— 四种记谱的几何差异是本质性的：简谱认一条
@@ -13,8 +13,8 @@
  * 高音弦，画在最上面，spec §26.2 的 a..f → 1..6 正是从上往下）。
  *
  * 尺寸一律取自 `layout/metrics.ts` 的 `TAB_METRICS`（唯一来源），单位是 abstract
- * unit（D6，不是像素）。本步**不做**时值装饰（符干 / 减时线）、`-S-/-H-/-P-` 连线、
- * stroke 方向记号——它们属于 T6.2–T6.4。
+ * unit（D6，不是像素）。本步**不做**`-S-/-H-/-P-` 连线、stroke 方向记号——它们
+ * 属于 T6.3–T6.4。
  */
 
 import type { SourceRef, TabNote } from '../../domain';
@@ -24,6 +24,9 @@ import type { Box, Point, System } from '../layout/primitives';
 import type { TextMeasurer } from '../layout/textMeasurer';
 import type { RenderDiagnosticDraft } from '../model/diagnostics';
 import type { Anchor, RenderDiagnosticCode } from '../model/types';
+// `import type`：编译期整个擦除，不构成与 `tabDurationGlyphs.ts` 的运行时循环依赖
+// （该文件反过来 `import { stringY } from './tabGlyphs'`，见其文件头注释）。
+import type { TabDurationGlyphs } from './tabDurationGlyphs';
 
 /** 弦号：直接取 Domain 的字面量联合，不在渲染层重写一遍 `1 | 2 | ... | 6`。 */
 export type TabStringIndex = TabNote['stringIndex'];
@@ -89,16 +92,20 @@ export interface TabNodeBase {
 export interface TabNoteNode extends TabNodeBase {
   readonly kind: 'tabNote';
   readonly fret: TabFretGlyph;
-  /** 本步只透传，**不画**任何时值装饰（符干 / 减时线属于 T6.2）。 */
-  readonly duration: Rational | undefined;
+  /** Domain 原始时值，只透传、不重新解释（`event.note.duration`）。 */
+  readonly durationValue: Rational | undefined;
+  /** 时值装饰的几何（符干 / 减时线 / 延音短横线 / 附点），T6.2。 */
+  readonly duration: TabDurationGlyphs;
 }
 
 export interface TabGroupNode extends TabNodeBase {
   readonly kind: 'tabGroup';
   /** 同一列纵向排开，按 `stringIndex` 升序（第 1 弦在最上）。 */
   readonly frets: readonly TabFretGlyph[];
-  /** 组时值取**末音**（spec §26.8，`CONFIRMED`），Domain 已放在 `TabGroupEvent.duration`。 */
-  readonly duration: Rational | undefined;
+  /** 组时值取**末音**（spec §26.8，`CONFIRMED`），Domain 已放在 `TabGroupEvent.duration`；只透传。 */
+  readonly durationValue: Rational | undefined;
+  /** 时值装饰的几何，按**末音**时值推导（同一份 `durationValue`），T6.2。 */
+  readonly duration: TabDurationGlyphs;
 }
 
 export interface TabRestNode extends TabNodeBase {
@@ -106,6 +113,10 @@ export interface TabRestNode extends TabNodeBase {
   /** 三态原样保留；`Z` / `@` 都按普通休止画并照常占位，差别只在诊断。 */
   readonly variant: 'z' | 'Z' | '@';
   readonly text: TabTextGlyph;
+  /** Domain 原始时值，只透传、不重新解释（`event.rest.duration`）。 */
+  readonly durationValue: Rational | undefined;
+  /** 时值装饰的几何，休止符与音符同一套规则（T6.2）。 */
+  readonly duration: TabDurationGlyphs;
 }
 
 export interface TabGraceNode extends TabNodeBase {

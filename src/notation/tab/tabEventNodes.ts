@@ -12,9 +12,11 @@
  * `tabEventOutOfScope`：音高与「哪根弦第几品」之间没有可逆映射（同一个音高在六线上
  * 有多个可弹位置），猜一个位置画出来就是在编造作者没写的指法。
  *
- * 本步**不做**：时值装饰（符干 / 减时线）、`-S-/-H-/-P-` 连线、stroke 方向记号
- * （spec §26.4；且 `TabGroupEvent.stroke` 在 parse 层从不填充，M1.8 已知限制②）。
- * `duration` 只透传不解释。
+ * 本步**不做**：`-S-/-H-/-P-` 连线、stroke 方向记号（spec §26.4；且
+ * `TabGroupEvent.stroke` 在 parse 层从不填充，M1.8 已知限制②），它们属于 T6.3–T6.4。
+ * 时值**来源**只透传不解释（`durationValue`）；时值**装饰**（符干 / 减时线 / 延音
+ * 短横线 / 附点，T6.2）由 `tabDurationGlyphs.ts` 的 `buildTabDurationGlyphs` 构造，
+ * 挂在节点的 `duration` 字段上。
  *
  * 依赖方向单向 `layoutTab.ts → tabEventNodes.ts → tabGlyphs.ts`，无环；尺寸一律取自
  * `layout/metrics.ts` 的 `TAB_METRICS`（唯一来源），单位是 abstract unit。
@@ -27,6 +29,7 @@ import type { SpacedSlot } from '../layout/spacing';
 import type { TextMeasurer } from '../layout/textMeasurer';
 import { RENDER_DIAGNOSTIC_CODES as CODES } from '../model/diagnostics';
 import type { Anchor, RenderItem } from '../model/types';
+import { durationGlyphsOf, isDurationFallback } from './tabDurationGlyphs';
 import {
   buildFretGlyph,
   buildTabBarlineGlyphs,
@@ -235,20 +238,22 @@ export function buildTabNode(
       const note = event.note;
       const fret = buildFretGlyph(note.stringIndex, note.fret, x, staffTop, size, measurer);
       // `duration === undefined`（`L:` 不可知）是时值上的降级路径：固定宽占位已由
-      // `spacing.ts` 给出（§2.6.1 R4），对应的 `muse.render.duration.unresolved` 诊断
-      // **已由 T1 的 `buildRenderScore` 在 event 级发出**，本层不重复报（§4.2：同一件事
-      // 只由一层报告一次）——契约 C2「fallback 节点至少关联一条诊断」因此仍然成立。
-      // 与简谱侧不同的是这里**不判 `unrepresentable`**：TAB 本步不画任何时值装饰
-      // （符干 / 减时线属于 T6.2），画不出装饰在这一步还不构成降级。
+      // `spacing.ts` 给出（§2.6.1 R4），对应的 `muse.render.duration.unresolved` /
+      // `muse.render.duration.unrepresentable` 诊断**已由 T1 的 `buildRenderScore` 在
+      // event 级发出**，本层不重复报（§4.2：同一件事只由一层报告一次）——契约 C2
+      // 「fallback 节点至少关联一条诊断」因此仍然成立。
+      const duration = durationGlyphsOf(note.duration, x, staffTop);
       return {
-        ...baseOf(cursor, voiceId, note.duration === undefined, fretTextWidth(fret, measurer)),
+        ...baseOf(cursor, voiceId, isDurationFallback(note.duration, duration), fretTextWidth(fret, measurer)),
         kind: 'tabNote',
         fret,
-        duration: note.duration,
+        durationValue: note.duration,
+        duration,
       };
     }
     case 'tabGroup': {
-      // 同一列纵向排开，按弦号升序（第 1 弦最上）；组时值取末音已由 Domain 解算（§26.8）。
+      // 同一列纵向排开，按弦号升序（第 1 弦最上）；组时值取末音已由 Domain 解算（§26.8），
+      // 时值装饰按这同一份末音时值推导，不逐成员各画一套。
       const ordered = [...event.members].sort((a, b) => a.stringIndex - b.stringIndex);
       const frets = ordered.map((member) =>
         buildFretGlyph(member.stringIndex, member.fret, x, staffTop, size, measurer),
@@ -256,12 +261,15 @@ export function buildTabNode(
       const glyphWidth = maxOrZero(frets.map((fret) => fretTextWidth(fret, measurer)));
       const duplicateString = hasDuplicateString(event.members);
       if (duplicateString) sinkDuplicateString(item, anchor, sink);
-      // `duration === undefined` 的说明同 `tabNote` 分支（诊断由 `buildRenderScore` 发出）。
+      // `duration === undefined` / `unrepresentable` 的说明同 `tabNote` 分支（诊断由
+      // `buildRenderScore` 发出）。
+      const duration = durationGlyphsOf(event.duration, x, staffTop);
       return {
-        ...baseOf(cursor, voiceId, event.duration === undefined || duplicateString, glyphWidth),
+        ...baseOf(cursor, voiceId, isDurationFallback(event.duration, duration) || duplicateString, glyphWidth),
         kind: 'tabGroup',
         frets,
-        duration: event.duration,
+        durationValue: event.duration,
+        duration,
       };
     }
     case 'rest': {
@@ -275,11 +283,15 @@ export function buildTabNode(
       const restSize = TAB_METRICS.restFontSize;
       const text = centeredGlyph(variant, x, staffCenterY(staffTop), restSize);
       const glyphWidth = measurer.measure(text.text, { fontSize: restSize }).width;
+      // 休止符与音符共用同一套时值装饰规则（T6.2 方案明文：「rest 同规则」）。
+      const duration = durationGlyphsOf(event.rest.duration, x, staffTop);
       return {
-        ...baseOf(cursor, voiceId, code !== undefined || event.rest.duration === undefined, glyphWidth),
+        ...baseOf(cursor, voiceId, code !== undefined || isDurationFallback(event.rest.duration, duration), glyphWidth),
         kind: 'rest',
         variant,
         text,
+        durationValue: event.rest.duration,
+        duration,
       };
     }
     case 'grace':

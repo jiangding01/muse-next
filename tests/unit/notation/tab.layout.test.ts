@@ -226,7 +226,7 @@ describe('TAB 音符组 —— 同时拨响的多根弦（spec §26.8）', () =>
     const event = voice.items[0]?.event;
     if (event?.kind !== 'tabGroup') throw new Error('fixture 应产生 tabGroup');
     const result = layout(tabHeader('[ax/bx/] |'));
-    expect(nodesOfKind(result, 'tabGroup')[0]?.duration).toEqual(event.duration);
+    expect(nodesOfKind(result, 'tabGroup')[0]?.durationValue).toEqual(event.duration);
   });
 });
 
