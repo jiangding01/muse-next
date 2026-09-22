@@ -4163,6 +4163,9 @@ Chord / Jianpu / TAB / Staff 四种记谱可渲染（T0–T7，T7 Staff + VexFlo
 恢复时：
 
 ```text
+0. 2026-09-22：M2 封板、T8.1 收紧、`docs/UI_DESIGN_BRIEF.md` v1.1（§10 十五条已裁决）
+   均已推送后**主动暂停**；不自动启动 M3，也不改 M2 代码。等用户拿 Brief 去
+   Claude Design 出第一轮 8 张核心画面并确认后再继续；
 1. 先阅读 §30.1 的 T0–T9 完整状态与「M2 遗留债务总表」（M2 已封板，
    T8.1 post-seal 契约收紧亦已三平台全绿，M2 代码不再改动）；
 2. 下一步不是 M3 编码，而是先做 M3 前的 UI 设计
