@@ -81,6 +81,8 @@ matrix（C1/C2/C3 三条契约对四种记谱的用例矩阵）、T9 文档封�
 
 ### Changed
 
+- Jianpu Engraving Polish Phase A（2026-09-22，`80edda1`）：附点紧贴数字并居中；延音线升至数字中线、与数字等距；高/低八度点贴近数字，低八度点固定位于减时线之下（层序 数字→减时线→低八度点→歌词，由 `JIANPU_METRICS` 保证）；小节线与反复记号高度≈1.1×数字高、反复点围绕中线对称、粗线减重；`systemHeight`/`systemGap` 收紧。附点/延音线按简谱惯例换算（整拍用延音线，附点只表示半拍余数：附点二分 → `6 – –`）。含简谱声部的文档页眉改为 `1=<调>` + 上下叠排拍号（`K:` 含 mode/未解析时回退 `K: <raw>`，staff-only 文档不变；Source/Inspector 保留原始 `K:`/`M:`）；简谱声部行首不再重复画调号/拍号（原 P1-2 改为「声部行首不显示调号拍号，由页眉承担」）。未改共享列宽、减时线分组与系统排版（留 Phase B / M2.5 T3.5）。
+
 - 2026-09-22 用 `git filter-repo` 重写了全部提交历史并 force push：早期 `package-lock.json` 中的内部 npm 源 URL 改写为 `registry.npmjs.org`，匿名化之前的真实语料文件名改写为 `corpus#NN`；HEAD 的文件树与重写前逐字节一致，但所有 commit SHA 已变化（本文档与 HANDOFF 中的 SHA 已按映射表同步更新；重写前的历史保留在维护者本地的私有镜像备份中）。
 
 - 断行规划把「未闭合括号上下文之后恢复出的 barline token」也算作断行点，使 canonical
