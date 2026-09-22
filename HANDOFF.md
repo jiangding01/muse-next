@@ -2611,6 +2611,8 @@ seal 流程与 M3 前的 UI 设计；把散落在 §30.1 第 5 条（T7 遗留�
    parse 诊断 `jcx.parse.unit-length.body-scope` 已按 U06「从该行起生效直到
    被下一条 L: 覆盖」处理。
 
+**T8.1 `b2dbc17`（M2 seal 之后的测试补丁，只改 tests）**：按用户六条补充裁决收紧矩阵——chord 退出 voice matrix，改为独立 document chord matrix（C1/C2 标 N/A，无 fake voice adapter）；D12 style 缺席/未知按声部级 fallback summary 测（两码各恰一条 + voice anchor 可解析 + `summarizeEvents` 确定性）；C3 加 ownership（event 的 voiceId 一致；relation 必须在该 Voice 的 ties/slurs/tuplets/tabRelations/brokenRhythms 之一）与 `anchorKey` 稳定/单射断言；C2 只并 RenderScore + layout 诊断，C3 另并 `layoutScoreHeader` 诊断；C1 只数 `layout.nodes` 的 event anchor（TAB stroke overlay 不重复计数有正面用例）；无硬编码 fixture 数。矩阵 1434→1194 用例（去掉 chord 空转），全量 74 文件 / 5642 用例；只读审查通过。
+
 **M2 遗留债务总表（T9 整合，恢复 M3 前或做视觉 polish 时先查这里）**：下表合并了
 T5.2/T6/T7 各阶段散落记录的债务（原 §30.1 第 5 条「T9 需记入文档的债务」、T6 TAB
 visual debt、T7 第 6 条），按 视觉 / 架构 / 测试 分类，每行注明来源任务，T9 前均
@@ -2640,7 +2642,7 @@ visual debt、T7 第 6 条），按 视觉 / 架构 / 测试 分类，每行注�
 | 架构 | TAB 单音级 stroke 记号在语料里出现 0 次、组级方向记号（`TabGroupEvent.stroke` 的 `V`/`U` 前缀）不支持——限制②，parse 层从不回填 | T6 |
 | 测试 | 语料时值 `5/8` 2 处 `unrepresentable`，无专项回归 | T5 |
 | 测试 | `spacing.ts` 里 `chordSymbol` 的两处判定点（`itemSlotWidth` 的 overlay 判定先行截断，`timedDurationOf` 穷尽性 `switch` 里再列一遍 `timed: false`）靠代码注释纪律保持一致，缺自动化的防分叉单测（两处改动不同步时不会有测试报警） | T6 |
-| 测试 | VexFlow adapter（`renderer/integrations/vexflow/**`）无自动化 DOM 测试，人工 smoke 覆盖；不引入 jsdom 的理由是 5882 个用例全基于 Node 纯函数，不是「VexFlow 明示不兼容 jsdom」 | T7 |
+| 测试 | VexFlow adapter（`renderer/integrations/vexflow/**`）无自动化 DOM 测试，人工 smoke 覆盖；不引入 jsdom 的理由是 5642 个用例（T8.1 后）全基于 Node 纯函数，不是「VexFlow 明示不兼容 jsdom」 | T7 |
 
 **M2 seal 与 M3 前置（T9 之后，恢复时从这里继续）**：T0–T9 已全部完成并推送，
 下一步不是继续写渲染代码，而是：
