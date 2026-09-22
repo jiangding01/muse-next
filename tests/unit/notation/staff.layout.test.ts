@@ -261,7 +261,9 @@ describe('事件 → 节点', () => {
     const result = layout(header('C |'));
     const notes = nodesOfKind(result, 'note');
     expect(notes).toHaveLength(1);
-    expect(notes[0]?.pitches).toEqual([{ letter: 'C', octave: 4, mixedOctave: false }]);
+    expect(notes[0]?.pitches).toEqual([
+      { memberIndex: 0, pitch: { letter: 'C', octave: 4, mixedOctave: false } },
+    ]);
     expect(notes[0]?.duration).toEqual({ base: 'quarter', dots: 0 });
     expect(notes[0]?.fallback).toBe(false);
   });
@@ -274,6 +276,15 @@ describe('事件 → 节点', () => {
     const diagnostic = result.diagnostics.find((d) => d.code === CODES.staffChordMemberRestNotModeled);
     expect(diagnostic?.level).toBe('info');
     expect(diagnostic?.anchor.kind).toBe('event');
+  });
+
+  it('和弦块含休止成员：pitches 的 memberIndex 是 **Domain 原始下标**，不是过滤后的下标', () => {
+    // `[zCE]`：Domain 成员是 `[休止, C, E]`；`pitches` 只剩 C / E，但它们必须分别记下
+    // 原始下标 1 / 2——T7.4 的 adapter 只能靠这个下标把关系端点落到 keys 上（T6.3
+    // `TabFretGlyph.memberIndex` 的同一条裁决），不得自己重放「跳过休止成员」的规则。
+    const notes = nodesOfKind(layout(header('[zCE] |')), 'note');
+    expect(notes[0]?.pitches.map((entry) => entry.memberIndex)).toEqual([1, 2]);
+    expect(notes[0]?.pitches.map((entry) => entry.pitch.letter)).toEqual(['C', 'E']);
   });
 
   it('和弦块成员全是休止 → 可见占位（**不是** pitches 为空的音符节点）+ 同一条诊断', () => {
@@ -289,9 +300,8 @@ describe('事件 → 节点', () => {
   it('混合方向八度 → staffOctaveMixed(warning, anchor event)，不抵消', () => {
     const result = layout(header("C,' |"));
     expect(nodesOfKind(result, 'note')[0]?.pitches[0]).toEqual({
-      letter: 'C',
-      octave: 4,
-      mixedOctave: true,
+      memberIndex: 0,
+      pitch: { letter: 'C', octave: 4, mixedOctave: true },
     });
     const diagnostic = result.diagnostics.find((d) => d.code === CODES.staffOctaveMixed);
     expect(diagnostic?.level).toBe('warning');

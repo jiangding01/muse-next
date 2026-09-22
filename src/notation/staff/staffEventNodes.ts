@@ -33,7 +33,7 @@ import type {
   StaffDuration,
   StaffEventNode,
   StaffFallbackReason,
-  StaffPitch,
+  StaffNotePitch,
 } from './staffTypes';
 
 /** 诊断草稿的收集口，与 tab 侧的 `DraftSink` 同构（各记谱各自声明，不跨目录共享）。 */
@@ -49,7 +49,7 @@ export interface StaffCursor {
 /** 「这个事件该画成什么」——纯语义，不含任何几何。 */
 export type StaffNodePlan =
   | { readonly kind: 'placeholder'; readonly reason: StaffFallbackReason; readonly text: string }
-  | { readonly kind: 'note'; readonly pitches: readonly StaffPitch[]; readonly duration: StaffDuration }
+  | { readonly kind: 'note'; readonly pitches: readonly StaffNotePitch[]; readonly duration: StaffDuration }
   | { readonly kind: 'rest'; readonly variant: 'z' | 'Z' | '@'; readonly duration: StaffDuration }
   | { readonly kind: 'chordSymbol'; readonly text: string }
   | { readonly kind: 'barline'; readonly raw: string; readonly form: StaffBarlineForm };
@@ -129,8 +129,13 @@ function isNoteMember(member: Note | Rest): member is Note {
 function isPitchGraceMember(member: Note | TabNote): member is Note {
   return 'pitch' in member;
 }
-function pitchesOf(members: readonly Note[]): readonly StaffPitch[] {
-  return members.map((member) => toStaffPitch(member.pitch, member.accidental));
+/**
+ * 一个音符成员 → 一项 `pitches`，**显式记下 Domain 原始成员下标**（单音恒 0；和弦块
+ * 取 `members` 的原始下标，休止成员被剔除后下标仍指原位）。端点身份显式保存、adapter
+ * 不重放筛选规则——与 `TabFretGlyph.memberIndex`（T6.3）同一条裁决。
+ */
+function pitchOf(member: Note, memberIndex: number): StaffNotePitch {
+  return { memberIndex, pitch: toStaffPitch(member.pitch, member.accidental) };
 }
 
 /** 倚音占位文本：pitch 成员画小写音名 + 原始八度修饰；TAB 成员画 `<弦号>/<品位>`，**绝不把弦品猜成音高**（spec §26.10）。 */
@@ -155,19 +160,23 @@ export function planStaffNode(event: MusicEvent): StaffNodePlan {
       const timing = timingOf(event.note.duration);
       return timing.kind === 'fallback'
         ? { kind: 'placeholder', reason: timing.reason, text: timedPlaceholderText(event, event.note.durationRaw) }
-        : { kind: 'note', pitches: pitchesOf([event.note]), duration: timing.duration };
+        : { kind: 'note', pitches: [pitchOf(event.note, 0)], duration: timing.duration };
     }
     case 'chord': {
       const timing = timingOf(event.duration);
       if (timing.kind === 'fallback') {
         return { kind: 'placeholder', reason: timing.reason, text: timedPlaceholderText(event, undefined) };
       }
-      const notes = event.members.filter(isNoteMember);
+      // `flatMap` 而不是 `filter().map()`：后者拿不到**原始**下标（filter 之后下标
+      // 已经重排），而下标正是 T7.4 把关系端点落到 keys 上的唯一依据。
+      const pitches = event.members.flatMap((member, memberIndex) =>
+        isNoteMember(member) ? [pitchOf(member, memberIndex)] : [],
+      );
       // 成员全是休止（`[zz]`）：一个音头都画不出，但事件不能凭空消失（C1），
       // 也**不得**产出 `pitches: []` 的音符节点（T7.4 会拿它去喂一个空 keys 的音符）。
-      return notes.length === 0
+      return pitches.length === 0
         ? { kind: 'placeholder', reason: 'chordAllMembersRest', text: summarizeEvent(event) }
-        : { kind: 'note', pitches: pitchesOf(notes), duration: timing.duration };
+        : { kind: 'note', pitches, duration: timing.duration };
     }
     case 'rest': {
       const timing = timingOf(event.rest.duration);
@@ -251,7 +260,7 @@ function sinkPlanDiagnostics(
   ref: RenderItem['sourceRef'],
   sink: StaffDraftSink,
 ): void {
-  if (plan.kind === 'note' && plan.pitches.some((pitch) => pitch.mixedOctave)) {
+  if (plan.kind === 'note' && plan.pitches.some((entry) => entry.pitch.mixedOctave)) {
     sink(draftOf(CODES.staffOctaveMixed, 'warning', "八度修饰同时含 `'` 与 `,`（spec §14.2 UNVERIFIED，不实现抵消）：只按字母大小写定基准八度，不把两个方向相加或相消", anchor, ref));
   }
   const restMembers = restMemberCountOf(event);

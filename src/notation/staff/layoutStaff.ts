@@ -18,11 +18,14 @@
  * 宽度（那样行首的谱号会把已经排满的一行挤超宽）。**零 VexFlow 编码**：调号只给
  * `{ tonic, alter }` 这种 renderer-neutral 形状，T7.4 才翻译成渲染器的调号名。
  *
- * 本步**不做**：beam 分组（已裁决暂缓）、tie/tuplet（T7.3，恒空数组）、`toSvg` 与
- * renderer 接入（T7.4）。
+ * T7.3 接上 tie / tuplet：拆段与诊断在 `staffRelations.ts`，本文件只负责把
+ * 「事件 → 节点」的映射喂给它，并把结果放进 `ties` / `tuplets`。
+ *
+ * 本步**不做**：beam 分组（已裁决暂缓）、slur（T7.2 已在声部级发过未建模诊断）、
+ * `toSvg` 与 renderer 接入（T7.4）。
  */
 
-import type { KeySignature, Meter, Score, DomainIndex, Voice } from '../../domain';
+import type { EventId, KeySignature, Meter, Score, DomainIndex, Voice } from '../../domain';
 import { keyHasExtraText } from '../layout/keySpelling';
 import { STAFF_METRICS } from '../layout/metrics';
 import { spaceItems } from '../layout/spacing';
@@ -35,6 +38,7 @@ import type { RenderDiagnosticDraft } from '../model/diagnostics';
 import type { Anchor, RenderItem, RenderVoice } from '../model/types';
 import { buildStaffNode, classifyStaffBarline } from './staffEventNodes';
 import type { StaffDraftSink } from './staffEventNodes';
+import { buildStaffTies, buildStaffTuplets } from './staffRelations';
 import { widenForStaffGlyphs } from './staffSlotWidths';
 import type {
   StaffBarlineForm,
@@ -181,7 +185,14 @@ export function layoutStaff(voice: RenderVoice, ctx: StaffContext): StaffLayout 
 
   // 两趟布局的结构照 T6 保留：第一趟只定横向归属，第二趟按每行实际需要的额外高度
   // 回填。本步节点都画在 `systemHeight` 之内（加线空间已含在 `staffTopOffset` 与
-  // `systemHeight` 的推导里），额外高度恒为 0；T7.3 加 tie/tuplet 只要改这一处。
+  // `systemHeight` 的推导里），额外高度恒为 0。
+  //
+  // **T7.3 判断：tie / tuplet bracket 不补高**。两条理由缺一不可：① 它们在本层
+  // **不带任何 y**（见 `StaffTie` / `StaffTupletBracket`），notation 层根本没有可以
+  // 折算成「额外高度」的量，硬补就是凭空造几何；② tuplet 括号画在谱表上方，而
+  // `staffTopOffset(32)` 已按 3 条上加线 + 呼吸空间预留，tie 的弧落在符头附近同样在
+  // `systemHeight(96)` 的包络内——真要超出，那是 adapter（T7.4）拿到实际 y 之后才判
+  // 得出来的事，届时由它回填，不由这里猜。
   const extraHeights = packed.systems.map(() => 0);
   const restacked = restackSystems(packed.systems, extraHeights, geometry);
   // `layoutSystems` 只知道内容宽度；行首预留是 Staff 自己的事，在这里补回行宽。
@@ -193,6 +204,9 @@ export function layoutStaff(voice: RenderVoice, ctx: StaffContext): StaffLayout 
   const nodes: StaffEventNode[] = [];
   const slots: SpacedSlot[] = [];
   const staves: StaffStaveSpec[] = [];
+  // 索引的是**布局产物**（事件 → 本次布局的节点），不是 Domain lookup（§2.4.1，P2-G）；
+  // T7.3 的关系拆段靠它判断端点落在第几行、画不画得出来。
+  const nodeByEvent = new Map<EventId, StaffEventNode>();
 
   for (const [measureIndex, measure] of measures.entries()) {
     const spacing = spacings[measureIndex];
@@ -222,14 +236,18 @@ export function layoutStaff(voice: RenderVoice, ctx: StaffContext): StaffLayout 
       const slot = spacing.slots[offset];
       if (slot === undefined) continue;
       slots.push(slot);
-      nodes.push(buildStaffNode(
+      const node = buildStaffNode(
         { item, slot, measureIndex, systemIndex: placement.systemIndex },
         voice.voiceId,
         sink,
-      ));
+      );
+      nodes.push(node);
+      nodeByEvent.set(item.eventId, node);
     }
   }
 
+  const ties = buildStaffTies(voice, ctx.index, nodeByEvent, sink);
+  const tuplets = buildStaffTuplets(voice, ctx.index, nodeByEvent, sink);
   sinkVoiceDiagnostics(voice.voice, sink);
 
   const lastSystem = systems[systems.length - 1];
@@ -241,8 +259,8 @@ export function layoutStaff(voice: RenderVoice, ctx: StaffContext): StaffLayout 
     slots,
     staves,
     nodes,
-    ties: [],
-    tuplets: [],
+    ties,
+    tuplets,
     width: systems.reduce((max, system) => Math.max(max, system.box.width), 0),
     height: lastSystem === undefined ? 0 : lastSystem.box.origin.y + lastSystem.box.height,
     diagnostics: collectRenderDiagnostics(drafts),

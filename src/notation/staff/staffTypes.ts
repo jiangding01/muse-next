@@ -11,14 +11,17 @@
  *
  * T7.2 把 `StaffEventNode` / `StaffStaveSpec` / `StaffLayout` 从骨架补成实际契约
  * （构造逻辑在 `staffEventNodes.ts` / `layoutStaff.ts`，本文件仍然只有类型）；
- * `StaffTie` / `StaffTupletBracket` 维持骨架，T7.3 才产出，T7.2 一律给空数组。
+ * T7.3 把 `StaffTie` / `StaffTupletBracket` 从骨架补成实际契约（类型在
+ * `staffRelationTypes.ts`，构造在 `staffRelations.ts`）：都**不带 x / y**，跨行按
+ * system 拆段。
  */
 
-import type { Accidental, RelationId, SourceRef, VoiceId } from '../../domain';
+import type { Accidental, SourceRef, VoiceId } from '../../domain';
 import type { MeasureSlice } from '../layout/systems';
 import type { SpacedSlot } from '../layout/spacing';
 import type { System } from '../layout/primitives';
 import type { Anchor, RenderDiagnostic } from '../model/types';
+import type { StaffTie, StaffTupletBracket } from './staffRelationTypes';
 
 // ---------------------------------------------------------------------------
 // 谱号 / 音高 / 时值——本任务的核心产出，`staffPitch.ts` / `staffDurations.ts` 消费。
@@ -152,12 +155,27 @@ export interface StaffNodeBase {
 }
 
 /**
+ * `pitches` 的一项：音高 + 它的 **Domain 原始成员下标**（单音 `note` 恒为 0，和弦块
+ * 取 `members` 的原始下标）。
+ *
+ * **端点身份显式保存，adapter 不重放筛选规则**（T6.3 已在 `TabFretGlyph.memberIndex`
+ * 上裁决过同一件事）：`pitches` 已剔除和弦块里的休止成员（`[zC]` 的 C 原始下标是 1、
+ * 数组下标是 0），所以 adapter（T7.4）把关系端点落到渲染器 keys 上时必须写
+ * `pitches.findIndex((entry) => entry.memberIndex === endpoint.memberIndex)`，**不得**
+ * 自己重放一遍「跳过休止成员」——同一条规则实现两次，两处早晚对不上。
+ */
+export interface StaffNotePitch {
+  readonly memberIndex: number;
+  readonly pitch: StaffPitch;
+}
+
+/**
  * 音符 / 和弦块：`pitches` 非空（成员里的休止已剔除并发诊断）。`duration` 是**已经
  * 能画出符头**的时值——非 `representable` 的三种结果一律走 `StaffPlaceholderNode`。
  */
 export interface StaffNoteNode extends StaffNodeBase {
   readonly kind: 'note';
-  readonly pitches: readonly StaffPitch[];
+  readonly pitches: readonly StaffNotePitch[];
   readonly duration: StaffDuration;
 }
 
@@ -247,28 +265,6 @@ export interface StaffStaveSpec {
   readonly endBarline?: StaffBarlineForm;
 }
 
-// 关系骨架（T7.3 填充；T7.2 一律产出空数组）。
-/**
- * tie（连音线）骨架。`segment` 区分「完整画在一行内」（`whole`）还是跨行谱续行的
- * 哪一半（`start` 只画到起点、弧延伸到下一行；`end` 只画落在本行的终点那一半）。
- * `status` 原样透传 Domain `Tie.status`，`unresolved` 画半开弧，同既有约定。
- */
-export interface StaffTie {
-  readonly relationId: RelationId;
-  readonly segment: 'whole' | 'start' | 'end';
-  readonly status: 'resolved' | 'unresolved';
-}
-
-/**
- * tuplet 括号骨架——**只带 `label` 与 `status`，不带时值缩放**（M2 不按 `p`/`q`
- * 推算 effective duration，`q === 0` UNVERIFIED）；`incomplete` 时缺失端不补。
- */
-export interface StaffTupletBracket {
-  readonly relationId: RelationId;
-  readonly label: string;
-  readonly status: 'complete' | 'incomplete';
-}
-
 // 布局产出。
 /**
  * 一个声部在 Staff 记谱下的完整布局产出（`layoutStaff.ts`）。与 `TabLayout` /
@@ -286,9 +282,9 @@ export interface StaffLayout {
   /** 每个 (system, measure) 一条，与 `measures` 同序。 */
   readonly staves: readonly StaffStaveSpec[];
   readonly nodes: readonly StaffEventNode[];
-  /** T7.3 填充；T7.2 恒为空数组。 */
+  /** tie 段（跨行已拆段，同一条 relation 的各段共用 `anchor`）。 */
   readonly ties: readonly StaffTie[];
-  /** T7.3 填充；T7.2 恒为空数组。 */
+  /** tuplet 括号段（跨行已按 system 拆段，`label` 只在首段）。 */
   readonly tuplets: readonly StaffTupletBracket[];
   readonly width: number;
   readonly height: number;

@@ -112,6 +112,54 @@ describe('notation 架构守卫 —— 依赖方向（§2.1）', () => {
   });
 });
 
+/**
+ * 记谱目录之间互不依赖（M2 §2.7）。四种记谱各有各的几何模型，互不继承、互不转换：
+ * 结构上的相似（切段、cursor → node → sink）一律**照抄**，不共享代码——共享一旦开始，
+ * 「简谱的弧」和「五线谱的连音线」就会被迫用同一组字段，而它们连坐标系都不一样。
+ *
+ * T7.3 追加：把 `staff/**` 也纳入这条双向守卫（`staff` ↮ `jianpu` / `tab` / `chord`）。
+ * 沿用本文件的 `collectSpecifiers`，五种 import 语法全覆盖。
+ */
+describe('notation 架构守卫 —— 记谱目录互不 import（§2.7）', () => {
+  const SIBLINGS: readonly string[] = ['staff', 'jianpu', 'tab', 'chord'];
+
+  /** `../jianpu`、`../jianpu/jianpuArcs`、`./../tab/tabGlyphs` 都算命中；`./x` 不算。 */
+  function crossNotationHits(source: string, self: string): string[] {
+    const others = SIBLINGS.filter((name) => name !== self);
+    return collectSpecifiers(source).filter((spec) =>
+      others.some((name) => new RegExp(`(^|/)${name}(/|$)`).test(spec)),
+    );
+  }
+
+  const notationDirFiles = SIBLINGS.flatMap((name) =>
+    files
+      .filter((file) => rel(file).startsWith(`${name}/`))
+      .map((file) => ({ file, self: name })),
+  );
+
+  it('四个记谱目录都扫到了文件（守卫没有扫空目录）', () => {
+    for (const name of SIBLINGS) {
+      expect(notationDirFiles.filter((entry) => entry.self === name).length).toBeGreaterThan(0);
+    }
+  });
+
+  it.each(notationDirFiles.map((entry) => [rel(entry.file), entry.file, entry.self] as const))(
+    '%s 不 import 其它记谱目录',
+    (_label, file, self) => {
+      expect(crossNotationHits(readFileSync(file, 'utf8'), self)).toEqual([]);
+    },
+  );
+
+  it('反例：探针 `import { x } from "../jianpu/jianpuArcs"` 在 staff 下确实会被命中', () => {
+    const probe = "import { buildArcSegments } from '../jianpu/jianpuArcs';";
+    expect(crossNotationHits(probe, 'staff')).toEqual(['../jianpu/jianpuArcs']);
+    expect(crossNotationHits(probe, 'jianpu')).toEqual([]);
+    expect(crossNotationHits("import { staffPitch } from '../staff/staffPitch';", 'tab')).toEqual([
+      '../staff/staffPitch',
+    ]);
+  });
+});
+
 describe('notation 架构守卫 —— model 内无 import 循环', () => {
   /**
    * 循环在类型层不报错（type-only import 被擦除），但它会让「谁依赖谁」失去方向，
