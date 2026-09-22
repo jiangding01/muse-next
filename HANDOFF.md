@@ -2613,9 +2613,13 @@ seal 流程与 M3 前的 UI 设计；把散落在 §30.1 第 5 条（T7 遗留�
 1. ~~duration capability（breve）~~ 已由 T5.2-E `f77d3d2` 解决（见上）。
 2. 16 分音符最小槽宽 12u = 减时线长 12u，相邻减时线相连是正确写法，但紧跟小节线
    时显得拥挤（`12|`）；T4 间距设计，未动。
-3. `[V:1]` 段内 inline `L:` 同时进入两个声部的 `unitLengthChanges`：**非 bug**，
-   parse 诊断 `jcx.parse.unit-length.body-scope` 已按 U06「从该行起生效直到
-   被下一条 L: 覆盖」处理。
+3. ~~`[V:1]` 段内 inline `L:` 同时进入两个声部的 `unitLengthChanges`：非 bug~~
+   **已按 U06 结案修正**（2026-09-22，U06 修复任务）：只读探针证实这是真实
+   泄漏（5 个语料 corpus#02/#03/#04/#10/#11 的简谱声部每小节时值曾 = 拍号 ×
+   2.000），已改为「body `L:` 只作用于它所在的声部，不泄漏到其它声部」，
+   归属产出于 `parse/body/segments.ts`（现拆到 `unitLengthBinding.ts`），装配
+   在 `parse/index.ts`；`jcx.parse.unit-length.body-scope` 诊断改由那里发放。
+   详见 `docs/JCX_SPEC.md` §8.5 / Appendix A U06。
 
 **T8.1 `a3fa0fd`（M2 seal 之后的测试补丁，只改 tests）**：按用户六条补充裁决收紧矩阵——chord 退出 voice matrix，改为独立 document chord matrix（C1/C2 标 N/A，无 fake voice adapter）；D12 style 缺席/未知按声部级 fallback summary 测（两码各恰一条 + voice anchor 可解析 + `summarizeEvents` 确定性）；C3 加 ownership（event 的 voiceId 一致；relation 必须在该 Voice 的 ties/slurs/tuplets/tabRelations/brokenRhythms 之一）与 `anchorKey` 稳定/单射断言；C2 只并 RenderScore + layout 诊断，C3 另并 `layoutScoreHeader` 诊断；C1 只数 `layout.nodes` 的 event anchor（TAB stroke overlay 不重复计数有正面用例）；无硬编码 fixture 数。矩阵 1434→1194 用例（去掉 chord 空转），全量 74 文件 / 5642 用例；只读审查通过；仓库转 public 后 GitHub Actions run 35702615344（8e60856）macOS/Ubuntu/Windows 三平台全绿。
 

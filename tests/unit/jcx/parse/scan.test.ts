@@ -8,6 +8,7 @@ import { createDiagnosticBag } from '../../../../src/formats/jcx/lexer/diagnosti
 import type { JcxDiagnostic } from '../../../../src/formats/jcx/lexer/diagnostics';
 import {
   assignSegments,
+  createUnitLengthScope,
   onceKeyed,
   parseHeader,
   parseJcxDocument,
@@ -41,8 +42,15 @@ function scanFixture(name: string): ScanByVoice {
   const ctx: ParseContext = { bag, once: onceKeyed(bag) };
   const header = parseHeader(ast, ctx);
   const { voices, registry } = parseVoices(header.voiceFields, ctx);
-  const segments = assignSegments(ast, registry, voices, ctx);
-  return scanSegments(segments.segments, header.unitLengthScope, ctx);
+  const validBodyUnitLengthLines = new Set(header.bodyUnitLengths.map((entry) => entry.lineIndex));
+  const segments = assignSegments(ast, registry, voices, ctx, validBodyUnitLengthLines);
+  const byLine = new Map(segments.unitLengthBindings.map((b) => [b.lineIndex, b.voiceId] as const));
+  const entries = header.bodyUnitLengths.map((entry) => {
+    const boundVoiceId = byLine.get(entry.lineIndex);
+    return boundVoiceId === undefined ? entry : { ...entry, voiceId: boundVoiceId };
+  });
+  const scope = createUnitLengthScope(header.unitLength, entries);
+  return scanSegments(segments.segments, scope, ctx);
 }
 
 function voiceOf(score: Score, id: VoiceId): Voice {

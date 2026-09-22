@@ -22,9 +22,11 @@ import type { DirectivesNormalization } from './directives';
 import { collectDirectives } from './directives';
 import { onceKeyed } from './diagnostics';
 import { parseHeader } from './header';
+import type { UnitLengthEntry, UnitLengthScope } from './duration';
+import { createUnitLengthScope } from './duration';
 import type { VoiceRegistry } from './voice';
 import { parseVoices } from './voice';
-import type { SegmentsResult, VoiceSegment } from './body/segments';
+import type { SegmentsResult, UnitLengthBinding, VoiceSegment } from './body/segments';
 import { assignSegments } from './body/segments';
 import type { ScanByVoice, ScanResult } from './body/scan';
 import { scanSegments } from './body/scan';
@@ -56,7 +58,7 @@ export type {
   VoiceRegistry,
 } from './voice';
 export { parseVoices, splitVoiceAttributes } from './voice';
-export type { SegmentsResult, SegmentUnit, VoiceSegment } from './body/segments';
+export type { SegmentsResult, SegmentUnit, UnitLengthBinding, VoiceSegment } from './body/segments';
 export { assignSegments } from './body/segments';
 export type { ScanByVoice, ScanMarker, ScanMarkerAnchor, ScanMarkerKind, ScanResult } from './body/scan';
 export { scanSegments } from './body/scan';
@@ -113,6 +115,23 @@ function buildScore(
 }
 
 /**
+ * 把 T3（`header.bodyUnitLengths`，只有行号 + 值）与 T5（`unitLengthBindings`，
+ * 每行的声部归属）按 `lineIndex` 拼成带 `voiceId` 的 `UnitLengthEntry`。两者的
+ * 合法行号集合恒相等（T5 只在 `validBodyUnitLengthLines` 里的行才产出 binding），
+ * 故这里退回原条目（保持 global）只是防御性兜底，不代表已知会触发的路径。
+ */
+function bindUnitLengthVoiceIds(
+  entries: readonly UnitLengthEntry[],
+  bindings: readonly UnitLengthBinding[],
+): readonly UnitLengthEntry[] {
+  const byLine = new Map(bindings.map((binding) => [binding.lineIndex, binding.voiceId] as const));
+  return entries.map((entry) => {
+    const voiceId = byLine.get(entry.lineIndex);
+    return voiceId === undefined ? entry : { ...entry, voiceId };
+  });
+}
+
+/**
  * 把 Lossless AST 归一化为 Domain `Score`。
  *
  * 当前进度：T3 描述头、T4 声部属性、T5 段落归属、T6 事件扫描、T7 marker 配对、
@@ -133,11 +152,23 @@ export function parseJcxDocument(ast: JcxAstDocument): ParseResult {
   const { voices: declaredVoices, registry } = parseVoices(header.voiceFields, ctx);
   // 供 T6（事件扫描）与后续阶段复用，避免重新扫描 header.voiceFields。
   ctx.voiceRegistry = registry;
-  const segmentsResult: SegmentsResult = assignSegments(ast, registry, declaredVoices, ctx);
+  const validBodyUnitLengthLines = new Set(header.bodyUnitLengths.map((entry) => entry.lineIndex));
+  const segmentsResult: SegmentsResult = assignSegments(
+    ast,
+    registry,
+    declaredVoices,
+    ctx,
+    validBodyUnitLengthLines,
+  );
   // T5 可能因未声明 id / 无任何声明而隐式追加声部，Score.voices 必须反映最终列表。
   ctx.segments = segmentsResult.segments;
+  // body `L:` 按声部作用域装配（spec §8.5 U06 已裁决）：T3 的值 + T5 的归属。
+  const unitLengthScope: UnitLengthScope = createUnitLengthScope(
+    header.unitLength,
+    bindUnitLengthVoiceIds(header.bodyUnitLengths, segmentsResult.unitLengthBindings),
+  );
   // T6：扫描事件流；marker 挂在 ctx 上供 T7 配对，不进 Score（方案 §0-5）。
-  const scan = scanSegments(segmentsResult.segments, header.unitLengthScope, ctx);
+  const scan = scanSegments(segmentsResult.segments, unitLengthScope, ctx);
   ctx.scan = scan;
   // T7：消费 marker，产出四类 relation 与 broken rhythm 改写后的事件流。
   const empty: ScanResult = { events: [], markers: [] };
@@ -151,8 +182,8 @@ export function parseJcxDocument(ast: JcxAstDocument): ParseResult {
       tuplets: paired.tuplets,
       tabRelations: paired.tabRelations,
       brokenRhythms: paired.brokenRhythms,
-      // body 区 `L:` 落到本声部事件序列上的生效位置（M1.7 T0，纯事实映射）。
-      unitLengthChanges: collectUnitLengthChanges(paired.events, header.unitLengthScope),
+      // body 区 `L:` 落到本声部事件序列上的生效位置（M1.7 T0，按声部作用域）。
+      unitLengthChanges: collectUnitLengthChanges(paired.events, unitLengthScope, voice.id),
     };
   });
   // T9：`%%` 指令、gchord 和弦图与 text block（与正文扫描互不依赖）。

@@ -1,0 +1,13 @@
+%MUSE2
+X:1
+T:Unit Length Voice Scope
+M:4/4
+L:1/8
+K:C
+V:1 style=tab clef=standardtab
+V:2 style=jianpu
+[V:1]
+L:1/4
+a1 a3|
+[V:2]
+C2 D2|

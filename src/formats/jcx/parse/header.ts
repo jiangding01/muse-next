@@ -16,12 +16,16 @@
  * | `jcx.parse.tempo.unparsed` | info | `Q:` 非 `<分数>=<整数>`（§8.6 UNVERIFIED） |
  * | `jcx.parse.ref-number.unparsed` | info | `X:` 非正整数（§8.1 不赋结构语义，故不升 warning） |
  * | `jcx.parse.unit-length.unparsed` | warning | `L:` 值形态不符，按缺席处理（§8.5） |
- * | `jcx.parse.unit-length.body-scope` | info | body 内 `L:`，作用域歧义 U06（§8.5） |
  * | `jcx.parse.unit-length.defaulted` | info | 无 `L:`，按文档规则由 `M:` 推断（§8.5） |
  * | `jcx.parse.unit-length.unresolved` | warning | 无 `L:` 且 `M:` 无数值，E1 不兜底 |
  *
  * `K:` 值解析失败**不发诊断**：spec §8.7 明确「解析失败不报错」。
  * 未知字母字段也不在这里发诊断——lexer 已发 `jcx.field.unknown`（方案 §2）。
+ *
+ * body 区 `L:` 只在本文件收集「行号 + 值」（`bodyUnitLengths`）：它归属哪个声部
+ * 是 T5（`body/segments.ts`）的事，`jcx.parse.unit-length.body-scope` 诊断与
+ * 最终的 `UnitLengthScope` 装配也都移到那之后（spec §8.5 U06 已裁决），本文件
+ * 不复制 T5 的声部状态机。
  */
 
 import type { JcxAstDocument, JcxFieldLineNode } from '../ast';
@@ -40,8 +44,8 @@ import type {
 import type { OnceKeyedReporter } from './diagnostics';
 import { reportParse } from './diagnostics';
 import { parseKey, parseMeter, parseTempo } from './keyMeter';
-import type { UnitLengthEntry, UnitLengthScope } from './duration';
-import { createUnitLengthScope, parseUnitLength, resolveDefaultUnitLength } from './duration';
+import type { UnitLengthEntry } from './duration';
+import { parseUnitLength, resolveDefaultUnitLength } from './duration';
 import { originOf } from './origin';
 
 /** parse 各阶段共享的上下文（同一个 bag 与同一个「每文档一次」作用域）。 */
@@ -61,8 +65,13 @@ export interface HeaderNormalization {
   readonly key?: KeySignature;
   readonly unknownFields: readonly UnknownField[];
   readonly ignoredFields: readonly IgnoredField[];
-  /** T6 查询「某位置的 unitLength」的唯一入口。 */
-  readonly unitLengthScope: UnitLengthScope;
+  /**
+   * body 区 `L:` 行的收集结果：只含形态合法的条目（行号 + 值 + raw + origin），
+   * 一律不带 `voiceId`（归属是 T5 的事）。T5（`assignSegments`）之后由调用方
+   * （`parse/index.ts`）把这里的 lineIndex 与 T5 产出的 voiceId binding 拼在一起，
+   * 再交给 `createUnitLengthScope` 装配成最终的 `UnitLengthScope`。
+   */
+  readonly bodyUnitLengths: readonly UnitLengthEntry[];
   /** 留给 T4 的 `V:` 字段行（不含内联 `[V:n]`，那是 T5 的事）。 */
   readonly voiceFields: readonly JcxFieldLineNode[];
   /** 留给 T8 的 `w:` 字段行，按文档顺序。 */
@@ -268,20 +277,14 @@ function applyBodyField(state: HeaderState, node: JcxFieldLineNode, bag: Diagnos
     );
     return;
   }
+  // 只收集行号 + 值；归属（voiceId）与 `jcx.parse.unit-length.body-scope`
+  // 诊断都交给 T5（`body/segments.ts`），本函数不知道、也不猜当前声部。
   state.bodyUnitLengths.push({
     lineIndex: lineIndexOf(node),
     unitLength: parsed,
     raw,
     origin: originOf(node),
   });
-  reportParse(
-    bag,
-    'jcx.parse.unit-length.body-scope',
-    'info',
-    '正文区的 L: 作用域存在歧义（到文件末尾 vs 到下一个 [V:n]，Appendix A U06），本实现按「从该行起生效直到被下一条 L: 覆盖」处理',
-    node.span,
-    originOf(node),
-  );
 }
 
 /** 归一化描述头。永不抛异常：任何值形态问题都降级为 raw + diagnostic。 */
@@ -338,7 +341,7 @@ export function parseHeader(ast: JcxAstDocument, ctx: ParseContext): HeaderNorma
     ...(state.key === undefined ? {} : { key: state.key }),
     unknownFields: state.unknownFields,
     ignoredFields: state.ignoredFields,
-    unitLengthScope: createUnitLengthScope(headerUnitLength, state.bodyUnitLengths),
+    bodyUnitLengths: state.bodyUnitLengths,
     voiceFields: state.voiceFields,
     lyricFields: state.lyricFields,
   };

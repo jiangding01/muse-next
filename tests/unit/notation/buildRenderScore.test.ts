@@ -51,9 +51,14 @@ function withCode(renderScore: RenderScore, code: string): readonly RenderDiagno
 /**
  * 主用例语料：一次覆盖 T1 必交的**五个固定 code**。
  *
- * - `V:1` 无 `style` → `voice.style-absent`；正文里 `C2` 在 body `L:` 之前，`duration`
- *   不可知 → `duration.unresolved`；`L:1/16` 之后的 `a5` = `5/16` 不可表示 →
- *   `duration.unrepresentable`；`(3CDE` → 一条 `tuplet.timing-not-modeled`。
+ * body `L:` 按声部作用域生效（spec §8.5 U06 已裁决），不再跨声部泄漏，所以
+ * `V:2` / `V:3` 各自补了一条 `L:1/16`——否则它们完全拿不到任何单位音长
+ * （header 没有 `L:`/`M:`），会连带把与本用例无关的事件也变成 duration 缺失。
+ *
+ * - `V:1` 无 `style` → `voice.style-absent`；正文里 `C2` 在自己声部的 body `L:`
+ *   之前，`duration` 不可知 → `duration.unresolved`（唯一一条，只此一处）；
+ *   `L:1/16` 之后的 `a5` = `5/16` 不可表示 → `duration.unrepresentable`；
+ *   `(3CDE` → 一条 `tuplet.timing-not-modeled`。
  * - `V:2` 写了我们不认识的 `style=foo` → `voice.style-unknown`；正文含 `Z` / `@` /
  *   混合方向八度 `C,'` 这三项 UNVERIFIED 事实（只保留，不解释）与一个未知 token。
  * - `V:3` 是已知 style + 可分解时值 → 一条诊断都不该有。
@@ -70,8 +75,10 @@ C2
 L:1/16
 (3CDE a5 z2 |
 [V:2]
+L:1/16
 Z2 @2 C,' %bogus%
 [V:3]
+L:1/16
 (3CDE
 `;
 

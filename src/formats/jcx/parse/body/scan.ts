@@ -307,8 +307,9 @@ function scanNode(node: JcxBodyNode, state: ScanState): void {
 /**
  * 扫描 T5 给出的有序段落，产出每个声部的事件流与并列的 marker 列表。
  *
- * `unitLengths` 的查询按**事件自身的 AstPath 行号**做（body 区 `L:` 从该行起生效，
- * spec §8.5 / U06），因此同一行内的事件共享同一个单位音长。
+ * `unitLengths` 的查询按**事件自身的 AstPath 行号 + 所在声部**做（body 区 `L:`
+ * 按声部作用域从该行起生效，spec §8.5 / U06 已裁决），因此同一行内的事件共享
+ * 同一个单位音长，且不同声部各自只看自己的条目与 global 条目。
  */
 export function scanSegments(
   segments: readonly VoiceSegment[],
@@ -323,7 +324,7 @@ export function scanSegments(
     return {
       voice: existing,
       voiceId: id,
-      dur: { ctx, unitLength: unitLengths.unitLengthAt(origin) },
+      dur: { ctx, unitLength: unitLengths.unitLengthAt(origin, id) },
       ctx,
     };
   };

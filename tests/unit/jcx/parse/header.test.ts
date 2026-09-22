@@ -6,7 +6,15 @@ import { buildAst } from '../../../../src/formats/jcx/ast';
 import { lexJcx } from '../../../../src/formats/jcx/lexer';
 import { createDiagnosticBag } from '../../../../src/formats/jcx/lexer/diagnostics';
 import type { JcxDiagnostic } from '../../../../src/formats/jcx/lexer/diagnostics';
-import { onceKeyed, parseHeader, parseJcxDocument } from '../../../../src/formats/jcx/parse';
+import {
+  assignSegments,
+  createUnitLengthScope,
+  onceKeyed,
+  parseHeader,
+  parseJcxDocument,
+  parseVoices,
+} from '../../../../src/formats/jcx/parse';
+import type { UnitLengthScope } from '../../../../src/formats/jcx/parse';
 import { voiceId } from '../../../../src/domain';
 
 /**
@@ -37,6 +45,27 @@ function header(name: string) {
   const bag = createDiagnosticBag();
   const ast = buildAst(lexJcx(readFileSync(resolve(__dirname, `../../../fixtures/jcx/${name}.jcx`))));
   return parseHeader(ast, { bag, once: onceKeyed(bag) });
+}
+
+/**
+ * `parseHeader` 不再直接产出 `UnitLengthScope`（body `L:` 的归属交给 T5，见
+ * `body/segments.ts`）；测试要看最终作用域时按 `parse/index.ts` 的同一套装配
+ * 顺序（parseHeader → parseVoices → assignSegments → createUnitLengthScope）重跑。
+ */
+function unitLengthScopeOf(name: string): UnitLengthScope {
+  const bag = createDiagnosticBag();
+  const ctx = { bag, once: onceKeyed(bag) };
+  const ast = buildAst(lexJcx(readFileSync(resolve(__dirname, `../../../fixtures/jcx/${name}.jcx`))));
+  const normalized = parseHeader(ast, ctx);
+  const { voices, registry } = parseVoices(normalized.voiceFields, ctx);
+  const validBodyUnitLengthLines = new Set(normalized.bodyUnitLengths.map((entry) => entry.lineIndex));
+  const segments = assignSegments(ast, registry, voices, ctx, validBodyUnitLengthLines);
+  const byLine = new Map(segments.unitLengthBindings.map((b) => [b.lineIndex, b.voiceId] as const));
+  const entries = normalized.bodyUnitLengths.map((entry) => {
+    const boundVoiceId = byLine.get(entry.lineIndex);
+    return boundVoiceId === undefined ? entry : { ...entry, voiceId: boundVoiceId };
+  });
+  return createUnitLengthScope(normalized.unitLength, entries);
 }
 
 describe('minimal fixture', () => {
@@ -105,22 +134,22 @@ describe('header-override fixture（spec §8.12 覆盖型 + §6.2）', () => {
   });
 });
 
-describe('body-field-l fixture（spec §8.5 U06）', () => {
+describe('body-field-l fixture（spec §8.5 U06 已裁决，单声部不受影响）', () => {
   const { diagnostics } = parsed('body-field-l');
   const normalized = header('body-field-l');
 
-  it('header 的 L: 仍是 Score.unitLength，body 的那条进作用域', () => {
+  it('header 的 L: 仍是 Score.unitLength，body 的那条进作用域并归属到唯一声部', () => {
     expect(normalized.unitLength).toEqual({ num: 1, den: 4 });
-    expect(normalized.unitLengthScope.entries).toEqual([
-      { lineIndex: 8, unitLength: { num: 1, den: 8 }, raw: '1/8', origin: 'L8' },
+    expect(unitLengthScopeOf('body-field-l').entries).toEqual([
+      { lineIndex: 8, unitLength: { num: 1, den: 8 }, raw: '1/8', origin: 'L8', voiceId: voiceId(1) },
     ]);
   });
 
   it('作用域从该行起生效', () => {
-    const scope = normalized.unitLengthScope;
-    expect(scope.unitLengthAtLine(7)).toEqual({ num: 1, den: 4 });
-    expect(scope.unitLengthAtLine(8)).toEqual({ num: 1, den: 8 });
-    expect(scope.unitLengthAt('L9.2')).toEqual({ num: 1, den: 8 });
+    const scope = unitLengthScopeOf('body-field-l');
+    expect(scope.unitLengthAtLine(7, voiceId(1))).toEqual({ num: 1, den: 4 });
+    expect(scope.unitLengthAtLine(8, voiceId(1))).toEqual({ num: 1, den: 8 });
+    expect(scope.unitLengthAt('L9.2', voiceId(1))).toEqual({ num: 1, den: 8 });
   });
 
   it('body 的 L: 发 body-scope info，不发 ignored-in-body', () => {
@@ -214,7 +243,7 @@ describe('no-unit-length-no-meter fixture（方案 §7 E1）', () => {
   });
 
   it('作用域全程返回 undefined', () => {
-    expect(header('no-unit-length-no-meter').unitLengthScope.unitLengthAtLine(9)).toBeUndefined();
+    expect(unitLengthScopeOf('no-unit-length-no-meter').unitLengthAtLine(9)).toBeUndefined();
   });
 });
 
@@ -248,11 +277,16 @@ describe('值形态解析失败的降级（内联源，语料 0 样本）', () =
     expect(score.unitLength).toEqual({ num: 1, den: 16 });
   });
 
-  it('body 的 L: 形态不符 → warning，且该条不进作用域', () => {
+  it('body 的 L: 形态不符 → warning，且该条不进 bodyUnitLengths（不产出 binding / body-scope info）', () => {
     const bag = createDiagnosticBag();
     const ast = buildAst(lexJcx('%MUSE2\nT:t\nM:4/4\nL:1/8\nK:C\nV:1\nC|\n L:x\nC|\n'));
-    const normalized = parseHeader(ast, { bag, once: onceKeyed(bag) });
-    expect(normalized.unitLengthScope.entries).toEqual([]);
+    const ctx = { bag, once: onceKeyed(bag) };
+    const normalized = parseHeader(ast, ctx);
+    expect(normalized.bodyUnitLengths).toEqual([]);
+    const { voices, registry } = parseVoices(normalized.voiceFields, ctx);
+    const validBodyUnitLengthLines = new Set(normalized.bodyUnitLengths.map((entry) => entry.lineIndex));
+    const segments = assignSegments(ast, registry, voices, ctx, validBodyUnitLengthLines);
+    expect(segments.unitLengthBindings).toEqual([]);
     expect(bag.list().map((d) => d.code)).toEqual(['jcx.parse.unit-length.unparsed']);
   });
 });

@@ -34,6 +34,10 @@
  * | `jcx.parse.voice.implicit` | warning | `[V:id]` 引用未声明 id，或全文无任何 `V:` 声明 |
  * | `jcx.parse.voice.segment-by-order` | warning | 无 `[V:...]` 且声明 ≥2 个声部时的顺序推断（onceKeyed，§9.4） |
  * | `jcx.parse.inline-field.unsupported` | warning | `V` 之外的 inline field（如 `[K:...]`，spec §9.5 UNVERIFIED） |
+ * | `jcx.parse.unit-length.body-scope` | info | body 内 `L:` 的声部归属，实际发放在 `unitLengthBinding.ts`（§8.5 U06 已裁决） |
+ *
+ * body `L:` 的声部归属拆到 `unitLengthBinding.ts`：本文件只在 walk 中把 `currentVoiceId`
+ * 递给它，归属规则、诊断文案、跨段持续判断都在那份文件里，不在这里重复。
  */
 
 import type {
@@ -50,8 +54,15 @@ import { reportParse } from '../diagnostics';
 import { originOf } from '../origin';
 import type { VoiceRegistry } from '../voice';
 import { splitVoiceAttributes } from '../voice';
+import type { UnitLengthBinding, UnitLengthBindingState } from './unitLengthBinding';
+import {
+  bindBodyUnitLength,
+  createUnitLengthBindingState,
+  noteCrossSegmentContinuationIfResumed,
+} from './unitLengthBinding';
 
-/** 一个正文行 / 行内尾随正文 / 歌词行被归属到某个声部的最小单位。 */
+export type { UnitLengthBinding } from './unitLengthBinding';
+
 /**
  * `w:` 行能绑定的「上一行音符」：可能是一条独立正文行，也可能是 `[V:x] CDE` 这种
  * inline 字段行的同行尾随正文（P2 修复：后者此前从未被记录，导致紧跟其后的 `w:`
@@ -85,6 +96,8 @@ export interface SegmentsResult {
   readonly segments: readonly VoiceSegment[];
   /** `V` 之外的 inline field（spec §9.5），并入 `Score.ignoredFields`。 */
   readonly ignoredFields: readonly IgnoredField[];
+  /** body `L:` 行的声部归属；只含 `validBodyUnitLengthLines` 里的合法行号。 */
+  readonly unitLengthBindings: readonly UnitLengthBinding[];
 }
 
 type Mode = 'inline' | 'orderly' | 'implicitSingle';
@@ -107,6 +120,8 @@ interface WalkState {
   currentVoiceId: VoiceId | undefined;
   lastLyricTarget: LyricTarget | undefined;
   lastLyricTargetVoiceId: VoiceId | undefined;
+  /** body `L:` 归属专属状态，见 `unitLengthBinding.ts`。 */
+  readonly unitLength: UnitLengthBindingState;
 }
 
 /**
@@ -198,6 +213,7 @@ function advanceOrderly(
     id = createImplicitVoice(state, node, ctx, rawId);
     state.idIndex.set(rawId, id);
   }
+  noteCrossSegmentContinuationIfResumed(state.unitLength, ctx, state.currentVoiceId, id, node);
   state.currentVoiceId = id;
   if (warnEnabled) {
     warnSegmentByOrder(ctx, node);
@@ -206,6 +222,7 @@ function advanceOrderly(
 
 function pushBodyLine(state: WalkState, id: VoiceId, node: JcxBodyLineNode): void {
   state.segments.push({ voiceId: id, unit: { kind: 'bodyLine', node } });
+  state.unitLength.voiceHasSegment.add(id);
   state.lastLyricTarget = { kind: 'bodyLine', line: node };
   state.lastLyricTargetVoiceId = id;
 }
@@ -232,11 +249,13 @@ function handleInlineFieldLine(state: WalkState, ctx: ParseContext, node: JcxInl
     id = createImplicitVoice(state, node, ctx, rawId);
     state.idIndex.set(rawId, id);
   }
+  noteCrossSegmentContinuationIfResumed(state.unitLength, ctx, state.currentVoiceId, id, node);
   state.currentVoiceId = id;
 
   if (node.trailing.length > 0) {
     // spec §9.2：help 示例 `[V:1] ABCD|`——同行尾随正文按切换后的声部归属。
     state.segments.push({ voiceId: id, unit: { kind: 'trailing', node } });
+    state.unitLength.voiceHasSegment.add(id);
     // P2 修复：同行尾随正文本身就是「上一行音符」，`w:` 紧跟其后时应绑定到它，
     // 而不是更早的某条独立正文行（或压根没有目标）。
     state.lastLyricTarget = { kind: 'inlineTrailing', line: node };
@@ -255,6 +274,7 @@ export function assignSegments(
   registry: VoiceRegistry,
   baseVoices: readonly Voice[],
   ctx: ParseContext,
+  validBodyUnitLengthLines: ReadonlySet<number>,
 ): SegmentsResult {
   const hasInlineVoice = ast.lines.some((line) => line.kind === 'inlineFieldLine' && line.key === 'V');
   const mode: Mode = hasInlineVoice
@@ -272,6 +292,7 @@ export function assignSegments(
     currentVoiceId: undefined,
     lastLyricTarget: undefined,
     lastLyricTargetVoiceId: undefined,
+    unitLength: createUnitLengthBindingState(),
   };
 
   for (const line of ast.lines) {
@@ -309,6 +330,9 @@ export function assignSegments(
             state.segments.push({ voiceId: owner, unit: { kind: 'lyric', node: line, target: state.lastLyricTarget } });
           }
         }
+        if (line.key === 'L') {
+          bindBodyUnitLength(state.unitLength, ctx, state.currentVoiceId, validBodyUnitLengthLines, line);
+        }
         break;
       }
       default:
@@ -317,5 +341,10 @@ export function assignSegments(
     }
   }
 
-  return { voices: state.voices, segments: state.segments, ignoredFields: state.ignoredFields };
+  return {
+    voices: state.voices,
+    segments: state.segments,
+    ignoredFields: state.ignoredFields,
+    unitLengthBindings: state.unitLength.unitLengthBindings,
+  };
 }

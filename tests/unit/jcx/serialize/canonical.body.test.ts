@@ -357,16 +357,18 @@ describe('canonical body —— unitLengthChanges 重放（决策 3 / 裁决①�
     expect(body).toEqual(['[V:1]', 'C D', 'L: 1/8', 'E F |']);
   });
 
-  it('多声部：声部切换时把文档级 L: 复位回描述头的值', () => {
+  it('多声部：body L: 按声部作用域生效（spec §8.5 U06 已裁决），不再跨声部泄漏', () => {
+    // fixture 里的 `L:1/8` 出现在 `[V:2]GABc|` 之后（此刻 currentVoiceId = V2），
+    // 按 U06 裁决只归属 V2：V1 全程保持 header 的 1/4，没有 change，因此 canonical
+    // 不必再像旧版本那样在 [V:2] 段开头补一行 `L: 1/4`——上一段（V1）从未离开
+    // header 的值，序列化器天然不需要补写复位。
     const { body, score } = fixtureTrip('body-field-l-two-voices');
-    expect(score.voices.map((voice) => voice.unitLengthChanges.length)).toEqual([1, 1]);
+    expect(score.voices.map((voice) => voice.unitLengthChanges.length)).toEqual([0, 1]);
     expect(body).toEqual([
       '[V:1]',
       'C D E F |',
-      'L: 1/8',
       'c d e f |',
       '[V:2]',
-      'L: 1/4',
       'G A B c |',
       'L: 1/8',
       "g a b c' |",

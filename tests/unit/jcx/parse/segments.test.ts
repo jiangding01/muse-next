@@ -32,7 +32,8 @@ function runSegments(source: string): { ast: JcxAstDocument; result: SegmentsRes
   const ctx: ParseContext = { bag, once: onceKeyed(bag) };
   const header = parseHeader(ast, ctx);
   const { voices, registry } = parseVoices(header.voiceFields, ctx);
-  const result = assignSegments(ast, registry, voices, ctx);
+  const validBodyUnitLengthLines = new Set(header.bodyUnitLengths.map((entry) => entry.lineIndex));
+  const result = assignSegments(ast, registry, voices, ctx, validBodyUnitLengthLines);
   return { ast, result, diagnostics: bag.list() };
 }
 

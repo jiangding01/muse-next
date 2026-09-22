@@ -13,7 +13,7 @@
 import { parseAstPath } from '../ast';
 import type { DiagnosticBag } from '../lexer/diagnostics';
 import type { SourceSpan } from '../lexer/sourceSpan';
-import type { Meter, Rational, SourceRef } from '../../../domain';
+import type { Meter, Rational, SourceRef, VoiceId } from '../../../domain';
 import { fromParts } from '../../../domain';
 import { meterRatio } from './keyMeter';
 import { reportParse } from './diagnostics';
@@ -80,31 +80,43 @@ export function resolveDefaultUnitLength(
   return resolved;
 }
 
-/** 一条 body 区 `L:` 的生效起点。`lineIndex` 是 AST 行下标（0-based），即 `AstPath` 的行号。 */
+/**
+ * 一条 body 区 `L:` 的生效起点。`lineIndex` 是 AST 行下标（0-based），即 `AstPath` 的行号。
+ *
+ * `voiceId` 缺省（`undefined`）表示这条 `L:` 是 **global binding**：header 的
+ * `L:` 恒为 global；body 区出现在任何声部上下文之前的 `L:` 也是 global（spec
+ * §8.5 U06 裁决第 3 点）。有 `voiceId` 的条目只对该声部生效。
+ */
 export interface UnitLengthEntry {
   readonly lineIndex: number;
   readonly unitLength: Rational;
   /** `L:` 的值原文（如 `1/8`）：事实字段，序列化时直接写回，不由 `unitLength` 反拼。 */
   readonly raw: string;
   readonly origin: SourceRef;
+  readonly voiceId?: VoiceId;
 }
 
 /**
- * 位置敏感的单位音长查询（spec §8.5 UNVERIFIED U06）。
+ * 位置敏感、按声部作用域的单位音长查询（spec §8.5 U06 已裁决）。
  *
- * 作用域规则按方案 §2 选定的那一支：**从该 `L:` 所在行起生效，直到被下一条 `L:` 覆盖**
- * （另一支解释是「到下一个 `[V:n]` 为止」，语料无法区分，故每条 body `L:` 都带 U06 info）。
+ * 作用域规则（U06 裁决，2026-09-22）：body `L:` 只作用于它所在的声部，从该行起
+ * 生效直到被同一声部后续的 `L:` 覆盖（CONFIRMED：语料自洽 + Muse Pro 原版渲染
+ * 对照）；同一声部被 `[V:n]` 交错成多段时按声部持续到后续段（INFERRED，语料
+ * 无样本区分「按声部持续」与「按段重置」，两者在全部语料上结果相同）。出现在
+ * 任何声部上下文之前的 `L:`（无归属）与 header 的 `L:` 一律按 global 处理，对
+ * 其后所有声部生效直到被覆盖——因此每次查询都取「该声部条目 ∪ global 条目中
+ * 行号 ≤ origin 的最近一条」。
  */
 export interface UnitLengthScope {
   /** header 区最终生效的 `L:`（含 §8.5 缺省推断的结果）；无法确定时为 `undefined`。 */
   readonly header: Rational | undefined;
   readonly entries: readonly UnitLengthEntry[];
-  /** 查询某个 AST 行下标处生效的单位音长。 */
-  unitLengthAtLine(lineIndex: number): Rational | undefined;
-  /** 查询某个 AST 行下标处生效的 body 区 `L:` 条目；该处仍由描述头的 `L:` 生效时为 `undefined`。 */
-  entryAtLine(lineIndex: number): UnitLengthEntry | undefined;
-  /** 查询某个 `SourceRef`（AstPath 字符串）处生效的单位音长；非行路径时退回 header 值。 */
-  unitLengthAt(origin: SourceRef): Rational | undefined;
+  /** 查询某个 AST 行下标 + 声部处生效的单位音长；`voiceId` 省略时只看 global 条目。 */
+  unitLengthAtLine(lineIndex: number, voiceId?: VoiceId): Rational | undefined;
+  /** 查询某个 AST 行下标 + 声部处生效的 body 区 `L:` 条目；仍由 header 生效时为 `undefined`。 */
+  entryAtLine(lineIndex: number, voiceId?: VoiceId): UnitLengthEntry | undefined;
+  /** 查询某个 `SourceRef`（AstPath 字符串）+ 声部处生效的单位音长；非行路径时退回 header 值。 */
+  unitLengthAt(origin: SourceRef, voiceId?: VoiceId): Rational | undefined;
 }
 
 export function createUnitLengthScope(
@@ -114,20 +126,13 @@ export function createUnitLengthScope(
   // 文档位置序：header 的值在所有 body 条目之前生效。
   const ordered = [...entries].sort((a, b) => a.lineIndex - b.lineIndex);
 
-  const unitLengthAtLine = (lineIndex: number): Rational | undefined => {
-    let current = header;
-    for (const entry of ordered) {
-      if (entry.lineIndex > lineIndex) {
-        break;
-      }
-      current = entry.unitLength;
-    }
-    return current;
-  };
+  // 该声部条目 ∪ global 条目；`ordered` 已按 lineIndex 升序，过滤后仍保持有序。
+  const applicable = (voiceId: VoiceId | undefined): readonly UnitLengthEntry[] =>
+    ordered.filter((entry) => entry.voiceId === undefined || entry.voiceId === voiceId);
 
-  const entryAtLine = (lineIndex: number): UnitLengthEntry | undefined => {
+  const entryAtLine = (lineIndex: number, voiceId?: VoiceId): UnitLengthEntry | undefined => {
     let current: UnitLengthEntry | undefined;
-    for (const entry of ordered) {
+    for (const entry of applicable(voiceId)) {
       if (entry.lineIndex > lineIndex) {
         break;
       }
@@ -136,12 +141,17 @@ export function createUnitLengthScope(
     return current;
   };
 
-  const unitLengthAt = (origin: SourceRef): Rational | undefined => {
+  const unitLengthAtLine = (lineIndex: number, voiceId?: VoiceId): Rational | undefined => {
+    const entry = entryAtLine(lineIndex, voiceId);
+    return entry === undefined ? header : entry.unitLength;
+  };
+
+  const unitLengthAt = (origin: SourceRef, voiceId?: VoiceId): Rational | undefined => {
     const parsed = parseAstPath(origin);
     if (parsed === null || parsed.kind !== 'line') {
       return header;
     }
-    return unitLengthAtLine(parsed.line);
+    return unitLengthAtLine(parsed.line, voiceId);
   };
 
   return { header, entries: ordered, unitLengthAtLine, entryAtLine, unitLengthAt };
