@@ -132,6 +132,29 @@ export const RENDER_DIAGNOSTIC_CODES = {
    * （如 `V[...]`）在谱面上不显示。
    */
   tabGroupStrokeNotModeled: 'muse.render.tab.group-stroke-not-modeled',
+  /**
+   * T7.1 追加（`notation/staff/**`）：以下九条覆盖 Staff（五线谱）记谱的降级/越界
+   * 事实，命名与 level 沿用 jianpu/tab 既有约定（`Not-modeled` info、越界/无法识别
+   * warning，事件级挂 `event`，声部级挂 `voice`）。
+   */
+  /** 声部缺 `clef` 信息：Staff 布局用默认谱号兜底，作者没写（info，类比 `voiceStyleAbsent`）。 */
+  staffClefAbsent: 'muse.render.staff.clef-absent',
+  /** `clef` 有值但不在已知谱号表内：原样透传/降级为默认谱号（warning，语义与「没写」不同，不得合并）。 */
+  staffClefUnrecognized: 'muse.render.staff.clef-unrecognized',
+  /** Staff 声部里出现了不属于本记谱范围的事件（如 TAB 专属事件）：画可见占位，不静默丢弃。 */
+  staffEventOutOfScope: 'muse.render.staff.event-out-of-scope',
+  /** `octaveShift` 缺失但 `octaveRaw` 非空（混合方向 UNVERIFIED，spec §14.2）：只按 `register` 定基准八度。 */
+  staffOctaveMixed: 'muse.render.staff.octave-mixed',
+  /** `toStaffDuration` 返回 `beyondGlyphRange`：时值细过本层收紧的 glyph 范围上限（128th），不画具体符头。 */
+  staffDurationBeyondGlyphRange: 'muse.render.staff.duration-beyond-glyph-range',
+  /** `GraceEvent`：倚音未建模专属几何，仅按普通音符降级占位；逐条发（anchor=event）。 */
+  staffGraceNotModeled: 'muse.render.staff.grace-not-modeled',
+  /** 圆滑线（slur）关系未建模：声部级发一次（anchor=voice），不逐条挂在每个成员上。 */
+  staffSlurNotModeled: 'muse.render.staff.slur-not-modeled',
+  /** 歌词未建模：声部级发一次（anchor=voice）。 */
+  staffLyricsNotModeled: 'muse.render.staff.lyrics-not-modeled',
+  /** 和弦块成员里的休止（`Note | Rest` 联合里的 `Rest` 分支）未单独建模：随和弦整体降级占位。 */
+  staffChordMemberRestNotModeled: 'muse.render.staff.chord-member-rest-not-modeled',
 } as const satisfies Record<string, RenderDiagnosticCode>;
 
 /** 纯构造：给定 draft 与序号，得到最终诊断。`ordinal` 只参与 id，不参与语义。 */

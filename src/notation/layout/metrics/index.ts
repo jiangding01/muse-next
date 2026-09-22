@@ -16,11 +16,13 @@ import { TEXT_METRICS, LINE_METRICS, SLOT_SPACING_METRICS, SCORE_HEADER_METRICS,
 import { CHORD_METRICS } from './chord';
 import { JIANPU_METRICS } from './jianpu';
 import { TAB_METRICS } from './tab';
+import { STAFF_METRICS } from './staff';
 
 export { TEXT_METRICS, LINE_METRICS, SLOT_SPACING_METRICS, SCORE_HEADER_METRICS, SCORE_VIEW_METRICS } from './shared';
 export { CHORD_METRICS } from './chord';
 export { JIANPU_METRICS } from './jianpu';
 export { TAB_METRICS } from './tab';
+export { STAFF_METRICS } from './staff';
 
 /** 尺寸常量的唯一汇总入口；调用方按需解构，不直接在别处写字面数字。 */
 export const NOTATION_METRICS = {
@@ -30,6 +32,7 @@ export const NOTATION_METRICS = {
   slot: SLOT_SPACING_METRICS,
   jianpu: JIANPU_METRICS,
   tab: TAB_METRICS,
+  staff: STAFF_METRICS,
   scoreHeader: SCORE_HEADER_METRICS,
   scoreView: SCORE_VIEW_METRICS,
 } as const;
