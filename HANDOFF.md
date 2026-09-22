@@ -2394,7 +2394,7 @@ GitHub Actions run 35054230663（commit 3f578fe）在 macOS/Windows/Ubuntu
 
 **M1.8 §60 DoD 逐条证据**：见 §60 后的勾选表。
 
-### M2 进行中状态（Notation Rendering，T0–T7 已提交，未封板）
+### M2 进行中状态（Notation Rendering，T0–T7 已完成并封板，当前暂停）
 
 **恢复位置（2026-09-16，最后一次实跑：typecheck 绿、vitest 58 文件 3907 用例绿、`jcx:corpus-test` 与 `jcx:fixture-report` 未受 M2 影响）**：M2 方案 v1.1.1 已冻结（任务序 T0 模型+守卫 → T1
 `buildRenderScore` → T2 SVG 基础设施+度量 → T3 Chord → T4 排布/换行+Jianpu
@@ -2403,7 +2403,7 @@ T8 最终 render matrix（契约 C1/C2/C3）→ T9 文档封板）。T0–T5 已
 GitHub Actions run 35087178952 三平台全绿；随后按真实语料（corpus#10，一份
 两声部 TAB+简谱成品）人工 smoke 的发现做了 **T5.2 real-world hardening**
 （四个 fix 提交 + 一个 breve 时值能力提交，见下）；随后 **T6 TAB 六线谱 T6.1–T6.5 全部完成**（见下），
-**下一步是 T7 Staff + VexFlow adapter**（历史记录：T7 已于 2026-09-22 完成并推送，见下方 T7 状态段）。`src/renderer` 里只剩五线谱声部显示「五线谱渲染待 T7」占位。
+历史规划中的下一步曾是 T7 Staff + VexFlow adapter；该阶段已于 2026-09-22 完成并封板（见下方 T7 状态段）。`src/renderer` 里只剩五线谱声部显示「五线谱渲染待 T7」占位。
 
 **管线与边界**（已由测试守住）：`loadJcx → {Score, DomainIndex} → RenderInput
 → src/notation/model（纯函数、flat 投影，不加 Measure）→ src/notation/{chord,
