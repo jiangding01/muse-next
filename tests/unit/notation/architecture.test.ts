@@ -100,7 +100,7 @@ describe('notation 架构守卫 —— 依赖方向（§2.1）', () => {
    * P1-4：`vexflow` 单列一条用例，**无 whitelist**。守卫的是**依赖边**——静态 import、
    * type-only import、`export … from`、动态 `import()`、`require()` 五种语法全覆盖
    * （见 `collectSpecifiers`）；提到 vexflow 的注释不算依赖，不参与判定。
-   * 唯一允许 import 它的文件是 `src/renderer/integrations/vexflow/renderStaff.ts`（T7）。
+   * 唯一允许目录 `src/renderer/integrations/vexflow/**`（T7）。
    */
   it('src/notation/** 零 vexflow 依赖边，且没有任何放行名单', () => {
     const offenders = files.filter((file) =>
@@ -280,5 +280,48 @@ describe('renderer 架构守卫 —— 反方向：不回到 AST / parse 内部�
     expect(FORBIDDEN_PRESENTATION_HELPER_RE.test(probeConst)).toBe(true);
     const probeImportPath = "import { parseDirectives } from '../../formats/jcx/parse/directives';";
     expect(FORMATS_JCX_SUBPATH_RE.test(probeImportPath)).toBe(true);
+  });
+});
+
+/**
+ * 全仓 vexflow 守卫（T7.0，M2 方案 v1.1.1 §2.1 补充）。
+ *
+ * 上面 notation 层的用例只管 `src/notation/**` 零 vexflow；但 vexflow 是 T7 才引入的
+ * 新依赖，真正需要钉住的是**全仓**——`src/main/**`、`src/preload/**`、
+ * `src/renderer/components/**` 等任何目录都不该有一条 vexflow 依赖边，唯一允许目录是
+ * `src/renderer/integrations/vexflow/**`（T7 后续小节落地）。该目录当前可能还不存在，
+ * 守卫在「没有任何文件 import vexflow」时也必须通过——这是先立守卫、后写实现的顺序。
+ */
+describe('全仓 vexflow 守卫 —— vexflow 依赖边只能出现在 renderer/integrations/vexflow/**（T7.0）', () => {
+  const SRC_DIR = join(import.meta.dirname, '../../../src');
+  const VEXFLOW_ALLOWED_DIR = join(SRC_DIR, 'renderer', 'integrations', 'vexflow');
+  const srcFiles = collectFiles(SRC_DIR);
+
+  function relSrc(file: string): string {
+    return relative(SRC_DIR, file).split(sep).join('/');
+  }
+
+  function importsVexflow(file: string): boolean {
+    return collectSpecifiers(readFileSync(file, 'utf8')).some((spec) =>
+      /(^|\/)vexflow(\/|$)/.test(spec),
+    );
+  }
+
+  it('至少扫到 src/** 的一些文件（守卫没有扫空目录）', () => {
+    expect(srcFiles.length).toBeGreaterThan(0);
+  });
+
+  it('src/** 里任何 vexflow 依赖边只允许出现在 src/renderer/integrations/vexflow/**', () => {
+    const offenders = srcFiles.filter(
+      (file) => importsVexflow(file) && !(file + sep).startsWith(VEXFLOW_ALLOWED_DIR + sep),
+    );
+    expect(offenders.map(relSrc)).toEqual([]);
+  });
+
+  it('src/renderer/components/** 没有 vexflow 依赖边', () => {
+    const COMPONENTS_DIR = join(SRC_DIR, 'renderer', 'components');
+    const componentFiles = collectFiles(COMPONENTS_DIR);
+    const offenders = componentFiles.filter(importsVexflow);
+    expect(offenders.map(relSrc)).toEqual([]);
   });
 });
