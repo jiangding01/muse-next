@@ -2659,6 +2659,8 @@ visual debt、T7 第 6 条），按 视觉 / 架构 / 测试 分类，每行注�
 | 测试 | `spacing.ts` 里 `chordSymbol` 的两处判定点（`itemSlotWidth` 的 overlay 判定先行截断，`timedDurationOf` 穷尽性 `switch` 里再列一遍 `timed: false`）靠代码注释纪律保持一致，缺自动化的防分叉单测（两处改动不同步时不会有测试报警） | T6 |
 | 测试 | VexFlow adapter（`renderer/integrations/vexflow/**`）无自动化 DOM 测试，人工 smoke 覆盖；不引入 jsdom 的理由是 5642 个用例（T8.1 后）全基于 Node 纯函数，不是「VexFlow 明示不兼容 jsdom」 | T7 |
 
+**Jianpu Engraving Polish Phase A（2026-09-22，`80edda1`，独立于 M2.5 的字形/间距任务，用户 Electron 100% 实机复验通过）**：`jianpuGlyphs.ts` 机械拆出 `jianpuGlyphBuilders.ts`；附点/延音线/八度点/小节线/反复记号几何与 `JIANPU_METRICS` 重标定；`jianpuDashDotPlan` 按简谱惯例换算附点与延音线（`jianpuSlotWidths` 同源消费，只加宽契约保持）；文档页眉 `1=<调>` + 叠排拍号（`layoutScoreHeader.jianpuTonicLabel/jianpuMeterFraction`，仅含简谱声部时）；`buildHeaderLabels` 恒空（声部行首不再画 `K:/M:`，P1-2 改写为「声部行首不显示调号拍号，由页眉承担」）。**Phase B（减时线粗细/垂直间距/组内列宽字形层）未做**，与 beam 分组一并归 M2.5 T3.5。P2 debt：`labelFontSize`/`headerLabelGap` 成死常量、`labels` 渲染路径保留；`jianpuSections.ts` 336 行接近上限。**当前状态：Phase A 提交后主动暂停；不进 Phase B，不启动 M2.5 T0，需用户明确指令。**
+
 **M2.5 派发要点（方案已冻结：`docs/M2.5_SYSTEM_LAYOUT_PLAN.md` v1.0，2026-09-22；冻结后改动需用户裁决，T0 启动需用户明确指令）**：
 - 前置条件（M2.5 之前、独立 formats 小任务）：~~`strokePrefix → TabGroupEvent.stroke` 回填~~ **已完成（2026-09-22，M2.5 formats preflight）**：`scan.ts` 顶层循环把紧邻 `tabGroup` 的 `strokePrefix` 绑进 `TabGroupEvent.stroke`，不改 Domain 类型/serializer 代码，dangling-stroke 诊断未对绑定成功的 group stroke 误报（真悬空的仍照常发 info）。U06（body `L:` 按声部作用域）已于 `8a74e8e` 结案。
 - 架构：`src/notation/system/**`（contracts 叶子层 → groupVoices / measureIdentity / timeline / composeSystem / justify / chordOverlay / pageModel）；System = overlay layers（chord diagrams，`layoutChord` 保持 document 级）+ ordered voice layers（jianpu/tab/staff 接受外部 system/measure 几何）+ attached layers（lyrics）；voice layout 不得反向 import composer。
