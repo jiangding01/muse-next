@@ -2,7 +2,7 @@
 
 > 面向后续实现 Agent 的项目交接文档  
 > 项目代号：`muse-next`  
-> 当前阶段：**M0–M1.8 已封板；M2 Notation Rendering 进行中（T0–T7 已完成：Chord / Jianpu / TAB / Staff 四种记谱可渲染；T7 已推送待 seal，seal 后主动暂停，不自动启动 T8；恢复时从 T8 render matrix 开始）**（详见 §30 里程碑表、§30.1「M2 进行中状态」、§69「当前明确的下一任务」）  
+> 当前阶段：**M0–M1.8 已封板；M2 Notation Rendering 进行中（T0–T7 已完成：Chord / Jianpu / TAB / Staff 四种记谱可渲染；T7 已于 2026-09-22 封板 ✅；当前主动暂停，不自动启动 T8；恢复时从 T8 render matrix 开始）**（详见 §30 里程碑表、§30.1「M2 进行中状态」、§69「当前明确的下一任务」）  
 > 核心目标：以现代 TypeScript 技术栈重建已停止维护的 **Muse Pro 2.70** 的核心能力，并优先恢复其 `.jcx` 乐谱格式、谱面渲染、编辑与播放能力。
 
 ---
@@ -1776,7 +1776,7 @@ Round-trip compatibility（fixture 矩阵 + closure + CI 看板，见 §30.1「M
 
 🟡 M2
 Notation Rendering（进行中：T0–T7 已推送，Chord / Jianpu / TAB / Staff 四种记谱可渲染；
-T7 待 seal，seal 后主动暂停 → T8 render matrix → T9 文档封板未开始；现状与恢复位置见
+T7 ✅ 2026-09-22 封板（CI run 35696163723）；当前主动暂停 → T8 render matrix → T9 文档封板未开始；现状与恢复位置见
 §30.1「M2 进行中状态」）
 
 → M3
@@ -2498,8 +2498,7 @@ UnknownEvent 恰一个可见节点；C2：fallback 节点至少一条诊断）�
 - 测试：tab.layout 27 / tab.duration 23 / tab.relations 25+3 / tab.toSvg 12 /
   scoreView.voiceRender 7 / spacing.overlay 12 / chordSymbolDisplay 9；全量 4140。
 
-**T7 Staff + VexFlow（T7.0–T7.5 全部完成，已推送、**待 seal**——seal commit 要等 push
-后三平台 CI 再次确认全绿才补 §30 的 ✅）**：
+**T7 Staff + VexFlow（T7.0–T7.5 全部完成，✅ 2026-09-22 封板：05760d9 推送后 GitHub Actions run 35696163723 macOS/Ubuntu/Windows 三平台 typecheck / test / fixture-report 全绿）**：
 
 - T7.0 `99f0f3d` 地基：引入 `vexflow@5.0.0`（精确版本），全仓 vexflow 守卫
   （`tests/unit/notation/architecture.test.ts`）扫 `src/**`，唯一允许目录
@@ -4094,7 +4093,7 @@ M1.3 / M1.4 / M1.5 / M1.6 / M1.7 / M1.8 已完成
 模块清单/canonical 规则摘要、语料四级回归结果、以及 M1.8 T0–T4 的 fixture
 矩阵/closure/CI 看板完整现状快照；§55–§60 DoD 已逐条打勾给证据，M1.8 于
 2026-09-16 经 GitHub Actions 三平台全绿封板）。**M2 已完成到 T7，Staff + VexFlow
-已推送、待 seal**（§30.1「M2 进行中状态」有 T0–T7 完整状态、T7 visual debt、
+已于 2026-09-22 封板 ✅**（§30.1「M2 进行中状态」有 T0–T7 完整状态、T7 visual debt、
 待裁决事项与 T8 派发要点）。**当前项目在 T7 后主动暂停，不自动启动 T8。**
 
 恢复时：
