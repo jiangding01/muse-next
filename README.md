@@ -17,7 +17,7 @@ Electron / React 技术栈重建其核心能力，优先顺序是：
 
 **当前阶段**：`.jcx` 格式的解码、词法、无损 AST、Domain 归一化、序列化
 （preserve / canonical 两种模式）与 round-trip 兼容性护栏均已完成并通过三平台 CI
-（M0–M1.8，见 §5「路线图」）；谱面渲染（M2）T0–T9 已全部完成、待封板——
+（M0–M1.8，见 §5「路线图」）；谱面渲染（M2）T0–T9 已全部完成并封板（2026-09-22）——
 和弦图（Chord）、简谱（Jianpu）、吉他 TAB、五线谱（Staff，经 VexFlow adapter）
 四种记谱均可渲染，支持缩放与渲染诊断面板，并有覆盖四种记谱的契约测试矩阵
 （见 §5「路线图」）。
@@ -172,7 +172,7 @@ projectionEquals(before, after); // true 表示语义往返无损
 | M1.7 | Serializer（preserve / canonical） |
 | M1.8 | Round-trip 兼容性护栏（fixture 矩阵 + closure + CI 看板） |
 
-已完成（待封板）：
+已完成（2026-09-22 封板）：
 
 - **M2 — Notation Rendering**：从 `src/domain/` 的 `Score` 出发画谱面，**不**从
   JCX 文本或 AST 直接画，四种记谱 Chord / Jianpu / TAB / Staff 均已可渲染（Chord

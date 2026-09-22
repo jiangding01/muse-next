@@ -18,9 +18,8 @@ evidence level 以 [`docs/JCX_SPEC.md`](docs/JCX_SPEC.md) 为准。
 M1.8「Round-trip Guardrails」已封板。**M2 — Notation Rendering T0–T9 已全部
 完成**：渲染模型、SVG 基础设施、Chord 图、Jianpu 排布/换行/SVG、React 视图、
 T5.2 real-world hardening、TAB 六线谱、Staff + VexFlow adapter、T8 render
-matrix（C1/C2/C3 三条契约对四种记谱的用例矩阵）、T9 文档封板均已推送，**待
-M2 seal**（push 后三平台 CI 全绿由 seal commit 补上里程碑表的 M2 行 ✅）；
-seal 后进入 M3 前的 UI 设计（功能清单 + 设计要求）。四种记谱（Chord / Jianpu
+matrix（C1/C2/C3 三条契约对四种记谱的用例矩阵）、T9 文档封板均已完成，**M2 已于 2026-09-22 封板**（seal 前 push 的 CI run
+35700198783 三平台全绿）；下一步是 M3 前的 UI 设计（功能清单 + 设计要求）。四种记谱（Chord / Jianpu
 / TAB / Staff）均可渲染，支持缩放与诊断面板。现状、遗留债务与恢复位置见
 `HANDOFF.md` §30.1「M2 进行中状态」。
 

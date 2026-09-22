@@ -2,7 +2,7 @@
 
 > 面向后续实现 Agent 的项目交接文档  
 > 项目代号：`muse-next`  
-> 当前阶段：**M0–M1.8 已封板；M2 Notation Rendering T0–T9 已全部完成（Chord / Jianpu / TAB / Staff 四种记谱可渲染 + T8 render matrix 契约测试 + T9 文档封板），已推送、待 M2 seal（push 后三平台 CI 全绿由 seal commit 补上 §30 的 M2 行 ✅）；seal 后进入 M3 前的 UI 设计（功能清单 + 设计要求）**（详见 §30 里程碑表、§30.1「M2 进行中状态」、§69「当前明确的下一任务」）  
+> 当前阶段：**M0–M1.8 已封板；M2 Notation Rendering T0–T9 已全部完成（Chord / Jianpu / TAB / Staff 四种记谱可渲染 + T8 render matrix 契约测试 + T9 文档封板），✅ 2026-09-22 封板（CI run 35700198783）；下一步是 M3 前的 UI 设计（功能清单 + 设计要求）**（详见 §30 里程碑表、§30.1「M2 进行中状态」、§69「当前明确的下一任务」）  
 > 核心目标：以现代 TypeScript 技术栈重建已停止维护的 **Muse Pro 2.70** 的核心能力，并优先恢复其 `.jcx` 乐谱格式、谱面渲染、编辑与播放能力。
 
 ---
@@ -1774,11 +1774,12 @@ Round-trip compatibility（fixture 矩阵 + closure + CI 看板，见 §30.1「M
 实际状态」；2026-09-16 GitHub Actions run 35054230663 于 macOS/Windows/Ubuntu
 三平台 typecheck / test / fixture report 全绿后封板）
 
-🟡 M2
+✅ M2
 Notation Rendering（T0–T9 已完成，已推送：Chord / Jianpu / TAB / Staff 四种记谱可渲染，
 T8 render matrix 契约测试（C1/C2/C3）与 T9 文档封板均已完成；
-T7 ✅ 2026-09-22 封板（CI run 35696163723）；待 M2 seal（push 后三平台 CI 全绿由 seal
-commit 补上本行 ✅）；现状见 §30.1「M2 进行中状态」）
+T7 ✅ 2026-09-22 封板（CI run 35696163723）；M2 ✅ 2026-09-22 封板：2ce3e6b 推送后
+GitHub Actions run 35700198783 macOS/Ubuntu/Windows 三平台 typecheck / test / fixture-report 全绿；
+现状与债务总表见 §30.1「M2 进行中状态」）
 
 → M3
 Editor Core
@@ -2395,7 +2396,7 @@ GitHub Actions run 35054230663（commit 3f578fe）在 macOS/Windows/Ubuntu
 
 **M1.8 §60 DoD 逐条证据**：见 §60 后的勾选表。
 
-### M2 进行中状态（Notation Rendering，T0–T9 已完成，待 M2 seal）
+### M2 进行中状态（Notation Rendering，T0–T9 已完成，✅ 2026-09-22 封板，CI run 35700198783）
 
 **恢复位置（2026-09-16，最后一次实跑：typecheck 绿、vitest 58 文件 3907 用例绿、`jcx:corpus-test` 与 `jcx:fixture-report` 未受 M2 影响）**：M2 方案 v1.1.1 已冻结（任务序 T0 模型+守卫 → T1
 `buildRenderScore` → T2 SVG 基础设施+度量 → T3 Chord → T4 排布/换行+Jianpu
@@ -3110,7 +3111,7 @@ validate
 
 # 40. M2：Notation Rendering
 
-> 本节是早期规划，**M2 T0–T9 已全部完成**（已推送、待 seal），实际状态与债务见
+> 本节是早期规划，**M2 T0–T9 已全部完成并于 2026-09-22 封板**，实际状态与债务见
 > §30.1「M2 进行中状态」。
 
 完成 JCX format layer 后进入渲染。
@@ -4154,7 +4155,7 @@ M1.3 / M1.4 / M1.5 / M1.6 / M1.7 / M1.8 已完成
 2026-09-16 经 GitHub Actions 三平台全绿封板）。**M2 T0–T9 已全部完成**：
 Chord / Jianpu / TAB / Staff 四种记谱可渲染（T0–T7，T7 Staff + VexFlow 已于
 2026-09-22 封板 ✅）、T8 render matrix 补齐 C1/C2/C3 三条契约的用例、T9 完成
-本轮文档封板；已推送，**待 M2 seal**（§30.1「M2 进行中状态」有 T0–T9 完整
+本轮文档封板；**M2 已于 2026-09-22 封板 ✅（CI run 35700198783）**（§30.1「M2 进行中状态」有 T0–T9 完整
 状态、M2 遗留债务总表与「M2 seal 与 M3 前置」要点）。
 
 恢复时：
