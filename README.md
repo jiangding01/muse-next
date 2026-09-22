@@ -17,7 +17,10 @@ Electron / React 技术栈重建其核心能力，优先顺序是：
 
 **当前阶段**：`.jcx` 格式的解码、词法、无损 AST、Domain 归一化、序列化
 （preserve / canonical 两种模式）与 round-trip 兼容性护栏均已完成并通过三平台 CI
-（M0–M1.8，见 §5「路线图」）；谱面渲染（M2）尚未开始。
+（M0–M1.8，见 §5「路线图」）；谱面渲染（M2）T0–T9 已全部完成、待封板——
+和弦图（Chord）、简谱（Jianpu）、吉他 TAB、五线谱（Staff，经 VexFlow adapter）
+四种记谱均可渲染，支持缩放与渲染诊断面板，并有覆盖四种记谱的契约测试矩阵
+（见 §5「路线图」）。
 
 ## 2. 核心发现与设计原则
 
@@ -169,14 +172,21 @@ projectionEquals(before, after); // true 表示语义往返无损
 | M1.7 | Serializer（preserve / canonical） |
 | M1.8 | Round-trip 兼容性护栏（fixture 矩阵 + closure + CI 看板） |
 
-下一阶段：
+已完成（待封板）：
 
 - **M2 — Notation Rendering**：从 `src/domain/` 的 `Score` 出发画谱面，**不**从
-  JCX 文本或 AST 直接画。推荐优先级 Chord → Jianpu → TAB → Staff（Chord 已有可借鉴
-  的 SVG 实现，Jianpu 是与主流制谱软件的核心差异能力）。VexFlow 只能作为 Staff 的
-  adapter，依赖方向固定为 `Domain Model → Adapter → VexFlow` 单向，不得让
-  `JCX Parser → VexFlow objects` 短路。
+  JCX 文本或 AST 直接画，四种记谱 Chord / Jianpu / TAB / Staff 均已可渲染（Chord
+  借鉴既有 SVG 实现，Jianpu 是与主流制谱软件的核心差异能力）。VexFlow 只作为
+  Staff 的 adapter，依赖方向固定为 `Domain Model → Adapter → VexFlow` 单向，
+  `src/renderer/integrations/vexflow/**` 是全仓唯一允许 import VexFlow 的目录，
+  `JCX Parser → VexFlow objects` 未被短路。渲染层有覆盖四种记谱的 C1/C2/C3 契约
+  测试矩阵（详见 `HANDOFF.md` §30.1「M2 进行中状态」），待三平台 CI 全绿后封板。
+  全仓测试规模（`npm test`）：74 个测试文件 / 5882 个用例全部通过。
+
+下一阶段：
+
 - **M3 — Editor Core**：选区/光标模型、命令架构、撤销重做、源码 ↔ 可视化选区同步。
+  开工前先完成 M3 前的 UI 设计（功能清单 + 设计要求）。
 - **M4 及以后 — Playback / Import-Export / Layout**：播放、MIDI 导入导出、页面布局
   与打包分发。以 `HANDOFF.md` §61 的规划为准，本文档不重复展开、不提前承诺细节。
 

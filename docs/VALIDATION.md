@@ -16,6 +16,33 @@
 > 重复维护。下面保留的是历史上第一条验证记录，作为项目验证方式演进的起点，不代表
 > 当前的验证覆盖范围。
 
+## 2026-09-22 — M2 T8 render matrix：C1/C2/C3 契约的自动化矩阵回归
+
+`tests/unit/notation/render.matrix.test.ts` + `renderMatrix.helpers.ts`
+（后者文件头是契约定义与矩阵覆盖表的唯一权威出处）对 Chord / Jianpu / TAB /
+Staff 四种记谱验证三条契约：C1 每个 `RenderItem` 在该声部布局里恰好一个可见
+节点；C2 每个 `fallback: true` 节点至少一条诊断指向它；C3 每条渲染诊断的
+`anchor` 可经 `DomainIndex` 解析、`anchorKey()` 稳定。
+
+**用例构成（1434 条）**：102 个 fixture × 两档 `availableWidth`（wide 100000
+不换行 / narrow 16 逼出多行谱）× C1/C2/C3；fixture × D12（style 缺席/未知）；
+fixture × chord 的 C1′ 口径；25 个合成边界用例 × 四种记谱 × 两档宽度 × 三条
+契约；dangling 端点定点用例 9 条；反空转哨兵 3 条（每种记谱 fallback 节点数
+> 0：jianpu 30 / tab 148 / staff 42；诊断种类数 > 10：staff 12 / tab 6 /
+jianpu 7；窄宽度下跨行 tie 确实产生 > 1 个 system）；跨行拆段 1 条；确定性
+（同输入两次布局结果相同）4 条；诊断码来源 1 条。
+
+**chord 的 C1′ 口径**：`Score.chordShapes` 是文档级对象，`ChordLayout.anchor`
+恒为 `{ kind: 'document' }`，与声部事件之间没有映射（D11 默认关闭）；断言
+改为「每个 `GuitarChord` 恰好一个 `ChordLayout`、每个 `ChordLayout` 恰好 6
+条弦标记、对事件的可见节点数恒为 0、`ChordLayout` 无 `fallback` 字段因此
+C2 恒为空集」。
+
+**结果**：零契约违规；变异检验——临时在 `buildRenderScore` 漏派一类事件，
+C1 断言红 204 条，证明矩阵能真的抓到回归。全量 vitest 74 文件 / 5882 用例；
+corpus smoke 11/11；GB18030 encoding composition 10/10；只读审查（`/check`）
+无 P1/P2；测试运行耗时 494ms。
+
 ## 2026-09-22 — M2 五线谱（Staff + VexFlow）渲染：人工 smoke + 修复复验（Electron 桌面窗口）
 
 **人工 smoke 顺序**：corpus#05（含唯一 staff 声部的真实语料）→ 6 个

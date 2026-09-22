@@ -2,7 +2,7 @@
 
 > 面向后续实现 Agent 的项目交接文档  
 > 项目代号：`muse-next`  
-> 当前阶段：**M0–M1.8 已封板；M2 Notation Rendering 进行中（T0–T7 已完成：Chord / Jianpu / TAB / Staff 四种记谱可渲染；T7 已于 2026-09-22 封板 ✅；当前主动暂停，不自动启动 T8；恢复时从 T8 render matrix 开始）**（详见 §30 里程碑表、§30.1「M2 进行中状态」、§69「当前明确的下一任务」）  
+> 当前阶段：**M0–M1.8 已封板；M2 Notation Rendering T0–T9 已全部完成（Chord / Jianpu / TAB / Staff 四种记谱可渲染 + T8 render matrix 契约测试 + T9 文档封板），已推送、待 M2 seal（push 后三平台 CI 全绿由 seal commit 补上 §30 的 M2 行 ✅）；seal 后进入 M3 前的 UI 设计（功能清单 + 设计要求）**（详见 §30 里程碑表、§30.1「M2 进行中状态」、§69「当前明确的下一任务」）  
 > 核心目标：以现代 TypeScript 技术栈重建已停止维护的 **Muse Pro 2.70** 的核心能力，并优先恢复其 `.jcx` 乐谱格式、谱面渲染、编辑与播放能力。
 
 ---
@@ -1775,9 +1775,10 @@ Round-trip compatibility（fixture 矩阵 + closure + CI 看板，见 §30.1「M
 三平台 typecheck / test / fixture report 全绿后封板）
 
 🟡 M2
-Notation Rendering（进行中：T0–T7 已推送，Chord / Jianpu / TAB / Staff 四种记谱可渲染；
-T7 ✅ 2026-09-22 封板（CI run 35696163723）；当前主动暂停 → T8 render matrix → T9 文档封板未开始；现状与恢复位置见
-§30.1「M2 进行中状态」）
+Notation Rendering（T0–T9 已完成，已推送：Chord / Jianpu / TAB / Staff 四种记谱可渲染，
+T8 render matrix 契约测试（C1/C2/C3）与 T9 文档封板均已完成；
+T7 ✅ 2026-09-22 封板（CI run 35696163723）；待 M2 seal（push 后三平台 CI 全绿由 seal
+commit 补上本行 ✅）；现状见 §30.1「M2 进行中状态」）
 
 → M3
 Editor Core
@@ -2394,7 +2395,7 @@ GitHub Actions run 35054230663（commit 3f578fe）在 macOS/Windows/Ubuntu
 
 **M1.8 §60 DoD 逐条证据**：见 §60 后的勾选表。
 
-### M2 进行中状态（Notation Rendering，T0–T7 已完成并封板，当前暂停）
+### M2 进行中状态（Notation Rendering，T0–T9 已完成，待 M2 seal）
 
 **恢复位置（2026-09-16，最后一次实跑：typecheck 绿、vitest 58 文件 3907 用例绿、`jcx:corpus-test` 与 `jcx:fixture-report` 未受 M2 影响）**：M2 方案 v1.1.1 已冻结（任务序 T0 模型+守卫 → T1
 `buildRenderScore` → T2 SVG 基础设施+度量 → T3 Chord → T4 排布/换行+Jianpu
@@ -2403,7 +2404,7 @@ T8 最终 render matrix（契约 C1/C2/C3）→ T9 文档封板）。T0–T5 已
 GitHub Actions run 35087178952 三平台全绿；随后按真实语料（corpus#10，一份
 两声部 TAB+简谱成品）人工 smoke 的发现做了 **T5.2 real-world hardening**
 （四个 fix 提交 + 一个 breve 时值能力提交，见下）；随后 **T6 TAB 六线谱 T6.1–T6.5 全部完成**（见下），
-历史规划中的下一步曾是 T7 Staff + VexFlow adapter；该阶段已于 2026-09-22 完成并封板（见下方 T7 状态段）。`src/renderer` 里只剩五线谱声部显示「五线谱渲染待 T7」占位。
+历史规划中的下一步曾是 T7 Staff + VexFlow adapter；该阶段已于 2026-09-22 完成并封板（见下方 T7 状态段）。`src/renderer` 里只剩五线谱声部显示「五线谱渲染待 T7」占位。随后 **T8 render matrix**（C1/C2/C3 三条契约对四种记谱的用例矩阵）与 **T9 文档封板**（本节与 CHANGELOG / VALIDATION / README 的同步）均已完成（见下方 T8/T9 状态段），M2 T0–T9 全部完成，已推送，待三平台 CI 全绿后由 seal commit 把 §30 的 M2 行标 ✅。
 
 **管线与边界**（已由测试守住）：`loadJcx → {Score, DomainIndex} → RenderInput
 → src/notation/model（纯函数、flat 投影，不加 Measure）→ src/notation/{chord,
@@ -2559,47 +2560,102 @@ UnknownEvent 恰一个可见节点；C2：fallback 节点至少一条诊断）�
   `grep -c artifactory package-lock.json` = 0；CI 三平台绿（run `35688854397`
   覆盖 T7.0–T7.4，run `35690835529` 覆盖 T7.5 修复）。
 
-**已知观察 / 待裁决 / visual debt（恢复时先看）**：
+**T8 render matrix（✅ 已完成：`4d2bcfe` 只加测试，不改 `src/**`）**：为 C1/C2/C3
+三条契约在 Chord / Jianpu / TAB / Staff 四种记谱上补齐用例，新增
+`tests/unit/notation/render.matrix.test.ts`（317 行）+
+`tests/unit/notation/renderMatrix.helpers.ts`（237 行，机械操作与契约/覆盖表的
+**唯一权威出处**，T9 文档同步取这里而不是测试文件本身）。三条契约：C1 每个
+`RenderItem` 在该声部布局里恰好一个可见节点；C2 每个 `fallback: true` 节点至少
+一条诊断指向它；C3 每条渲染诊断的 `anchor` 可经 `DomainIndex` 解析且
+`anchorKey()` 稳定。
 
-0. TAB visual debt：`x` 品位字形比数字矮，按 `fretBaselineRatio` 定位后略高于弦线
-   （可给 `x` 单独基线比例）；相邻减时线不做 beam grouping（连续八分音符各画各的
-   减时线，不合并成横梁）；休止画 `z`/`Z`/`@` 原字符不用休止符号；单音级 stroke 在
-   语料里 0 次、组级 `V[`/`U[`/`B[` 不显示（限制②）。
+- 用例构成（1434 条矩阵用例）：102 个 fixture × 两档 `availableWidth`
+  （wide 100000 不换行 / narrow 16 逼出多行谱）× C1/C2/C3，另加 fixture × D12
+  （style 缺席/未知）、fixture × chord 的 C1′ 口径、25 个合成边界用例 ×
+  四种记谱 × 两档宽度 × 三条契约，加上 dangling 端点定点用例 9 条、反空转
+  哨兵 3 条（每种记谱 fallback 节点数 > 0：jianpu 30 / tab 148 / staff 42；
+  诊断种类数 > 10：staff 12 / tab 6 / jianpu 7；窄宽度下跨行 tie 确实产生
+  > 1 个 system），以及跨行拆段 1 条、确定性（同输入两次布局结果相同）4 条、
+  诊断码来源 1 条。
+- chord 的 C1′ 口径：`Score.chordShapes` 是文档级对象，`ChordLayout.anchor`
+  恒为 `{ kind: 'document' }`，与声部事件之间没有任何映射（D11：按名关联仅
+  `INFERRED`，默认关闭）；矩阵断言改为「每个 `GuitarChord` 恰好一个
+  `ChordLayout`、每个 `ChordLayout` 恰好 6 条弦标记、对事件的可见节点数恒为 0
+  （不是漏画）、`ChordLayout` 没有 `fallback` 字段因此 C2 恒为空集」。
+- 跳过项（均为显式改写，非静默跳过）：style 缺席/未知声部不跑通用 C1（D12 下
+  无 layout），改为 D12 专用用例区分 style-absent / style-unknown 两态；
+  dangling 端点用例（靠人为剪掉 `index.eventById` 里一项制造）不跑通用 C3
+  （用通用 C3 断言等于断言「我造的故障没生效」），改为定点断言 relation 分支
+  的 C3；跨记谱事件（tab 事件落入 jianpu/staff、pitch 事件落入 tab）靠
+  `layoutVoiceAs` 强制分派造出，不依赖真实语料里恰好存在这类混排。
+- 结果：零契约违规；变异检验通过——临时在 `buildRenderScore` 漏派一类事件，
+  C1 断言红 204 条（证明矩阵不是摆设）。
+- 数字：全量 vitest 74 文件 / 5882 用例；corpus smoke 11/11；GB18030 encoding
+  composition 10/10；T8 只读审查（`/check`）无 P1/P2；测试运行耗时 494ms。
+
+**T9 文档封板（✅ 本节，只改文档：`HANDOFF.md` / `CHANGELOG.md` /
+`docs/VALIDATION.md` / `README.md`）**：把上面 T8 的契约与矩阵事实同步进这
+四份文档；HANDOFF 顶部状态行与 §30 表 M2 行改为「T0–T9 完成、待 seal」（不
+标 ✅，seal 由三平台 CI 全绿后单独 commit 补上）；§69「下一任务」改为指向
+seal 流程与 M3 前的 UI 设计；把散落在 §30.1 第 5 条（T7 遗留）、T6 段（TAB
+视觉细节）、T7 段第 6 条（Staff 遗留）里的债务合并为本节末尾的「M2 遗留债务
+总表」，作为后续 Agent 恢复工作的单一入口。
+
+**已知观察 / 待裁决（非债务，决策与说明记录，恢复时先看）**：
 
 1. ~~duration capability（breve）~~ 已由 T5.2-E `de23124` 解决（见上）。
-2. 附点位置（**记为 debt，用户 2026-09-17 裁决**）：现画在数字右侧、延音线之前
-   （`X . _ _ _`）；简谱习惯长音的附点在延音线之后。未核实，属视觉 polish，
-   T9 前不处理。
-3. 16 分音符最小槽宽 12u = 减时线长 12u，相邻减时线相连是正确写法，但紧跟小节线
+2. 16 分音符最小槽宽 12u = 减时线长 12u，相邻减时线相连是正确写法，但紧跟小节线
    时显得拥挤（`12|`）；T4 间距设计，未动。
-4. `[V:1]` 段内 inline `L:` 同时进入两个声部的 `unitLengthChanges`：**非 bug**，
+3. `[V:1]` 段内 inline `L:` 同时进入两个声部的 `unitLengthChanges`：**非 bug**，
    parse 诊断 `jcx.parse.unit-length.body-scope` 已按 U06「从该行起生效直到
    被下一条 L: 覆盖」处理。
-5. T9 需记入文档的债务：头部字号 CSS/metrics 双来源；
-   `ScoreHeaderTextLine.fontSize/width` 无消费方；a11y 未做；
-   `src/renderer/dist` 产物入库待清理；语料时值 `5/8` 2 处 unrepresentable；
-   `syllableKind` 类型可收窄；350 行上限无自动守卫；歌词居中 polish。
 
-6. T7 追加的 visual debt（T9 前不处理，供 T8/T9 参考）：`STAFF_METRICS.lineGap` 8u
-   与 VexFlow 实际谱线距 10px 不一致（仅影响自绘 tuplet bracket / 热区偏移，不影响
-   VexFlow 自己画的谱线）；`keySignatureAccidentalReserve` 固定按 7 个升降号预留，
-   偏保守（多数调号用不到这么宽）；不做 beam（暂缓单独裁决）；slur/lyrics 未画（voice
-   级 info 占位）；行内不做两端对齐、密度校准（40u）待后续 engraving 轮次；极窄容器
-   （`availableWidth` < 行首预留）时单小节超宽未测；adapter 无自动化 DOM 测试（不引
-   jsdom 的理由：4400+ 用例全基于 Node 纯函数，不是「VexFlow 明示不兼容」）；`'256'`
-   时值码字形未核实。
+**M2 遗留债务总表（T9 整合，恢复 M3 前或做视觉 polish 时先查这里）**：下表合并了
+T5.2/T6/T7 各阶段散落记录的债务（原 §30.1 第 5 条「T9 需记入文档的债务」、T6 TAB
+visual debt、T7 第 6 条），按 视觉 / 架构 / 测试 分类，每行注明来源任务，T9 前均
+不处理：
 
-**T8 派发要点（M2 T7 之后、主动暂停，恢复时从这里继续）**：T8 是最终 render
-matrix（建议 Opus），补齐 C1/C2/C3 三条契约对 Chord / Jianpu / TAB / Staff **四种
-记谱（含 T7 新增的 Staff）**的用例——C1 每个事件恰好一个可见节点、C2 降级节点必带
-`fallback: true` 且至少一条诊断、C3 诊断 `anchor` 指向正确的事件/关系。完成后进
-T9 文档封板 → M2 seal（三平台 CI 全绿后由 seal commit 把 §30 的 M2 行、T7 行标
-✅）→ 提醒用户做 M3 前的 UI 设计（功能清单 + 设计要求）。
+| 分类 | 内容 | 来源 |
+|---|---|---|
+| 视觉 | TAB `x` 品位字形比数字矮，按 `fretBaselineRatio` 定位后略高于弦线（可给 `x` 单独基线比例） | T6 |
+| 视觉 | TAB 相邻减时线不做 beam grouping（连续八分音符各画各的减时线，不合并成横梁） | T6 |
+| 视觉 | TAB 休止画 `z`/`Z`/`@` 原字符，不用休止符号 | T6 |
+| 视觉 | 简谱附点画在数字右侧、延音线之前（`X . _ _ _`），简谱习惯长音附点在延音线之后；未核实，用户 2026-09-17 已裁决记为 debt | T5.2 |
+| 视觉 | 头部字号 CSS 与 `layout/metrics` 双来源，未统一 | T5 |
+| 视觉 | 歌词按列左对齐，居中留作视觉 polish | T5.2 |
+| 视觉 | `STAFF_METRICS.lineGap` 8u 与 VexFlow 实际谱线距 10px 不一致（仅影响自绘 tuplet bracket / 热区偏移，不影响 VexFlow 自己画的谱线） | T7 |
+| 视觉 | `keySignatureAccidentalReserve` 固定按 7 个升降号预留，偏保守（多数调号用不到这么宽） | T7 |
+| 视觉 | Staff 不做 beam（暂缓单独裁决） | T7 |
+| 视觉 | Staff slur/lyrics 不画，仅 voice 级 info 占位 | T7 |
+| 视觉 | Staff 行内不做两端对齐、密度校准（40u）待后续 engraving 轮次 | T7 |
+| 视觉 | Staff 极窄容器（`availableWidth` < 行首预留）时单小节超宽未测 | T7 |
+| 视觉 | Staff `'256'` 时值码字形未核实 | T7 |
+| 架构 | `ScoreHeaderTextLine.fontSize/width` 字段无消费方 | T5 |
+| 架构 | a11y（无障碍）未做 | T5 |
+| 架构 | `src/renderer/dist` 构建产物入库，待清理 | T5 |
+| 架构 | `syllableKind` 类型可收窄 | T5 |
+| 架构 | 350 行文件上限无自动守卫（人工约定） | T5 |
+| 架构 | `src/notation/tab/tabEventNodes.ts` 339 行、`staffEventNodes.ts` 309 行，逼近 350 行上限，再加逻辑须先拆文件 | T6 / T7 |
+| 架构 | TAB 单音级 stroke 记号在语料里出现 0 次、组级方向记号（`TabGroupEvent.stroke` 的 `V`/`U` 前缀）不支持——限制②，parse 层从不回填 | T6 |
+| 测试 | 语料时值 `5/8` 2 处 `unrepresentable`，无专项回归 | T5 |
+| 测试 | `spacing.ts` 里 `chordSymbol` 的两处判定点（`itemSlotWidth` 的 overlay 判定先行截断，`timedDurationOf` 穷尽性 `switch` 里再列一遍 `timed: false`）靠代码注释纪律保持一致，缺自动化的防分叉单测（两处改动不同步时不会有测试报警） | T6 |
+| 测试 | VexFlow adapter（`renderer/integrations/vexflow/**`）无自动化 DOM 测试，人工 smoke 覆盖；不引入 jsdom 的理由是 5882 个用例全基于 Node 纯函数，不是「VexFlow 明示不兼容 jsdom」 | T7 |
 
-**工作流约束**（M2 全程）：每轮改动 → typecheck / vitest / corpus → 只读
-`/check` 审查 → 修复复审 → 提交；里程碑 ✅ 只在 push 后三平台 CI 全绿后由
-seal commit 补上；真实语料只以 `corpus#NN` 引用；M2 封板后、M3 前先做 UI
-设计（功能清单 + 设计要求）。
+**M2 seal 与 M3 前置（T9 之后，恢复时从这里继续）**：T0–T9 已全部完成并推送，
+下一步不是继续写渲染代码，而是：
+
+1. **M2 seal**：push 后确认三平台（macOS/Windows/Ubuntu）CI 全绿，再由一次独立
+   的 seal commit 把 §30 里程碑表的 M2 行标 ✅ 并写入该次 CI 的 run 号（不得提前
+   标、不得由本轮 T9 commit 代劳）。
+2. **M3 前的 UI 设计**：seal 之后，下一步**不是** M3 编码，而是先产出「功能清单
+   + 设计要求」，由用户拿去 Claude Design 做视觉设计，设计稿确认后再回来规划
+   M3 Editor Core 的实现任务序。
+3. 后续 Agent 接手时，先读本节上方的「M2 遗留债务总表」，视觉 polish 与架构/
+   测试债务分别在 UI 设计阶段与 M3 早期任务中择机排入。
+
+**工作流约束**（M2 全程，M3 起沿用）：每轮改动 → typecheck / vitest / corpus →
+只读 `/check` 审查 → 修复复审 → 提交；里程碑 ✅ 只在 push 后三平台 CI 全绿后由
+seal commit 补上；真实语料只以 `corpus#NN` 引用。
 
 ---
 
@@ -3053,6 +3109,9 @@ validate
 ---
 
 # 40. M2：Notation Rendering
+
+> 本节是早期规划，**M2 T0–T9 已全部完成**（已推送、待 seal），实际状态与债务见
+> §30.1「M2 进行中状态」。
 
 完成 JCX format layer 后进入渲染。
 
@@ -4092,17 +4151,21 @@ M1.3 / M1.4 / M1.5 / M1.6 / M1.7 / M1.8 已完成
 （§30.1 有文件结构、Domain 边界、归一化规则、evidence 策略、Serializer
 模块清单/canonical 规则摘要、语料四级回归结果、以及 M1.8 T0–T4 的 fixture
 矩阵/closure/CI 看板完整现状快照；§55–§60 DoD 已逐条打勾给证据，M1.8 于
-2026-09-16 经 GitHub Actions 三平台全绿封板）。**M2 已完成到 T7，Staff + VexFlow
-已于 2026-09-22 封板 ✅**（§30.1「M2 进行中状态」有 T0–T7 完整状态、T7 visual debt、
-待裁决事项与 T8 派发要点）。**当前项目在 T7 后主动暂停，不自动启动 T8。**
+2026-09-16 经 GitHub Actions 三平台全绿封板）。**M2 T0–T9 已全部完成**：
+Chord / Jianpu / TAB / Staff 四种记谱可渲染（T0–T7，T7 Staff + VexFlow 已于
+2026-09-22 封板 ✅）、T8 render matrix 补齐 C1/C2/C3 三条契约的用例、T9 完成
+本轮文档封板；已推送，**待 M2 seal**（§30.1「M2 进行中状态」有 T0–T9 完整
+状态、M2 遗留债务总表与「M2 seal 与 M3 前置」要点）。
 
 恢复时：
 
 ```text
-1. 先阅读 §30.1 的 T7 完整状态与 visual debt；
-2. 若决定继续 M2，再派 T8 render matrix（Opus）
-   （T8 render matrix → T9 文档封板 → M2 seal）；
-3. 当前不要继续 T8。
+1. 先阅读 §30.1 的 T0–T9 完整状态与「M2 遗留债务总表」；
+2. seal M2：push 后确认三平台 CI 全绿，由 seal commit 把 §30 的
+   M2 行标 ✅；
+3. seal 之后下一步不是 M3 编码，而是先做 M3 前的 UI 设计
+   （功能清单 + 设计要求，交给用户去 Claude Design）；
+4. UI 设计确认后再回来规划 M3 Editor Core 的实现任务序。
 ```
 
 **M2 入口要求**（§40/§41/§52）：从 `src/domain/` 的 `Score` 出发画谱面，

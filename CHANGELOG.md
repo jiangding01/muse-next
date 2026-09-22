@@ -15,11 +15,14 @@ evidence level 以 [`docs/JCX_SPEC.md`](docs/JCX_SPEC.md) 为准。
 
 ### Current milestone
 
-M1.8「Round-trip Guardrails」已封板。**M2 — Notation Rendering 进行中**：T0–T7
-（渲染模型、SVG 基础设施、Chord 图、Jianpu 排布/换行/SVG、React 视图、T5.2
-real-world hardening、TAB 六线谱、Staff + VexFlow adapter）已推送、**T7 待
-seal**；seal 后主动暂停，不自动启动 T8，恢复时从 T8 render matrix 开始 → T9
-文档封板。现状与恢复位置见 `HANDOFF.md` §30.1「M2 进行中状态」。
+M1.8「Round-trip Guardrails」已封板。**M2 — Notation Rendering T0–T9 已全部
+完成**：渲染模型、SVG 基础设施、Chord 图、Jianpu 排布/换行/SVG、React 视图、
+T5.2 real-world hardening、TAB 六线谱、Staff + VexFlow adapter、T8 render
+matrix（C1/C2/C3 三条契约对四种记谱的用例矩阵）、T9 文档封板均已推送，**待
+M2 seal**（push 后三平台 CI 全绿由 seal commit 补上里程碑表的 M2 行 ✅）；
+seal 后进入 M3 前的 UI 设计（功能清单 + 设计要求）。四种记谱（Chord / Jianpu
+/ TAB / Staff）均可渲染，支持缩放与诊断面板。现状、遗留债务与恢复位置见
+`HANDOFF.md` §30.1「M2 进行中状态」。
 
 ### Added
 
@@ -54,6 +57,13 @@ seal**；seal 后主动暂停，不自动启动 T8，恢复时从 T8 render matr
   时画；不做 beam、不用 VexFlow `Tuplet`（自绘括号）、slur/lyrics 不画、grace 占位；
   9 条新诊断码 `muse.render.staff.*`）；Electron 渲染进程的 `ScoreView` / 渲染诊断
   面板 / 缩放控件（缩放只改像素换算与换行，不缩放 SVG）。
+- Render matrix 契约测试（M2 T8）：`tests/unit/notation/render.matrix.test.ts` +
+  `renderMatrix.helpers.ts`，1434 条用例对 Chord / Jianpu / TAB / Staff 四种记谱
+  验证 C1（每个事件恰好一个可见节点）/ C2（降级节点必带 `fallback: true` 且至少
+  一条诊断）/ C3（诊断 `anchor` 可解析、`anchorKey()` 稳定）三条契约，覆盖 102 个
+  fixture × 两档宽度、25 个合成边界用例、dangling 端点定点用例与反空转哨兵；
+  chord 采用文档级 C1′ 口径（`ChordLayout.anchor` 恒 document，对事件可见节点数
+  恒为 0）。
 - L2 语义投影 `projectScore` 及配套 round-trip 验证矩阵，用于比较「原始解析结果」与
   「canonical 输出重新解析后的结果」在语义层是否等价（M1.7）。
 - Round-trip 兼容性护栏（M1.8）：
