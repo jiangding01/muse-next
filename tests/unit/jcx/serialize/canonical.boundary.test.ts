@@ -222,13 +222,12 @@ describe('边界 fixture —— 裸 duration 叶子与 stroke 前缀（UNVERIFIE
     ]);
   });
 
-  it('tab-stroke-prefix.jcx：`V[` / `U[` / `B[` 的前缀与悬空前缀当前都不进 Domain，canonical 因此不写回（pinned current behaviour, not a spec claim）', () => {
-    // 这是已知限制②（`canonical/body.ts` 文件头）在 fixture 上的钉子。
-    // §26.4 的拨弦/扫弦前缀本身是 CONFIRMED 事实，但 parse 层至今不填
-    // `TabGroupEvent.stroke`，Domain 里没有这个事实，canonical 无从写回；
-    // 悬空 strokePrefix（不紧邻 `[` 的那个 `V` / `B`）更是 UNVERIFIED，方案 §6
-    // 第 2 条禁止建模。两者当前都被静默吃掉——本用例把「被吃掉」这件事本身
-    // 变成可见的断言：修掉限制②时它会失败。
+  it('tab-stroke-prefix.jcx：紧邻 `[` 的 `V[` / `U[` 绑进 Domain 并写回，真悬空的 `B` / 尾 `V` 仍不进 Domain（M2.5 formats preflight 回填后的当前行为）', () => {
+    // 源文本 `V[ax/bx/] U[cx/dx/] | B dx/ V |`：`V[` / `U[` 紧邻组括号，§26.4
+    // CONFIRMED，现已绑进 `TabGroupEvent.stroke`；`B`（后面是空格 + `dx/`）与
+    // 行尾 `V`（后面是空格 + `|`）两个都不满足「零宽紧邻」，lexer 判定悬空、发
+    // `jcx.tab.dangling-stroke-prefix` info，方案 §6 第 2 条禁止给它们建模，
+    // 因此仍不进 Domain、canonical 仍不写回。
     expect(eventProfile('tab-stroke-prefix.jcx')).toEqual([
       'tabGroup',
       'tabGroup',
@@ -240,13 +239,15 @@ describe('边界 fixture —— 裸 duration 叶子与 stroke 前缀（UNVERIFIE
     expect(tail).toEqual([
       'V:1 style=tab clef=standardtab',
       '[V:1]',
-      '[ax/bx/] [cx/dx/] |',
+      'V[ax/bx/] U[cx/dx/] |',
       'dx/ |',
     ]);
-    // 源文本里的 `V[` / `U[` / `B ` / 悬空 `V` 一个都没有出现在输出里。
-    expect(tail.join('\n')).not.toContain('V[');
-    expect(tail.join('\n')).not.toContain('U[');
+    // 组前缀原样写回；真悬空的 `B ` 与行尾单独的 `V` 仍被静默吃掉。
+    expect(tail.join('\n')).toContain('V[');
+    expect(tail.join('\n')).toContain('U[');
     expect(tail.join('\n')).not.toContain('B ');
+    // 尾行只剩 `dx/ |`：行尾悬空的 `V` 没有落进任何输出。
+    expect(tail[3]).toBe('dx/ |');
   });
 });
 
@@ -266,19 +267,25 @@ describe('canonical/body.ts 三条已知限制的精确 pin', () => {
     expect(after[3]?.kind).toBe('barline');
   });
 
-  it('限制②：`V[ax/bx/]` 的 `V` 在 Domain 里没有落点（pinned current behaviour, not a spec claim）', () => {
-    // 与上面 tab-stroke-prefix.jcx 那条是同一件事的最小复现，直接用文本表达
-    // 「前缀进不了 Domain」：两个 tabGroup 完全相同，唯一区别只有源文本里的 `V`。
+  it('限制②已回填（2026-09-22，M2.5 formats preflight）：`V[ax/bx/]` 的 `V` 现在落进 TabGroupEvent.stroke，canonical 区分两种输入', () => {
+    // 与上面 tab-stroke-prefix.jcx 那条是同一件事的最小复现：`V` 与不带 `V` 的
+    // 两个 tabGroup 现在应产出不同的 canonical 文本，唯一区别正是这个 `V`。
     const header = '%MUSE2\nX:1\nT:t\nM:4/4\nL:1/8\nK:C\nV:1 style=tab clef=standardtab\n';
     const withPrefix = loadJcx(`${header}[V:1]V[ax/bx/] |\n`).score;
     const withoutPrefix = loadJcx(`${header}[V:1][ax/bx/] |\n`).score;
 
     expect(withPrefix.voices[0]?.events.map((e) => e.kind)).toEqual(['tabGroup', 'barline']);
-    // canonical 输出逐字相等：`V` 这个 CONFIRMED 的事实目前完全没有被记录下来。
+    const withPrefixGroup = withPrefix.voices[0]?.events[0];
+    expect(withPrefixGroup?.kind === 'tabGroup' ? withPrefixGroup.stroke : undefined).toBe('V');
+    const withoutPrefixGroup = withoutPrefix.voices[0]?.events[0];
+    expect(withoutPrefixGroup?.kind === 'tabGroup' ? withoutPrefixGroup.stroke : undefined).toBeUndefined();
+
+    // canonical 输出不再相等：`V` 这个 CONFIRMED 的事实现在被记录并写回。
     const a = serializeJcx(withPrefix, { mode: 'canonical' }).text;
     const b = serializeJcx(withoutPrefix, { mode: 'canonical' }).text;
-    expect(a).toBe(b);
-    expect(a).not.toContain('V[');
+    expect(a).not.toBe(b);
+    expect(a).toContain('V[');
+    expect(b).not.toContain('V[');
   });
 
   it('限制③：`[CEG]2` 的 `2` 是独立 UnknownEvent，canonical 输出 `[CEG] 2`（pinned current behaviour, not a spec claim）', () => {

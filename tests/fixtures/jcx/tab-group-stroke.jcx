@@ -1,0 +1,8 @@
+%MUSE2
+X:1
+T:Tab Group Stroke
+M:4/4
+L:1/8
+K:C
+V:1 style=tab clef=standardtab
+[V:1]V[a0/b2/] U[c1/d3/] [e2/f4/] H a1 |

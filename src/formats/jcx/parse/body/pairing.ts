@@ -27,6 +27,10 @@
  *
  * 悬空 `strokePrefix`（§26.4）不建关系也**不重复发诊断**：lexer 已发过
  * `jcx.tab.dangling-stroke-prefix`（含 span），本层只做消费登记。
+ *
+ * 注：紧邻 `tabGroup` 的 `strokePrefix`（`V[...]` 的 `V`）从 M2.5 formats
+ * preflight 起已在 `scan.ts` 顶层循环里直接绑进 `TabGroupEvent.stroke`，
+ * 根本不产出 marker，因此**到达本层的 `strokePrefix` marker 恒为真悬空**。
  */
 
 import type { BrokenRhythm, MusicEvent, Slur, TabRelation, Tie, Tuplet, VoiceId } from '../../../../domain';

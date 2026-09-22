@@ -2214,8 +2214,11 @@ jcx.serialize.voice-value-unencodable
    `UnknownEvent`，canonical 原样写回后脱离非法上下文，重解析成正常
    `barline`（文本一致，只是分类变）。fixture 级矩阵用 `unclosed-chord.jcx`
    点名豁免 L2 断言，钉死差异恰好只有一处（`$.voices[0].events[3].tokenKind`）。
-2. `TabGroupEvent.stroke` parse 层从不填充，`V[ax/bx/]` 的 `V` 与悬空
-   strokePrefix 在 Domain 里没有事实，canonical 无从写回（spec §26.4）。
+2. ~~`TabGroupEvent.stroke` parse 层从不填充~~ **已回填（2026-09-22，M2.5
+   formats preflight）**：见 §30.1 M2.5 段落，`scan.ts` 顶层循环把紧邻
+   `tabGroup` 的 `strokePrefix` 绑进 `TabGroupEvent.stroke`；`canonical/
+   body.ts` 的文件头注释仍写着旧状态（本任务硬规则不改 serialize 代码/
+   注释，留给下一次 touch 该文件时同步）。
 3. 组级时值后缀 `[CEG]2` 的 `2` 被 parse 落成独立 `UnknownEvent`，canonical
    因此输出 `[CEG] 2`（往返一致，但形态与源文本不同）。
 
@@ -2346,9 +2349,11 @@ GitHub Actions run 35054230663 在 macOS/Windows/Ubuntu 三平台上 typecheck�
    后跟小节线——差异路径同构，按硬规则（L2 豁免名单不得扩大）**未入库**
    为 fixture，只在 `canonical.boundary.test.ts` 文件头描述形态，不写
    具体语料内容。
-2. `TabGroupEvent.stroke` parse 层从不填充，`V[ax/bx/]` 的 `V` 前缀与悬空
-   strokePrefix 在 Domain 里没有事实字段，canonical 无从写回（spec
-   §26.4）。
+2. ~~`TabGroupEvent.stroke` parse 层从不填充~~ **已回填（2026-09-22，M2.5
+   formats preflight）**：紧邻 `tabGroup` 的 `strokePrefix`（`V[ax/bx/]`
+   的 `V`）现由 `scan.ts` 顶层循环绑进 `TabGroupEvent.stroke`，canonical
+   的 `${event.stroke ?? ''}[...]` 规则随之生效并写回；真悬空的
+   strokePrefix（不紧邻 `[` 或弦号）仍是 UNVERIFIED，不建模、不写回。
 3. 组级时值后缀 `[CEG]2` 的 `2` 被 parse 落成独立 `UnknownEvent`，
    canonical 因此输出 `[CEG] 2`（往返一致，但形态与源文本不同）。
 4. **（M1.8 T2 新发现，Domain 级语义丢失，非排版有损）**：`w:` 歌词行绑定
@@ -2649,13 +2654,13 @@ visual debt、T7 第 6 条），按 视觉 / 架构 / 测试 分类，每行注�
 | 架构 | `syllableKind` 类型可收窄 | T5 |
 | 架构 | 350 行文件上限无自动守卫（人工约定） | T5 |
 | 架构 | `src/notation/tab/tabEventNodes.ts` 339 行、`staffEventNodes.ts` 309 行，逼近 350 行上限，再加逻辑须先拆文件 | T6 / T7 |
-| 架构 | TAB 单音级 stroke 记号在语料里出现 0 次、组级方向记号（`TabGroupEvent.stroke` 的 `V`/`U` 前缀）不支持——限制②，parse 层从不回填 | T6 |
+| 架构 | ~~组级方向记号（`TabGroupEvent.stroke` 的 `V`/`U` 前缀）parse 层从不回填~~ **已回填（2026-09-22，M2.5 formats preflight）**；渲染层 `tabStrokes.ts` 早已写好消费该字段的画法，回填后随之生效（见 §30.1 M2.5 段落）；`tabGroupStrokeNotModeled` 诊断的措辞仍说「不支持」，未跟着更新（本任务不改 src/notation/**） | T6 |
 | 测试 | 语料时值 `5/8` 2 处 `unrepresentable`，无专项回归 | T5 |
 | 测试 | `spacing.ts` 里 `chordSymbol` 的两处判定点（`itemSlotWidth` 的 overlay 判定先行截断，`timedDurationOf` 穷尽性 `switch` 里再列一遍 `timed: false`）靠代码注释纪律保持一致，缺自动化的防分叉单测（两处改动不同步时不会有测试报警） | T6 |
 | 测试 | VexFlow adapter（`renderer/integrations/vexflow/**`）无自动化 DOM 测试，人工 smoke 覆盖；不引入 jsdom 的理由是 5642 个用例（T8.1 后）全基于 Node 纯函数，不是「VexFlow 明示不兼容 jsdom」 | T7 |
 
 **M2.5 派发要点（方案已冻结：`docs/M2.5_SYSTEM_LAYOUT_PLAN.md` v1.0，2026-09-22；冻结后改动需用户裁决，T0 启动需用户明确指令）**：
-- 前置条件（M2.5 之前、独立 formats 小任务）：`strokePrefix → TabGroupEvent.stroke` 回填（Domain 字段已存在、parse 未投影；不改 Domain/serializer；dangling-stroke 诊断不得误报）。U06（body `L:` 按声部作用域）已于 `8a74e8e` 结案。
+- 前置条件（M2.5 之前、独立 formats 小任务）：~~`strokePrefix → TabGroupEvent.stroke` 回填~~ **已完成（2026-09-22，M2.5 formats preflight）**：`scan.ts` 顶层循环把紧邻 `tabGroup` 的 `strokePrefix` 绑进 `TabGroupEvent.stroke`，不改 Domain 类型/serializer 代码，dangling-stroke 诊断未对绑定成功的 group stroke 误报（真悬空的仍照常发 info）。U06（body `L:` 按声部作用域）已于 `8a74e8e` 结案。
 - 架构：`src/notation/system/**`（contracts 叶子层 → groupVoices / measureIdentity / timeline / composeSystem / justify / chordOverlay / pageModel）；System = overlay layers（chord diagrams，`layoutChord` 保持 document 级）+ ordered voice layers（jianpu/tab/staff 接受外部 system/measure 几何）+ attached layers（lyrics）；voice layout 不得反向 import composer。
 - 关键裁决：`MeasureTimeline` 只含 timed onset（绝对 Rational 累计 offset）+ `chordSymbol` zero-time overlay，barline 固定 `endX`，decoration/grace/unknown 走 voice-local slot；跨 voice measure identity = ordinal candidate + 结构兼容性校验（时值总量逐 measure 绝对相等，不预设相等，不等进 tier 3；缺 measure 留空保留公共宽度；冲突 fallback + 诊断，不重写事件）；公共 measure width = 各 voice demand 取 max → packing → water-filling justify（`justified: full|partial|none`，末行不拉）；D11 精确名匹配（0 只画名 / 1 名+图 / >1 只画名 + ambiguity 诊断）；`ComposedSystemLayout {target:'screen'|'page'}`，PageModel 只收 page 产物，单 system 不跨页；Staff 验收 = tier 1（共享 measure 边界/宽度），T5.S 为非阻塞 spike。
 - 刻印（T3.5，先于 T4 demand solver）：TAB/简谱 beam 按拍分组（x/4 四分一拍、6/8 等附点四分一拍、5/8·7/8 与 `M:` raw 不分组；用 voice 自身 offset，不依赖 shared timeline）；**P1-3 窄化为新裁决**：Meter 不得直接决定 spacing，可用于 engraving grouping，glyph demand 反向约束最小宽度；扫弦 `V/U` → ↓/↑；纵向次序 和弦名 → 和弦图 → 箭头 → 第 1 弦。
@@ -4189,7 +4194,7 @@ Chord / Jianpu / TAB / Staff 四种记谱可渲染（T0–T7，T7 Staff + VexFlo
    和弦图 → 六线谱 → 简谱 → 歌词，系统交错）；设计稿第一轮 8 张画面仍在用户侧进行；
 3. 代码侧下一步是 **M2.5 Score System Layout**（用户 2026-09-22 裁决插在 M3 前）：
    方案已冻结为 `docs/M2.5_SYSTEM_LAYOUT_PLAN.md` v1.0（派发要点见 §30.1）；
-   前置 formats preflight（`TabGroupEvent.stroke` 回填）进行中；**T0 启动需用户明确指令**；
+   前置 formats preflight（`TabGroupEvent.stroke` 回填）已完成（2026-09-22）；**T0 启动需用户明确指令**；
 4. M2.5 封板后再规划 M3A（source/save/history）→ M3B（selection + 三向同步）→ M3C（可视化编辑）。
 ```
 

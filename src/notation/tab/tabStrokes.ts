@@ -7,12 +7,10 @@
  * 那是把 help 符号表的字面含义换成了我们自己的图形约定，读者对不上原文。字符统一画在
  * 该音所在列、第 1 弦上方（产品决定，`TAB_METRICS.strokeOffsetY`）。
  *
- * **组级 vs 单音级**（M1.8 已知限制②）：`TabGroupEvent.stroke` 在 parse 层从不填充
- * （`src/formats/jcx/parse/body/scan.ts` 的 `scanTabGroup` 从不读取组级前缀；组级前缀如
- * `V[...]` 是悬空 `strokePrefix` marker，被消费掉后不落进事件流，谱面上不显示）——
- * 这不是「扫弦方向不可用」，而是「作用范围不同的两件事，M2 只实现了其中单音的一件」。
- * 下面仍然写了 `TabGroupEvent.stroke` 有值时的画法（按单音规则、拼进同一个记号槽），
- * 但**当前不可达**，只是不让接口形状锁死这条未来会打开的路径。
+ * **组级 vs 单音级**：单音级与组级方向记号均按原字符显示。`TabGroupEvent.stroke`
+ * 自 2026-09-22（M2.5 formats preflight）起由 `src/formats/jcx/parse/body/scanTab.ts`
+ * 的 `scanTopLevelItems` 回填（`V[...]` 的 `V` 绑进事件本身），下面
+ * `tabGroupStrokesOf` 的组级画法随之可达，与成员级 stroke 拼进同一个记号槽。
  */
 
 import type { EventId, TabGroupEvent, TabNote } from '../../domain';
@@ -82,8 +80,8 @@ function memberStrokesOf(members: readonly TabNote[]): readonly string[] {
 }
 
 /**
- * `tabGroup` 事件应画的 stroke 字符集合：成员级（可达）+ 组级（`TabGroupEvent.stroke`，
- * 当前不可达，parse 层从不填充）。**同一事件多成员有 stroke 时只画一次、字符拼接**——
+ * `tabGroup` 事件应画的 stroke 字符集合：成员级 + 组级（`TabGroupEvent.stroke`，
+ * parse 层已回填，见文件头）。**同一事件多成员有 stroke 时只画一次、字符拼接**——
  * 都画在第 1 弦上方同一个位置，逐个单独画只会互相重叠，拼接成一个记号才看得出有几个。
  */
 function tabGroupStrokesOf(event: TabGroupEvent): readonly string[] {
@@ -99,15 +97,6 @@ export function buildTabStrokes(
   sink: DraftSink,
 ): TabStrokesResult {
   const strokes: TabStrokeMark[] = [];
-  const voiceAnchor: Anchor = { kind: 'voice', voiceId: voice.voiceId };
-  // 每个 TAB 声部恰好一条：措辞见文件头——精确区分「单音支持 / 组不支持」，不写成
-  //「扫弦方向不可用」（组级前缀在谱面上确实不显示，但单音级的完全按 stroke 画出）。
-  sink(draftOf(
-    CODES.tabGroupStrokeNotModeled,
-    'info',
-    'M2 的 TAB 渲染支持单音级的扫弦/拨弦方向记号（TabNote.stroke，parse 层已填充），不支持组级的方向记号（TabGroupEvent.stroke，parse 层从不填充，M1.8 已知限制②）；组级前缀（如 V[...]）在谱面上不显示',
-    voiceAnchor,
-  ));
 
   for (const item of voice.items) {
     const event = item.event;

@@ -338,8 +338,56 @@ describe('scan-tab-kinds fixture（spec §26）', () => {
     expect(rest).toMatchObject({ kind: 'rest', rest: { variant: 'z', durationRaw: '*2' } });
   });
 
-  it('作用于弦组的 `V` 不进 events，作为 marker 交 T7（§26.4）', () => {
-    expect(markerTriples(scanFixture('scan-tab-kinds'), voiceId(1))).toEqual(['strokePrefix@e6:V']);
+  it('作用于弦组的 `V` 绑进 TabGroupEvent.stroke，不再产出 marker（§26.4，M2.5 formats preflight 回填）', () => {
+    expect(markerTriples(scanFixture('scan-tab-kinds'), voiceId(1))).toEqual([]);
+    const group = voice.events[6];
+    if (group?.kind !== 'tabGroup') {
+      throw new Error('expected tabGroup event');
+    }
+    expect(group.stroke).toBe('V');
+  });
+});
+
+describe('tab-group-stroke fixture（§26.4 组级 strokePrefix 回填，M2.5 formats preflight，合成 fixture）', () => {
+  const { score, diagnostics } = parseFixture('tab-group-stroke');
+  const voice = voiceOf(score, voiceId(1));
+
+  it('事件 kind 序列：三个 tabGroup + 一个 tabNote + barline，悬空 `H` 不产出事件', () => {
+    expect(eventKinds(voice)).toEqual(['tabGroup', 'tabGroup', 'tabGroup', 'tabNote', 'barline']);
+  });
+
+  it('`V[...]` 回填 stroke: \'V\'', () => {
+    const group = voice.events[0];
+    if (group?.kind !== 'tabGroup') {
+      throw new Error('expected tabGroup event');
+    }
+    expect(group.stroke).toBe('V');
+  });
+
+  it('`U[...]` 回填 stroke: \'U\'', () => {
+    const group = voice.events[1];
+    if (group?.kind !== 'tabGroup') {
+      throw new Error('expected tabGroup event');
+    }
+    expect(group.stroke).toBe('U');
+  });
+
+  it('无前缀的 `[...]` 保持 stroke: undefined', () => {
+    const group = voice.events[2];
+    if (group?.kind !== 'tabGroup') {
+      throw new Error('expected tabGroup event');
+    }
+    expect(group.stroke).toBeUndefined();
+  });
+
+  it('悬空前缀 `H`（后面是空白 + `a1`，不满足零宽紧邻）仍作为 marker 交 T7，且不绑到任何事件', () => {
+    expect(markerTriples(scanFixture('tab-group-stroke'), voiceId(1))).toEqual(['strokePrefix@e3:H']);
+  });
+
+  it('悬空前缀仍触发 lexer 的 `jcx.tab.dangling-stroke-prefix` info（绑定成功的 `V[` / `U[` 不触发）', () => {
+    const codes = diagnostics.filter((d) => d.code === 'jcx.tab.dangling-stroke-prefix');
+    expect(codes).toHaveLength(1);
+    expect(codes[0]?.severity).toBe('info');
   });
 });
 

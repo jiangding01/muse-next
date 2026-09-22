@@ -38,8 +38,11 @@
  *    `barline`（文本一致，只是分类变；fixture `unclosed-chord.jcx`）。
  *    该 tokenKind 漂移**仍在**，`roundtrip.test.ts` 的 `L2_KNOWN_LIMITATION` 保留；
  *    被修掉的只是断行（`breaksLineAfter`），故 **canon1 起即为不动点**。
- * 2. `TabGroupEvent.stroke` parse 层从不填充，`V[ax/bx/]` 的 `V` 与悬空
- *    strokePrefix 在 Domain 里没有事实，canonical 无从写回（§26.4）。
+ * 2. ~~`TabGroupEvent.stroke` parse 层从不填充~~ **已回填（2026-09-22，M2.5
+ *    formats preflight）**：紧邻 `tabGroup` 的 `strokePrefix`（`V[ax/bx/]` 的
+ *    `V`）现由 `scanTab.ts` 的 `scanTopLevelItems` 绑进 `TabGroupEvent.stroke`，
+ *    `bodyEvents.ts` 里 `${event.stroke ?? ''}[...]` 的写回规则随之生效；真悬空
+ *    的 strokePrefix（不紧邻 `[` 或弦号）仍是 UNVERIFIED，不建模、不写回（§26.4）。
  * 3. 组级时值后缀 `[CEG]2` 的 `2` 被 parse 落成独立 `UnknownEvent`，
  *    canonical 因此输出 `[CEG] 2`（往返一致，但形态与源文本不同）。
  */

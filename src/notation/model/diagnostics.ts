@@ -126,10 +126,10 @@ export const RENDER_DIAGNOSTIC_CODES = {
   /** stroke 字符不在 help 符号表（`V`/`U`/`A`/`B`/`P`/`H`/`'`/`S`/`T`）内：仍画原字符（可见），不猜语义。 */
   tabStrokeUnrecognized: 'muse.render.tab.stroke-unrecognized',
   /**
-   * 每个 TAB 声部恰好一条（anchor 为 voice）：M2 的 TAB 渲染支持单音级的扫弦/拨弦
-   * 方向记号（`TabNote.stroke`，parse 层已填充），不支持组级的方向记号
-   * （`TabGroupEvent.stroke`，parse 层从不填充，M1.8 已知限制②）；组级前缀
-   * （如 `V[...]`）在谱面上不显示。
+   * **2026-09-22 起 parse 已回填 `TabGroupEvent.stroke`**（M2.5 formats preflight，
+   * `scanTab.ts` 的 `scanTopLevelItems`），`tabStrokes.ts` 随之画出组级方向记号
+   * （如 `V[...]` 的 `V`），不再有「组不支持」这件事——**本 code 保留仅为兼容/
+   * 历史，当前无发放点**（`tabStrokes.ts` 已删掉这条 sink 调用）。
    */
   tabGroupStrokeNotModeled: 'muse.render.tab.group-stroke-not-modeled',
   /**

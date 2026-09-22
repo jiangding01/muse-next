@@ -503,24 +503,20 @@ describe('TAB stroke —— 单音记号（spec §26.4）', () => {
   });
 });
 
-describe('TAB stroke —— tabGroupStrokeNotModeled（每 TAB 声部恰一条，anchor 为 voice）', () => {
-  it('恰好一条，措辞精确区分「单音支持 / 组不支持」', () => {
+describe('TAB stroke —— tabGroupStrokeNotModeled（2026-09-22 起不再发放：code 保留仅为兼容/历史，见 model/diagnostics.ts）', () => {
+  it('单音声部：不发该 code（`tabStrokes.ts` 已删掉那条无条件 sink 调用）', () => {
     const result = layout(tabHeader('a5 |'));
     const hits = result.diagnostics.filter((d) => d.code === CODES.tabGroupStrokeNotModeled);
-    expect(hits).toHaveLength(1);
-    expect(hits[0]?.anchor.kind).toBe('voice');
-    expect(hits[0]?.message).not.toMatch(/扫弦方向不可用/);
-    expect(hits[0]?.message).toContain('单音级');
-    expect(hits[0]?.message).toContain('组级');
+    expect(hits).toEqual([]);
   });
 
-  it('多次布局同一声部仍只有一条（不会随事件数累加）', () => {
+  it('含 tabGroup 的声部同样不发（组级 stroke 现在直接画出，不再需要「组不支持」这条降级说明）', () => {
     const result = layout(tabHeader('a5 b3 c2 [a0/b2] {d8}d10 |'));
     const hits = result.diagnostics.filter((d) => d.code === CODES.tabGroupStrokeNotModeled);
-    expect(hits).toHaveLength(1);
+    expect(hits).toEqual([]);
   });
 
-  it('非 TAB 声部不发（layoutTab 本就只服务 style=tab 声部，jianpu 布局的诊断码里没有它）', () => {
+  it('非 TAB 声部同样不发（该 code 现在对任何声部都不再发放）', () => {
     const jianpuSource = '%MUSE2\nX:1\nM:4/4\nL:1/4\nK:C\nV:1 style=jianpu\nC D E F |\n';
     const renderScore = renderScoreOf(jianpuSource);
     expect(renderScore.diagnostics.map((d) => d.code)).not.toContain(CODES.tabGroupStrokeNotModeled);
@@ -542,14 +538,22 @@ describe('TAB stroke —— tabGroup 成员级 stroke（[Va0/Ub2] 实测可达�
     expect(group.width).toBeGreaterThanOrEqual(strokeWidth + 2 * TAB_METRICS.fretPaddingX);
   });
 
-  it('`TabGroupEvent.stroke`（组级前缀 V[...]）当前不可达：parse 层把它消费为独立 marker，从不落进 tabGroup 事件本身', () => {
+  it('`TabGroupEvent.stroke`（组级前缀 V[...]）parse 层已回填（M2.5 formats preflight，2026-09-22）：组级记号被画出，且不再发 tabGroupStrokeNotModeled', () => {
     const { score } = loaded(tabHeader('V[a0/b2] |'));
     const voice = score.voices[0];
     if (voice === undefined) throw new Error('fixture 必须至少有一个声部');
     const group = voice.events.find((event) => event.kind === 'tabGroup');
     if (group === undefined || group.kind !== 'tabGroup') throw new Error('fixture 应含一个 tabGroup');
-    expect(group.stroke).toBeUndefined();
+    expect(group.stroke).toBe('V');
     expect(group.members.every((member) => member.stroke === undefined)).toBe(true);
+
+    const layoutResult = layout(tabHeader('V[a0/b2] |'));
+    expect(layoutResult.strokes).toHaveLength(1);
+    expect(layoutResult.strokes[0]?.text.text).toBe('V');
+    // `tabStrokes.ts` 已删掉那条无条件 sink：组级 stroke 现在直接画出，不再需要
+    // 「组不支持」这条降级说明；code 本身仍保留在 diagnostics.ts（兼容/历史）。
+    const hits = layoutResult.diagnostics.filter((d) => d.code === CODES.tabGroupStrokeNotModeled);
+    expect(hits).toEqual([]);
   });
 });
 

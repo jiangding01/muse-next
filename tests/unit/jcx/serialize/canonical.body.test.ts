@@ -148,7 +148,10 @@ describe('canonical body —— 事件形态（spec §13–§26，逐字段重�
 
   it('tabNote / tabGroup：弦号 → a..f，fret 的 `x` 原样，stroke 前缀在最前', () => {
     const { body } = fixtureTrip('scan-tab-kinds');
-    expect(body[1]).toBe('a1*2 ax Va1 c10/ ax// z*2 [ax/bx/] [a1*2bx] a1/2 |');
+    // `V[ax/bx/]` 的组级 `V` 现在由 parse 层回填进 `TabGroupEvent.stroke`
+    // （M2.5 formats preflight），canonical 的 `${event.stroke ?? ''}[...]`
+    // 早已备好这条渲染规则，回填后原样吐出来。
+    expect(body[1]).toBe('a1*2 ax Va1 c10/ ax// z*2 V[ax/bx/] [a1*2bx] a1/2 |');
   });
 
   it('UnknownEvent：raw 原样（`|||2` 的落单 `2` 不被丢弃、不被解释）', () => {

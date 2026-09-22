@@ -42,7 +42,7 @@ import type { ScanValueContext } from './scanPitch';
 import { buildNote, buildRest } from './scanPitch';
 import type { PendingMemberMarker, ScanMarker } from './scanLeaf';
 import { buildChordSymbol, buildDecoration, markerKindOf, reportRestVariant } from './scanLeaf';
-import { buildTabNote, tabNoteRaw } from './scanTab';
+import { buildTabNote, scanTopLevelItems, tabNoteRaw } from './scanTab';
 
 export type { ScanMarker, ScanMarkerAnchor, ScanMarkerKind } from './scanLeaf';
 
@@ -208,7 +208,7 @@ function scanGrace(node: JcxGraceNode, state: ScanState): void {
   flushGroup(members, state, eventIndex);
 }
 
-function scanTabGroup(node: JcxTabGroupNode, state: ScanState): void {
+function scanTabGroup(node: JcxTabGroupNode, state: ScanState, stroke?: string): void {
   const members = collectMembers(node.items, state);
   const eventIndex = state.voice.events.length;
   // §26.8 CONFIRMED BY DOCUMENTATION：TAB 组时值**严格**取最后一个成员（与 pitch 相反）。
@@ -219,6 +219,7 @@ function scanTabGroup(node: JcxTabGroupNode, state: ScanState): void {
     id,
     members: members.tabNotes,
     ...(duration === undefined ? {} : { duration }),
+    ...(stroke === undefined ? {} : { stroke }),
     origin: node.path,
   }));
   flushGroup(members, state, eventIndex);
@@ -337,9 +338,8 @@ export function scanSegments(
     }
     const items = unit.kind === 'bodyLine' ? unit.node.items : unit.node.trailing;
     const state = stateOf(segment.voiceId, unit.node.path);
-    for (const item of items) {
-      scanNode(item, state);
-    }
+    // §26.4 弦组前缀绑定（`V[...]`）：逻辑在 scanTab.ts，这里只注入回调（见该文件头）。
+    scanTopLevelItems(items, (item) => scanNode(item, state), (node, stroke) => scanTabGroup(node, state, stroke));
   }
 
   const result = new Map<VoiceId, ScanResult>();

@@ -114,6 +114,18 @@ matrix（C1/C2/C3 三条契约对四种记谱的用例矩阵）、T9 文档封�
   `[V:2]` 的单位音长，只读探针证实 5 个语料文件（corpus#02/#03/#04/#10/#11）的
   简谱声部因此每小节时值 = 拍号 × 2.000；已按 spec §8.5 U06 裁决改为「body `L:`
   只作用于它所在的声部，不泄漏到其它声部」（U06 修复任务）。
+- `TabGroupEvent.stroke`（作用于整个弦组的拨弦/扫弦前缀，`V[...]` / `U[...]`
+  的 `V` / `U`，spec §26.4）此前只在单音 `TabNote.stroke` 上投影，组级前缀被
+  parse 层当成悬空 marker 静默丢弃；改为在 `scan.ts` 顶层循环识别「顶层
+  `strokePrefix` 紧邻其右边的 `tabGroup` 兄弟节点」这一 AST 事实并回填进
+  `TabGroupEvent.stroke`，真悬空的前缀（不紧邻 `[` 或弦号）行为不变，仍发
+  `jcx.tab.dangling-stroke-prefix` info。canonical 序列化早已写好
+  `${event.stroke ?? ''}[...]` 的渲染规则，回填后自动生效；渲染层
+  `tabStrokes.ts` 同样早已写好消费该字段的画法，回填后随之在 TAB 视图里画出
+  组级记号。只读探针实测 11 个本地语料文件里 554 处 `tabGroup` 事件中 504 处
+  被成功绑定为组级 stroke（与 spec §26.8 记载的 504 次 `[...]`/前缀共现计数
+  一致），corpus#3/#4/#7/#9 各有命中（#11 有 21 个弦组但源文本无组级前缀）
+  （M2.5 formats preflight）。
 
 ### Compatibility / Known limitations
 
@@ -122,7 +134,8 @@ Canonical 序列化目前有四条已知限制（详见 `HANDOFF.md` §30.1「�
 
 1. 未闭合括号上下文（chord `[` / grace `{` / TAB `[`）后紧跟小节线时，事件分类在
    往返后发生漂移（文本仍然一致）。
-2. `TabGroupEvent.stroke` 的 `V`/`U` 前缀在 Domain 中没有对应事实字段，无法写回。
+2. ~~`TabGroupEvent.stroke` 的 `V`/`U` 前缀在 Domain 中没有对应事实字段，无法
+   写回。~~ 已回填（见下方 Fixed，2026-09-22 M2.5 formats preflight）。
 3. 组级时值后缀（如 `[CEG]2`）的写回形态与源文本不同（往返一致，但排版不同）。
 4. `w:` 歌词行绑定到零事件声部时，canonical 序列化会丢弃整条歌词行并发出诊断
    （Domain 语义级、不可逆，非排版细节丢失）。
