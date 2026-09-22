@@ -1,5 +1,5 @@
 /**
- * M2 T8 —— 渲染矩阵的共用夹具（**只放机械操作，断言全部留在 `render.matrix.test.ts`**）。
+ * M2 T8 / T8.1 —— 渲染矩阵的共用夹具（**只放机械操作，断言全部留在 `render.matrix.test.ts`**）。
  *
  * 分派按 `voice.style` 自行做（与 `renderer/components/notation/voiceRender.ts` 同一
  * 口径）：**不 import renderer、不 import vexflow**——矩阵到 layout 层为止，staff 的
@@ -12,42 +12,61 @@
  * - **C1**：每个 `RenderItem` 在该声部的布局里**恰好**对应一个可见节点（含 unknown /
  *   outOfScope / grace / decoration / placeholder；chordSymbol 与 barline 也算节点）。
  * - **C2**：每个 `fallback: true` 的节点至少有一条诊断指向它（本层 `layout.diagnostics`
- *   或上游 `RenderScore.diagnostics` / `layoutScoreHeader`，anchor 为该 event）。
+ *   或上游 `RenderScore.diagnostics`，anchor 为该 event）。
  * - **C3**：每条渲染诊断的 `anchor` 可经 `DomainIndex` 解析，且 `anchorKey()` 稳定。
  *
- * **各记谱的 C1 口径**（三种事件记谱同口径，chord 单列）：
- * - jianpu / tab / staff：`layout.nodes` 是「每个事件一个事件节点」的数组，C1 = 对
- *   `voice.items` 的每一项，`nodes` 里 `anchor.kind === 'event' && eventId === 该项` 的
- *   节点数**恰好 1**。
- * - **chord**：`Score.chordShapes` 是**文档级**对象，`ChordLayout.anchor` 恒为
- *   `{ kind: 'document' }`，与声部事件之间没有任何映射（D11：与 `ChordSymbolEvent` 按名
- *   关联只有 `INFERRED`，默认关闭）。所以 chord 的 C1 口径改写成「每个 `GuitarChord`
- *   恰好一个 `ChordLayout`、每个 `ChordLayout` 恰好 6 条弦标记、anchor 恒为 document」，
- *   并且**恒不消费任何 `RenderItem`**（对事件的可见节点数恒为 0，不是「漏画」）。
- *   chord 的 C2 同理恒为空集：`ChordLayout` 根本没有 `fallback` 字段，它没有降级路径。
+ * **两张互不混用的矩阵**（T8.1 裁决①）：
+ * - **voice matrix**（jianpu / tab / staff）：输入是 `RenderVoice`，跑 C1/C2/C3 三条。
+ * - **document chord matrix**（`layoutChordShapes`）：输入是 `Score.chordShapes`，它是
+ *   **document 级**的 T3 renderer，既不是 `RenderVoice` 也不消费 `RenderItem`
+ *   （D11：与 `ChordSymbolEvent` 按名关联只有 `INFERRED`，默认关闭）。因此
+ *   **C1(RenderItem) 与 C2(fallback node) 对它是 N/A**（`ChordLayout` 根本没有
+ *   `fallback` 字段），只跑「每个 `GuitarChord` → 恰好一个 `ChordLayout`、anchor 恒为
+ *   document 且可解析」。`MatrixLayout` 联合里**刻意没有 chord 分支**，也没有任何
+ *   `layoutVoiceAs('chord', …)` 之类的 fake voice adapter。
  *
- * 矩阵覆盖表（用例 × 记谱 × 契约；`C` = 三条全跑，`C1′` = 按上面的 chord 口径跑）：
+ * **C1 只数 primary event node**（T8.1 裁决⑤）：`visibleNodesByEvent` 只遍历
+ * `layout.nodes`——那是「每个事件一个节点」的**主字形**数组。三种记谱的关系弧、
+ * tuplet 括号、歌词、header 标签、`L:` 变化标记全部住在**各自独立的字段**
+ * （jianpu 的 `arcs` / `tuplets` / `lyrics` / `labels` / `unitLengthMarks`、tab 的
+ * `relations` / `strokes` / `staffLines`、staff 的 `ties` / `tuplets` / `staves`），
+ * 它们**不在 `nodes` 里**。实测各 overlay 的 anchor 分布：`JianpuArc` / `JianpuTupletBracket`
+ * 是 relation anchor，`JianpuLyricNode` 是 voice anchor，而 **`TabStrokeMark` 是货真价实的
+ * event anchor**——一旦把 `layout.strokes` 并进来，同一个 `tabNote` 事件立刻被数成 2 个
+ * 节点。所以过滤规则是「**只看 `nodes`，再按 `anchor.kind === 'event'` 收口**」，不是
+ * 「扫遍整个 layout 找 event anchor」；`overlayEventAnchorCount` 就是给这条规则做正面
+ * 证据的（测试断言它 > 0 而 C1 仍为 1）。
  *
- * | 用例组                                                               | chord | jianpu | tab   | staff |
- * | -------------------------------------------------------------------- | ----- | ------ | ----- | ----- |
- * | 102 个 fixture（按 `voice.style` 分派；无 style 的走 D12 用例）      | C1′   | C      | C     | C     |
- * | unknown 事件 / decoration / chordSymbol 在段末                       | C1′   | C      | C     | C     |
- * | tab 事件（落入 jianpu/staff）/ pitch 事件（落入 tab）                | C1′   | C      | C     | C     |
- * | grace（TabNote 成员 / Note 成员）/ 全 Rest chord `[zz]`              | C1′   | C      | C     | C     |
- * | duration undefined / 1/3 / 1/512 / 2/1                               | C1′   | C      | C     | C     |
- * | Z / @ 休止 / unresolved tie / tuplet q=0                             | C1′   | C      | C     | C     |
- * | clef 三态 / M: raw / K: 缺席 `Eb` `Dm`                               | C1′   | C      | C     | C     |
- * | 跨行 tie（窄宽度拆段）/ style 缺席 / style 未知                      | C1′   | C      | C     | C     |
- * | dangling relation 端点                                               | C1/C2 | C1/C2  | C1/C2 | C1/C2 |
+ * 矩阵覆盖表（用例 × 记谱 × 契约；`C` = 三条全跑，`N/A` = 按上面的口径不适用）：
  *
- * **唯一的非全跑格**是 dangling relation 端点：该用例靠**人为剪掉 `index.eventById`**
- * 里的一项来制造，于是「event anchor 解析不了」正是被造出来的那个故障本身，拿通用 C3
- * 去断它等于断言「我造的故障没生效」。该块改为定点断言 relation 分支的 C3，不静默跳过。
+ * | 用例组                                                          | jianpu | tab | staff | chord（document） |
+ * | --------------------------------------------------------------- | ------ | --- | ----- | ----------------- |
+ * | 全部 runtime `fixtureNames`（按 `voice.style` 分派）            | C      | C   | C     | 见下行            |
+ * | 带 `%%gchord` 的 fixture + 合成 chord 源                        | —      | —   | —     | C3 + 计数；C1/C2 N/A |
+ * | `style` 缺席 / 未知（D12 声部级 fallback summary）              | N/A    | N/A | N/A   | N/A               |
+ * | unknown 事件 / decoration / chordSymbol 在段末                  | C      | C   | C     | —                 |
+ * | tab 事件（落入 jianpu/staff）/ pitch 事件（落入 tab）           | C      | C   | C     | —                 |
+ * | grace（TabNote 成员 / Note 成员）/ 全 Rest chord `[zz]`         | C      | C   | C     | —                 |
+ * | duration undefined / 1/3 / 1/512 / 2/1                          | C      | C   | C     | —                 |
+ * | Z / @ 休止 / unresolved tie / tuplet q=0                        | C      | C   | C     | —                 |
+ * | clef 三态 / M: raw / K: 缺席 `Eb` `Dm`                          | C      | C   | C     | —                 |
+ * | 歌词 overlay / TAB stroke overlay（不得被数成第二个 event node） | C      | C   | C     | —                 |
+ * | 跨行 tie（窄宽度拆段）                                          | C      | C   | C     | —                 |
+ * | dangling relation 端点                                          | C1/C2  | C1/C2 | C1/C2 | —               |
+ *
+ * 两处非全跑格，都有理由且都不静默跳过：
+ * - **D12（`style` 缺席 / 未知）**：notation 层根本不产 layout，它是**声部级 fallback
+ *   summary**（`layout/fallbackSummary.ts` 的 `summarizeEvents`），**没有任何
+ *   `fallback: true` 的 event node**，所以 C1/C2 无对象可断。改为定点断言声部级诊断与
+ *   summary 的确定性，**不伪造 C2 node**。
+ * - **dangling relation 端点**：该用例靠**人为剪掉 `index.eventById`** 里的一项来制造，
+ *   于是「event anchor 解析不了」正是被造出来的那个故障本身，拿通用 C3 去断它等于断言
+ *   「我造的故障没生效」。改为定点断言 relation 分支的 C3。
  *
  * 两档 `availableWidth`：`wide` 不换行，`narrow` 逼出多行谱（跨行 tie 的拆段路径）。
  */
 
-import type { DomainIndex, EventId, Score } from '../../../src/domain';
+import type { DomainIndex, EventId, RelationId, Score, VoiceId } from '../../../src/domain';
 import { loadJcx } from '../../../src/formats/jcx';
 import type { ChordLayout } from '../../../src/notation/chord/layoutChord';
 import { layoutChord } from '../../../src/notation/chord/layoutChord';
@@ -63,9 +82,9 @@ import { layoutTab } from '../../../src/notation/tab/layoutTab';
 import { buildRenderScore } from '../../../src/notation/model/buildRenderScore';
 import type { Anchor, RenderDiagnostic, RenderScore, RenderVoice } from '../../../src/notation/model/types';
 
-/** 四种记谱。`chord` 是**文档级**和弦图，C1 口径见 `visibleNodesByEvent`。 */
-export const NOTATIONS = ['chord', 'jianpu', 'tab', 'staff'] as const;
-export type MatrixNotation = (typeof NOTATIONS)[number];
+/** voice matrix 的三种记谱。**chord 不在其中**（它是 document 级，见文件头裁决①）。 */
+export const VOICE_NOTATIONS = ['jianpu', 'tab', 'staff'] as const;
+export type VoiceNotation = (typeof VOICE_NOTATIONS)[number];
 
 /** 两档可用宽度：`wide` 不触发换行，`narrow` 逼出多行谱（跨行 tie / tuplet 的拆段路径）。 */
 export const MATRIX_WIDTHS = { wide: 100_000, narrow: 16 } as const;
@@ -96,8 +115,20 @@ export function matrixScoreFrom(input: string | Uint8Array): MatrixScore {
   };
 }
 
-/** 上游（非本记谱层）诊断：C2 允许由它满足，C3 对它同样适用。 */
-export function upstreamDiagnostics(source: MatrixScore): readonly RenderDiagnostic[] {
+/**
+ * **C2 的上游诊断**（T8.1 裁决④）：只并 `RenderScore.diagnostics`。
+ * 头部诊断全是 document anchor，对「event anchor 指向某个 fallback 节点」没有贡献，
+ * 混进来只会让 C2 变松。
+ */
+export function upstreamDiagnosticsForC2(source: MatrixScore): readonly RenderDiagnostic[] {
+  return source.renderScore.diagnostics;
+}
+
+/**
+ * **C3 的全量诊断**（T8.1 裁决④）：`RenderScore` + score 级 `layoutScoreHeader`，
+ * 后者正是 document anchor 的来源，加进来 C3 的 `document` 分支才真的被覆盖到。
+ */
+export function allDiagnosticsForC3(source: MatrixScore): readonly RenderDiagnostic[] {
   return [...source.renderScore.diagnostics, ...source.headerDiagnostics];
 }
 
@@ -117,9 +148,8 @@ export function matrixContext(source: MatrixScore, width: MatrixWidthKey): Matri
   };
 }
 
-/** 四种记谱的布局产物，判别联合——泛化访问器靠它分支，不用 `as`。 */
+/** voice matrix 的布局产物，判别联合——泛化访问器靠它分支，不用 `as`。**无 chord 分支**。 */
 export type MatrixLayout =
-  | { readonly notation: 'chord'; readonly chords: readonly ChordLayout[] }
   | { readonly notation: 'jianpu'; readonly layout: JianpuLayout }
   | { readonly notation: 'tab'; readonly layout: TabLayout }
   | { readonly notation: 'staff'; readonly layout: StaffLayout };
@@ -127,20 +157,15 @@ export type MatrixLayout =
 /**
  * 强制按指定记谱布局一个声部：**不看 `voice.style`**。「tab 事件落入 jianpu/staff」
  * 「pitch 事件落入 tab」只能这样造——parse 层按 `style` 决定 body 的解释方式，不可能
- * 解析出「jianpu 声部里的 tabNote」。`chord` 分支不消费声部（`chordShapes` 是文档级
- * 对象，与 `ChordSymbolEvent` 的关联只有 `INFERRED`，D11 默认关闭）。
+ * 解析出「jianpu 声部里的 tabNote」。
  */
 export function layoutVoiceAs(
-  notation: MatrixNotation,
+  notation: VoiceNotation,
   voice: RenderVoice,
   ctx: MatrixContext,
 ): MatrixLayout {
   const { score, index, measurer, availableWidth } = ctx;
   switch (notation) {
-    case 'chord': {
-      const options = { showFinger: score.showFinger, measurer };
-      return { notation, chords: score.chordShapes.map((chord) => layoutChord(chord, options)) };
-    }
     case 'jianpu': {
       const head = {
         ...(score.key === undefined ? {} : { key: score.key }),
@@ -161,9 +186,7 @@ export function layoutVoiceAs(
 
 /**
  * 按 `voice.style` 分派（同 `voiceRender.buildVoiceRender`，但不 import renderer）。
- * `style` 缺席 / 未知 → `undefined`：D12 方案 B 下这类声部走 renderer 侧占位展示，
- * **notation 层不产生 layout**，故 C1 不适用，C2/C3 靠 `RenderScore.diagnostics` 的
- * `voice.style-absent` / `style-unknown` 覆盖。
+ * `style` 缺席 / 未知 → `undefined`：走 D12 的声部级 fallback summary，见文件头。
  */
 export function layoutVoiceForMatrix(voice: RenderVoice, ctx: MatrixContext): MatrixLayout | undefined {
   const style = voice.voice.style;
@@ -173,10 +196,18 @@ export function layoutVoiceForMatrix(voice: RenderVoice, ctx: MatrixContext): Ma
   return undefined;
 }
 
-function nodeAnchors(model: MatrixLayout, onlyFallback: boolean): readonly Anchor[] {
+/**
+ * **document chord matrix 的唯一入口**（裁决①）：输入是 `Score.chordShapes`，
+ * **不接受也不需要任何 `RenderVoice`**。
+ */
+export function layoutChordShapes(source: MatrixScore): readonly ChordLayout[] {
+  const options = { showFinger: source.score.showFinger, measurer: matrixMeasurer };
+  return source.score.chordShapes.map((chord) => layoutChord(chord, options));
+}
+
+/** 只遍历 `layout.nodes`（primary event node），不碰 overlay 数组——理由见文件头裁决⑤。 */
+function primaryNodeAnchors(model: MatrixLayout, onlyFallback: boolean): readonly Anchor[] {
   switch (model.notation) {
-    case 'chord':
-      return onlyFallback ? [] : model.chords.map((chord) => chord.anchor);
     case 'jianpu':
       return model.layout.nodes.filter((n) => !onlyFallback || n.fallback).map((n) => n.anchor);
     case 'tab':
@@ -190,33 +221,73 @@ function nodeAnchors(model: MatrixLayout, onlyFallback: boolean): readonly Ancho
   }
 }
 
-/**
- * C1 的泛化访问器：`EventId → 可见节点数`。jianpu / tab / staff 的 `nodes` 是「每个事件
- * 一个节点」的数组（含 unknown / outOfScope / grace / decoration / placeholder /
- * chordSymbol / barline），只数 `anchor.kind === 'event'`。**chord 恒为空 map**：
- * `ChordLayout.anchor` 恒为 `{ kind: 'document' }`，与声部事件无映射——chord 侧 C1 改成
- * 「每个 `GuitarChord` 恰好一个 `ChordLayout`、恰好 6 条弦标记」，由测试单独断言。
- */
+/** C1 的泛化访问器：`EventId → 该事件的 primary 可见节点数`（期望恒为 1）。 */
 export function visibleNodesByEvent(model: MatrixLayout): ReadonlyMap<EventId, number> {
   const counts = new Map<EventId, number>();
-  for (const anchor of nodeAnchors(model, false)) {
+  for (const anchor of primaryNodeAnchors(model, false)) {
     if (anchor.kind !== 'event') continue;
     counts.set(anchor.eventId, (counts.get(anchor.eventId) ?? 0) + 1);
   }
   return counts;
 }
 
-/** C2 的泛化访问器：所有 `fallback: true` 节点的 anchor。chord 侧恒为空（无降级路径）。 */
+/** C2 的泛化访问器：所有 `fallback: true` 的 primary 节点的 anchor。 */
 export function fallbackAnchors(model: MatrixLayout): readonly Anchor[] {
-  return nodeAnchors(model, true);
+  return primaryNodeAnchors(model, true);
 }
 
-/** 本记谱层自己发的诊断。chord 层不产诊断（`layoutChord` 没有 sink）。 */
+/** overlay 计数：`nodes` 之外、同样带 event anchor 的产物，用来证明 C1 的过滤规则有意义。 */
+export function overlayEventAnchorCount(model: MatrixLayout): number {
+  switch (model.notation) {
+    case 'jianpu':
+      return [...model.layout.lyrics, ...model.layout.arcs, ...model.layout.tuplets].filter(
+        (entry) => entry.anchor.kind === 'event',
+      ).length;
+    case 'tab':
+      return [...model.layout.strokes, ...model.layout.relations].filter(
+        (entry) => entry.anchor.kind === 'event',
+      ).length;
+    case 'staff':
+      return [...model.layout.ties, ...model.layout.tuplets].filter(
+        (entry) => entry.anchor.kind === 'event',
+      ).length;
+    default: {
+      const exhaustive: never = model;
+      return exhaustive;
+    }
+  }
+}
+
+/** 本记谱层自己发的诊断。 */
 export function layoutDiagnostics(model: MatrixLayout): readonly RenderDiagnostic[] {
-  return model.notation === 'chord' ? [] : model.layout.diagnostics;
+  return model.layout.diagnostics;
 }
 
-/** C3：逐分支真的查一次，没有恒成立的分支。 */
+/**
+ * relation 的**归属**校验（T8.1 裁决③）：光有 `relationById.has(id)` 不够——那只证明
+ * 这个 id 在文档里存在，证明不了它属于 anchor 所声称的那个声部。`Voice` 的
+ * `ties` / `slurs` / `tuplets` / `tabRelations` / `brokenRhythms` 五类数组是关系的
+ * 实际归属处（与 `notation/model/relations.ts` 的 `voiceRelations()` 同一全集），逐一比对 `id`。
+ */
+function relationBelongsToVoice(source: MatrixScore, voiceId: VoiceId, relationId: RelationId): boolean {
+  if (!source.index.relationById.has(relationId)) return false;
+  const voice = source.index.voiceById.get(voiceId);
+  if (voice === undefined) return false;
+  return [
+    ...voice.ties,
+    ...voice.slurs,
+    ...voice.tuplets,
+    ...voice.tabRelations,
+    ...voice.brokenRhythms,
+  ].some(
+    (relation) => relation.id === relationId,
+  );
+}
+
+/**
+ * C3：逐分支真的查一次，**且 event / relation 两支都校验 ownership**（裁决③）。
+ * 没有恒成立的分支：`document` 也要求 `RenderScore` 的根确实是同一份 `Score`。
+ */
 export function anchorResolves(anchor: Anchor, source: MatrixScore): boolean {
   switch (anchor.kind) {
     case 'document':
@@ -228,7 +299,7 @@ export function anchorResolves(anchor: Anchor, source: MatrixScore): boolean {
       return found !== undefined && found.voiceId === anchor.voiceId;
     }
     case 'relation':
-      return source.index.relationById.has(anchor.relationId);
+      return relationBelongsToVoice(source, anchor.voiceId, anchor.relationId);
     default: {
       const exhaustive: never = anchor;
       return exhaustive;

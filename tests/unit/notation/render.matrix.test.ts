@@ -1,70 +1,37 @@
 /**
- * M2 T8 —— 最终 render matrix：C1/C2/C3 × Chord / Jianpu / TAB / Staff。
+ * M2 T8 / T8.1 —— 最终 render matrix：C1/C2/C3 × Jianpu / TAB / Staff（voice matrix）
+ * ＋ 独立的 document chord matrix。
  *
- * **契约原文、各记谱的 C1 口径、「用例 × 记谱 × 契约」覆盖表全部在
+ * **契约原文、各记谱的 C1 口径、「用例 × 记谱 × 契约」覆盖表、两处 N/A 格的理由全部在
  * `./renderMatrix.helpers.ts` 的文件头**（唯一权威出处，T9 同步 docs 取那里）；本文件
  * 只放断言。**不 import vexflow、不 import renderer、不引入 jsdom**；真实语料一律以
- * `corpus#NN` 形式引用（本文件不需要引用任何一条）。
+ * `corpus#NN` 形式引用（本文件不需要引用任何一条），fixture 一律走运行时 glob
+ * `fixtureNames`，**数量不写死**。
  */
 import { describe, expect, it } from 'vitest';
 
 import type { EventId } from '../../../src/domain';
+import { summarizeEvents } from '../../../src/notation/layout/fallbackSummary';
 import { RENDER_DIAGNOSTIC_CODES } from '../../../src/notation/model/diagnostics';
 import { buildRenderScore } from '../../../src/notation/model/buildRenderScore';
-import type { RenderDiagnostic } from '../../../src/notation/model/types';
+import type { Anchor, RenderDiagnostic } from '../../../src/notation/model/types';
 import { anchorKey } from '../../../src/notation/model/types';
 import { fixtureBytes, fixtureNames } from '../jcx/serialize/roundtrip.helpers';
-import type { MatrixNotation, MatrixScore, MatrixWidthKey } from './renderMatrix.helpers';
 import {
-  NOTATIONS, WIDTH_KEYS, anchorResolves, fallbackAnchors, layoutDiagnostics, layoutVoiceAs,
-  layoutVoiceForMatrix, matrixContext, matrixScoreFrom, upstreamDiagnostics, visibleNodesByEvent,
+  CHORD_SOURCES, D12_CASES, DANGLING_SOURCE, DETERMINISM_SOURCE, MATRIX_CASES,
+} from './renderMatrix.cases';
+import type { MatrixScore, MatrixWidthKey, VoiceNotation } from './renderMatrix.helpers';
+import {
+  VOICE_NOTATIONS, WIDTH_KEYS, allDiagnosticsForC3, anchorResolves, fallbackAnchors,
+  layoutChordShapes, layoutDiagnostics, layoutVoiceAs, layoutVoiceForMatrix, matrixContext,
+  matrixScoreFrom, overlayEventAnchorCount, upstreamDiagnosticsForC2, visibleNodesByEvent,
 } from './renderMatrix.helpers';
 
 const CODE_VALUES: readonly string[] = Object.values(RENDER_DIAGNOSTIC_CODES);
 
-/** 合成边界用例：**不用任何真实语料**，全部是最小 JCX 字符串。 */
-const GCHORD = '%%gchord C=1;0,3,2,0,1,0';
-const HEAD_4_4 = 'M:4/4\nL:1/4\nK:C';
-const HEAD_1_8 = 'M:4/4\nL:1/8\nK:C';
-const STAFF_VOICE = 'V:1 style=staff clef=treble';
-const TAB_VOICE = 'V:1 style=tab clef=standardtab';
-
-/** 每份合成源都带一条 `%%gchord`，chord 记谱因此在每个用例上都真的跑起来，不留空格。 */
-function jcx(head: string, voice: string, body: string): string {
-  return `%MUSE2\n${GCHORD}\nX:1\n${head}\n${voice}\n${body}\n`;
-}
-
-const MATRIX_CASES: readonly (readonly [string, string])[] = [
-  ['unknown 事件', jcx(HEAD_4_4, STAFF_VOICE, 'C?D|')],
-  ['tab 事件（落入 jianpu/staff）', jcx(HEAD_1_8, TAB_VOICE, '[V:1]a1 b2 c10 |')],
-  ['pitch 事件（落入 tab）', jcx(HEAD_4_4, STAFF_VOICE, 'CDE|')],
-  ['grace（TabNote 成员）', jcx(HEAD_1_8, TAB_VOICE, '[V:1]{b11}b12 |')],
-  ['grace（Note 成员）', jcx(HEAD_1_8, STAFF_VOICE, '{G}A2|')],
-  ['decoration', jcx(HEAD_4_4, STAFF_VOICE, '!TRILL!C !st!D|')],
-  ['全 Rest chord', jcx(HEAD_4_4, STAFF_VOICE, '[zz] C|')],
-  ['duration undefined（L: 不可知）', jcx('K:C', STAFF_VOICE, 'CDE|')],
-  ['duration 1/3', jcx('M:4/4\nL:1/3\nK:C', STAFF_VOICE, 'CDE|')],
-  ['duration 1/512', jcx('M:4/4\nL:1/512\nK:C', STAFF_VOICE, 'CDE|')],
-  ['duration 2/1', jcx(HEAD_4_4, STAFF_VOICE, 'C8 D8|')],
-  ['Z / @ 休止', jcx(HEAD_4_4, STAFF_VOICE, 'Z2 @2 z2|')],
-  ['unresolved tie', jcx(HEAD_4_4, STAFF_VOICE, 'C-|')],
-  ['tuplet q=0', jcx(HEAD_1_8, STAFF_VOICE, '(3:0:3CDE|')],
-  ['clef 缺席', jcx(HEAD_4_4, 'V:1 style=staff', 'CDE|')],
-  ['clef 已知', jcx(HEAD_4_4, 'V:1 style=staff clef=bass', 'CDE|')],
-  ['clef 未知', jcx(HEAD_4_4, 'V:1 style=staff clef=hexagram', 'CDE|')],
-  ['M: raw', jcx('M:C\nL:1/4\nK:C', STAFF_VOICE, 'CDE|')],
-  ['K: 缺席', jcx('M:4/4\nL:1/4', STAFF_VOICE, 'CDE|')],
-  ['K:Eb', jcx('M:4/4\nL:1/4\nK:Eb', STAFF_VOICE, 'CDE|')],
-  ['K:Dm', jcx('M:4/4\nL:1/4\nK:Dm', STAFF_VOICE, 'CDE|')],
-  ['chordSymbol 在段末', jcx(HEAD_4_4, STAFF_VOICE, 'CDE "G"')],
-  ['跨行 tie（窄宽度拆段）', jcx(HEAD_4_4, STAFF_VOICE, 'CDEF|GABc|CDEF|GAB-|c4|')],
-  ['style 缺席', jcx(HEAD_4_4, 'V:1', 'CDE|')],
-  ['style 未知', jcx(HEAD_4_4, 'V:1 style=hexagram', 'CDE|')],
-];
-
-const CASE_ROWS: readonly (readonly [string, string, MatrixNotation, MatrixWidthKey])[] =
+const CASE_ROWS: readonly (readonly [string, string, VoiceNotation, MatrixWidthKey])[] =
   MATRIX_CASES.flatMap(([label, source]) =>
-    NOTATIONS.flatMap((notation) =>
+    VOICE_NOTATIONS.flatMap((notation) =>
       WIDTH_KEYS.map((width) => [label, source, notation, width] as const),
     ),
   );
@@ -88,7 +55,7 @@ function firstVoice(source: MatrixScore): MatrixScore['renderScore']['voices'][n
   return voice;
 }
 
-/** C1 的判定：返回未满足「恰好一个可见节点」的项，空数组即通过。 */
+/** C1 的判定：返回未满足「恰好一个 primary 可见节点」的项，空数组即通过。 */
 function c1Offenders(
   items: readonly { readonly eventId: EventId; readonly event: { readonly kind: string } }[],
   counts: ReadonlyMap<EventId, number>,
@@ -104,40 +71,45 @@ function c2Offenders(anchors: readonly string[], diagnostics: readonly RenderDia
   return anchors.filter((key) => !covered.has(key));
 }
 
-/** C3 的判定：返回 anchor 解析不了的诊断，空数组即通过。 */
+/** C3 的判定：返回 anchor 解析不了（含 ownership 不符）的诊断，空数组即通过。 */
 function c3Offenders(diagnostics: readonly RenderDiagnostic[], source: MatrixScore): readonly string[] {
   return diagnostics
     .filter((diagnostic) => !anchorResolves(diagnostic.anchor, source))
     .map((diagnostic) => `${diagnostic.code}@${anchorKey(diagnostic.anchor)}`);
 }
 
-describe('render matrix —— 102 个 fixture × 声部 × 两档宽度（按 voice.style 分派）', () => {
-  it.each(FIXTURE_ROWS)('C1：%s @ %s —— 每个事件恰好一个可见节点', (name, width) => {
+describe('voice matrix —— 全部 runtime fixture × 声部 × 两档宽度（jianpu / tab / staff）', () => {
+  it('fixture 清单来自运行时 glob，非空', () => {
+    expect(fixtureNames.length).toBeGreaterThan(0);
+    expect(FIXTURE_ROWS).toHaveLength(fixtureNames.length * WIDTH_KEYS.length);
+  });
+
+  it.each(FIXTURE_ROWS)('C1：%s @ %s —— 每个事件恰好一个 primary 可见节点', (name, width) => {
     const source = fixtureScore(name);
     const ctx = matrixContext(source, width);
     for (const voice of source.renderScore.voices) {
       const model = layoutVoiceForMatrix(voice, ctx);
-      // style 缺席 / 未知：D12 下 notation 层不产 layout，C1 不适用，由下面的 D12 用例覆盖。
+      // style 缺席 / 未知：无 layout，走 D12 的声部级 fallback summary 用例，不在此断言。
       if (model === undefined) continue;
       expect(c1Offenders(voice.items, visibleNodesByEvent(model))).toEqual([]);
     }
   });
 
-  it.each(FIXTURE_ROWS)('C2：%s @ %s —— 每个 fallback 节点至少一条诊断', (name, width) => {
+  it.each(FIXTURE_ROWS)('C2：%s @ %s —— fallback 节点 ⊆ layout + RenderScore 诊断', (name, width) => {
     const source = fixtureScore(name);
     const ctx = matrixContext(source, width);
     for (const voice of source.renderScore.voices) {
       const model = layoutVoiceForMatrix(voice, ctx);
       if (model === undefined) continue;
-      const diagnostics = [...layoutDiagnostics(model), ...upstreamDiagnostics(source)];
+      const diagnostics = [...layoutDiagnostics(model), ...upstreamDiagnosticsForC2(source)];
       expect(c2Offenders(fallbackAnchors(model).map(anchorKey), diagnostics)).toEqual([]);
     }
   });
 
-  it.each(FIXTURE_ROWS)('C3：%s @ %s —— 每条诊断的 anchor 可经 DomainIndex 解析', (name, width) => {
+  it.each(FIXTURE_ROWS)('C3：%s @ %s —— anchor 可解析且归属正确（含 header 文档级诊断）', (name, width) => {
     const source = fixtureScore(name);
     const ctx = matrixContext(source, width);
-    const diagnostics = [...upstreamDiagnostics(source)];
+    const diagnostics = [...allDiagnosticsForC3(source)];
     for (const voice of source.renderScore.voices) {
       const model = layoutVoiceForMatrix(voice, ctx);
       if (model === undefined) continue;
@@ -145,14 +117,69 @@ describe('render matrix —— 102 个 fixture × 声部 × 两档宽度（按 v
     }
     expect(c3Offenders(diagnostics, source)).toEqual([]);
   });
+});
 
-  /** D12：`style` 缺席 / 未知的声部没有 layout，但必须有一条声部级诊断并且它可解析。 */
-  it.each(fixtureNames)('D12：%s —— style 缺席/未知的声部有可解析的声部级诊断', (name) => {
-    const source = fixtureScore(name);
-    const styleless = source.renderScore.voices.filter(
-      (voice) => layoutVoiceForMatrix(voice, matrixContext(source, 'wide')) === undefined,
+/**
+ * document chord matrix：输入是 `Score.chordShapes`，**不经过任何 `RenderVoice`**。
+ * C1(RenderItem) 与 C2(fallback node) 对它 **N/A**——它不消费事件，`ChordLayout` 也没有
+ * `fallback` 字段（理由见 helpers 文件头裁决①）。
+ */
+describe('document chord matrix —— chordShapes → ChordLayout（C1/C2 N/A，只跑计数与 C3）', () => {
+  const chordFixtures = fixtureNames.filter((name) => fixtureScore(name).score.chordShapes.length > 0);
+
+  it('至少有一个带 %%gchord 的 fixture，矩阵不空转', () => {
+    expect(chordFixtures.length).toBeGreaterThan(0);
+  });
+
+  it.each([...chordFixtures, ...CHORD_SOURCES.map(([label]) => label)])(
+    '%s —— 每个 GuitarChord 恰好一个 ChordLayout、anchor 为可解析的 document',
+    (key) => {
+      const synthetic = CHORD_SOURCES.find(([label]) => label === key);
+      const source = synthetic === undefined ? fixtureScore(key) : matrixScoreFrom(synthetic[1]);
+      const chords = layoutChordShapes(source);
+      expect(chords).toHaveLength(source.score.chordShapes.length);
+      for (const chord of chords) {
+        expect(chord.anchor).toEqual({ kind: 'document' });
+        expect(anchorResolves(chord.anchor, source)).toBe(true);
+        expect(chord.strings).toHaveLength(6);
+      }
+    },
+  );
+
+  it.each(CHORD_SOURCES)('%s —— 同输入两次 layoutChordShapes 逐字段相等', (_label, text) => {
+    const source = matrixScoreFrom(text);
+    expect(layoutChordShapes(source)).toEqual(layoutChordShapes(source));
+  });
+});
+
+/**
+ * D12：`style` 缺席 / 未知是**声部级 fallback summary**，没有 layout、没有
+ * `fallback: true` 的 event node——这里**不伪造 C2 node**，只断言真实存在的三件事。
+ */
+describe('D12 —— style 缺席 / 未知的声部级 fallback summary', () => {
+  it.each(D12_CASES)('%s —— 恰好一条声部级诊断，anchor 为 voice 且可解析', (_label, text, code) => {
+    const source = matrixScoreFrom(text);
+    const voice = firstVoice(source);
+    expect(layoutVoiceForMatrix(voice, matrixContext(source, 'wide'))).toBeUndefined();
+    const own = source.renderScore.diagnostics.filter(
+      (diagnostic) => anchorKey(diagnostic.anchor) === `voice:${voice.voiceId}`,
     );
-    for (const voice of styleless) {
+    expect(own.map((diagnostic) => diagnostic.code)).toEqual([code]);
+    expect(own.map((diagnostic) => diagnostic.anchor.kind)).toEqual(['voice']);
+    expect(c3Offenders(own, source)).toEqual([]);
+  });
+
+  it.each(D12_CASES)('%s —— summarizeEvents 对同一声部两次调用逐字段相等', (_label, text) => {
+    const source = matrixScoreFrom(text);
+    const events = firstVoice(source).items.map((item) => item.event);
+    expect(summarizeEvents(events)).toEqual(summarizeEvents(events));
+    expect(summarizeEvents(events).length).toBeGreaterThan(0);
+  });
+
+  it.each(fixtureNames)('%s —— fixture 里无 layout 的声部必带可解析的声部级诊断', (name) => {
+    const source = fixtureScore(name);
+    for (const voice of source.renderScore.voices) {
+      if (layoutVoiceForMatrix(voice, matrixContext(source, 'wide')) !== undefined) continue;
       const own = source.renderScore.diagnostics.filter(
         (diagnostic) => anchorKey(diagnostic.anchor) === `voice:${voice.voiceId}`,
       );
@@ -164,54 +191,31 @@ describe('render matrix —— 102 个 fixture × 声部 × 两档宽度（按 v
       expect(c3Offenders(own, source)).toEqual([]);
     }
   });
-
-  /** chord 的 C1 口径（见文件头）：只在真的有 `%%gchord` 的 fixture 上跑。 */
-  it.each(fixtureNames)('C1′：%s —— 每个 GuitarChord 恰好一个 ChordLayout', (name) => {
-    const source = fixtureScore(name);
-    const voice = source.renderScore.voices[0];
-    if (voice === undefined || source.score.chordShapes.length === 0) return;
-    const model = layoutVoiceAs('chord', voice, matrixContext(source, 'wide'));
-    if (model.notation !== 'chord') throw new Error('分派错误');
-    expect(model.chords).toHaveLength(source.score.chordShapes.length);
-    for (const chord of model.chords) {
-      expect(chord.anchor).toEqual({ kind: 'document' });
-      expect(chord.strings).toHaveLength(6);
-    }
-    expect(visibleNodesByEvent(model).size).toBe(0);
-    expect(fallbackAnchors(model)).toEqual([]);
-  });
 });
 
-describe('render matrix —— 合成边界用例 × 四种记谱 × 两档宽度', () => {
+describe('voice matrix —— 合成边界用例 × 三种记谱 × 两档宽度', () => {
   it.each(CASE_ROWS)('C1：%s / %s / %s @ %s', (_label, text, notation, width) => {
     const source = matrixScoreFrom(text);
     const voice = firstVoice(source);
     const model = layoutVoiceAs(notation, voice, matrixContext(source, width));
-    const counts = visibleNodesByEvent(model);
-    if (notation === 'chord') {
-      // chord 口径（见文件头）：不消费事件，按 chordShapes 计数。
-      expect(counts.size).toBe(0);
-      expect(model.notation === 'chord' ? model.chords.length : -1).toBe(source.score.chordShapes.length);
-      return;
-    }
-    expect(c1Offenders(voice.items, counts)).toEqual([]);
+    expect(c1Offenders(voice.items, visibleNodesByEvent(model))).toEqual([]);
   });
 
   it.each(CASE_ROWS)('C2：%s / %s / %s @ %s', (_label, text, notation, width) => {
     const source = matrixScoreFrom(text);
     const model = layoutVoiceAs(notation, firstVoice(source), matrixContext(source, width));
-    const diagnostics = [...layoutDiagnostics(model), ...upstreamDiagnostics(source)];
+    const diagnostics = [...layoutDiagnostics(model), ...upstreamDiagnosticsForC2(source)];
     expect(c2Offenders(fallbackAnchors(model).map(anchorKey), diagnostics)).toEqual([]);
   });
 
   it.each(CASE_ROWS)('C3：%s / %s / %s @ %s', (_label, text, notation, width) => {
     const source = matrixScoreFrom(text);
     const model = layoutVoiceAs(notation, firstVoice(source), matrixContext(source, width));
-    expect(c3Offenders([...layoutDiagnostics(model), ...upstreamDiagnostics(source)], source)).toEqual([]);
+    expect(c3Offenders([...layoutDiagnostics(model), ...allDiagnosticsForC3(source)], source)).toEqual([]);
   });
 
   /** 反空转哨兵：矩阵若一个 fallback 节点都没走到，C2 会全绿但什么也没证明。 */
-  it.each(['jianpu', 'tab', 'staff'] as const)('%s 在合成矩阵里确实走到过 fallback 节点', (notation) => {
+  it.each([...VOICE_NOTATIONS])('%s 在合成矩阵里确实走到过 fallback 节点', (notation) => {
     const total = MATRIX_CASES.reduce((sum, [, text]) => {
       const source = matrixScoreFrom(text);
       const model = layoutVoiceAs(notation, firstVoice(source), matrixContext(source, 'wide'));
@@ -220,28 +224,45 @@ describe('render matrix —— 合成边界用例 × 四种记谱 × 两档宽�
     expect(total).toBeGreaterThan(0);
   });
 
+  /**
+   * C1 过滤规则的正面证据（裁决⑤）：TAB 的 stroke 记号是**真的带 event anchor** 的
+   * overlay（`TabStrokeMark.anchor` 为 `{ kind: 'event' }`），它住在 `layout.strokes`
+   * 而不是 `layout.nodes`。断言：该用例确实产出了这类 overlay，而 C1 仍恰好 1 ——
+   * 说明「只看 `nodes`」的过滤规则真的挡住了重复计数。
+   */
+  it('TAB stroke overlay 带 event anchor，但不被数成第二个 primary 节点', () => {
+    const row = MATRIX_CASES.find(([label]) => label.startsWith('tab stroke overlay'));
+    if (row === undefined) throw new Error('用例表缺少 tab stroke overlay');
+    const source = matrixScoreFrom(row[1]);
+    const voice = firstVoice(source);
+    const model = layoutVoiceAs('tab', voice, matrixContext(source, 'wide'));
+    expect(overlayEventAnchorCount(model)).toBeGreaterThan(0);
+    expect(c1Offenders(voice.items, visibleNodesByEvent(model))).toEqual([]);
+  });
+
   it('跨行 tie 用例在窄宽度下真的拆成了多行谱', () => {
     const row = MATRIX_CASES.find(([label]) => label.startsWith('跨行 tie'));
     if (row === undefined) throw new Error('用例表缺少跨行 tie');
     const source = matrixScoreFrom(row[1]);
     const model = layoutVoiceAs('staff', firstVoice(source), matrixContext(source, 'narrow'));
-    expect(model.notation === 'staff' ? model.layout.systems.length : 0).toBeGreaterThan(1);
+    expect(model.layout.systems.length).toBeGreaterThan(1);
   });
 });
 
 /**
  * dangling relation 端点：靠**人为剪掉 `index.eventById` 里的一项**制造。
  *
- * 本块**刻意不跑通用 C3**：index 已被故意破坏，`event:` 分支的 anchor 当然解析不了，
- * 那正是被造出来的故障本身（tab 记谱下的 `tab.event-out-of-scope` 就挂在被剪掉的事件
- * 上）。改为定点断言 C3 的 relation 分支——`relationById` 完好，诊断必须挂在 relation
- * 上而不是挂在查不到的事件上。
+ * 本块**刻意不跑通用 C3**（理由见 helpers 文件头），改为定点断言 C3 的 relation 分支。
+ * 也**不要求** `relationEndpointMissing` 一定伴随一个可见的 relation glyph——端点查不到
+ * 时画不出连线正是预期行为，强求 glyph 等于要求本层去猜一个不存在的端点位置。
  */
-describe('render matrix —— dangling relation 端点（index 被人为破坏）', () => {
-  const BASE = jcx(HEAD_4_4, STAFF_VOICE, 'C-C D|');
+describe('voice matrix —— dangling relation 端点（index 被人为破坏）', () => {
+  const ROWS = VOICE_NOTATIONS.flatMap((notation) =>
+    WIDTH_KEYS.map((width) => [notation, width] as const),
+  );
 
   function prunedSource(): MatrixScore {
-    const base = matrixScoreFrom(BASE);
+    const base = matrixScoreFrom(DANGLING_SOURCE);
     const victim = firstVoice(base).items[1];
     if (victim === undefined) throw new Error('用例至少要有两个事件');
     const eventById = new Map(base.index.eventById);
@@ -250,7 +271,7 @@ describe('render matrix —— dangling relation 端点（index 被人为破坏�
     return { ...base, index, renderScore: buildRenderScore({ score: base.score, index }) };
   }
 
-  it('C3（relation 分支）：发出 relationEndpointMissing，且 anchor 落在可解析的 relation 上', () => {
+  it('C3（relation 分支）：发出 relationEndpointMissing，anchor 落在归属本声部的 relation 上', () => {
     const source = prunedSource();
     const dangling = source.renderScore.diagnostics.filter(
       (diagnostic) => diagnostic.code === RENDER_DIAGNOSTIC_CODES.relationEndpointMissing,
@@ -260,57 +281,64 @@ describe('render matrix —— dangling relation 端点（index 被人为破坏�
     expect(c3Offenders(dangling, source)).toEqual([]);
   });
 
-  it.each(CASE_NOTATION_WIDTHS())('C1/C2 仍成立：%s @ %s（布局只读 voice.items，不读 index）', (notation, width) => {
+  it.each(ROWS)('C1/C2 仍成立：%s @ %s（布局只读 voice.items，不读 index）', (notation, width) => {
     const source = prunedSource();
     const voice = firstVoice(source);
     const model = layoutVoiceAs(notation, voice, matrixContext(source, width));
-    if (notation !== 'chord') {
-      expect(c1Offenders(voice.items, visibleNodesByEvent(model))).toEqual([]);
-    }
-    const diagnostics = [...layoutDiagnostics(model), ...upstreamDiagnostics(source)];
+    expect(c1Offenders(voice.items, visibleNodesByEvent(model))).toEqual([]);
+    const diagnostics = [...layoutDiagnostics(model), ...upstreamDiagnosticsForC2(source)];
     expect(c2Offenders(fallbackAnchors(model).map(anchorKey), diagnostics)).toEqual([]);
   });
 });
 
-function CASE_NOTATION_WIDTHS(): readonly (readonly [MatrixNotation, MatrixWidthKey])[] {
-  return NOTATIONS.flatMap((notation) => WIDTH_KEYS.map((width) => [notation, width] as const));
+/** 把整张矩阵（fixture + 合成用例）跑一遍，收集全部诊断，供 C3 的稳定性与码表断言复用。 */
+function collectAllDiagnostics(): readonly RenderDiagnostic[] {
+  const all: RenderDiagnostic[] = [];
+  for (const name of fixtureNames) {
+    const source = fixtureScore(name);
+    all.push(...allDiagnosticsForC3(source));
+    for (const width of WIDTH_KEYS) {
+      const ctx = matrixContext(source, width);
+      for (const voice of source.renderScore.voices) {
+        const model = layoutVoiceForMatrix(voice, ctx);
+        if (model !== undefined) all.push(...layoutDiagnostics(model));
+      }
+    }
+  }
+  for (const [, text] of [...MATRIX_CASES, ...D12_CASES.map(([l, t]) => [l, t] as const)]) {
+    const source = matrixScoreFrom(text);
+    all.push(...allDiagnosticsForC3(source));
+    for (const width of WIDTH_KEYS) {
+      for (const notation of VOICE_NOTATIONS) {
+        all.push(...layoutDiagnostics(layoutVoiceAs(notation, firstVoice(source), matrixContext(source, width))));
+      }
+    }
+  }
+  return all;
 }
 
-describe('render matrix —— 确定性与诊断码来源', () => {
-  const DETERMINISM_SOURCE = jcx(HEAD_1_8, STAFF_VOICE, '!TRILL!C?D [zz] (3:0:3EFG Z2 @2 "Am"c4-|c4|');
-
-  it.each(NOTATIONS)('%s：同输入两次 layout 逐字段相等', (notation) => {
+describe('render matrix —— 确定性、anchorKey 稳定性、诊断码来源', () => {
+  it.each([...VOICE_NOTATIONS])('%s：同输入两次 layout 逐字段相等', (notation) => {
     const source = matrixScoreFrom(DETERMINISM_SOURCE);
     const voice = firstVoice(source);
     const ctx = matrixContext(source, 'narrow');
     expect(layoutVoiceAs(notation, voice, ctx)).toEqual(layoutVoiceAs(notation, voice, ctx));
   });
 
+  it('anchorKey 对同一 anchor 重复调用返回同一字符串，且 key 唯一决定 anchor', () => {
+    const byKey = new Map<string, Anchor>();
+    for (const diagnostic of collectAllDiagnostics()) {
+      const key = anchorKey(diagnostic.anchor);
+      expect(anchorKey(diagnostic.anchor)).toBe(key);
+      const seen = byKey.get(key);
+      if (seen === undefined) byKey.set(key, diagnostic.anchor);
+      else expect(diagnostic.anchor).toEqual(seen);
+    }
+    expect(byKey.size).toBeGreaterThan(0);
+  });
+
   it('全矩阵诊断的 code 都来自 RENDER_DIAGNOSTIC_CODES（禁止手写字符串）', () => {
-    const codes = new Set<string>();
-    const collect = (diagnostics: readonly RenderDiagnostic[]): void => {
-      for (const diagnostic of diagnostics) codes.add(diagnostic.code);
-    };
-    for (const name of fixtureNames) {
-      const source = fixtureScore(name);
-      collect(upstreamDiagnostics(source));
-      for (const width of WIDTH_KEYS) {
-        const ctx = matrixContext(source, width);
-        for (const voice of source.renderScore.voices) {
-          const model = layoutVoiceForMatrix(voice, ctx);
-          if (model !== undefined) collect(layoutDiagnostics(model));
-        }
-      }
-    }
-    for (const [, text] of MATRIX_CASES) {
-      const source = matrixScoreFrom(text);
-      collect(upstreamDiagnostics(source));
-      for (const width of WIDTH_KEYS) {
-        for (const notation of NOTATIONS) {
-          collect(layoutDiagnostics(layoutVoiceAs(notation, firstVoice(source), matrixContext(source, width))));
-        }
-      }
-    }
+    const codes = new Set(collectAllDiagnostics().map((diagnostic) => diagnostic.code));
     expect([...codes].filter((code) => !CODE_VALUES.includes(code))).toEqual([]);
     expect(codes.size).toBeGreaterThan(10);
   });
