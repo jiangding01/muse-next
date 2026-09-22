@@ -250,6 +250,33 @@ describe('时值装饰 —— 走 T0 的 {base, dots}（§2.6.1，用例中不�
     expect(firstNote(header('C3/2|'))).toEqual({ beams: 0, dashes: 0, dots: 1 });
   });
 
+  /**
+   * 用户裁决补充：简谱惯例换算（延音线表示整拍数、附点只用于不足一拍的余数，
+   * `jianpuGlyphBuilders.ts` 的 `jianpuDashDotPlan`，INFERRED，不改
+   * `decomposeDuration`）。五个用户点名的用例：
+   * - `3/4`（附点二分音符）→ 2 条延音线、0 个附点（**这是行为变化**：
+   *   `decomposeDuration` 原始给 `dots=1, dashes=1`，画成 `6•—`；换算后 `q=3`
+   *   是整数，改画 `6 – –`，与参考谱一致）；
+   * - `1/2`、`1` → 1/3 条延音线（`q` 为整数但 `dots` 本就是 0，换算前后一致，
+   *   上面「绝对音长 1/2 → 一条延音线；1 → 三条」已经覆盖，这里不重复）；
+   * - `3/8`（附点四分音符，`L:1/8` 下写作 `X3`）→ 0 条延音线、1 个附点
+   *   （`q = 1.5`，`k = 1`，`dashes = k − 1 = 0`——与换算前一致，上面「3/8 → 附点」
+   *   已经覆盖，这里换一种 `L:` 写法再钉一次）；
+   * - `3/16`（附点八分音符）→ 减时线 1 条 + 附点 1 个，**不变**（`q = 0.75 < 1`，
+   *   落在 `beams > 0` 分支，换算规则天然不触碰——这正是「从不碰减时线」的证据）。
+   */
+  it('用户裁决：3/4（附点二分音符）→ 2 条延音线、0 个附点（换算后不再画附点，与原始 decomposeDuration 的 {dashes:1,dots:1} 不同）', () => {
+    expect(firstNote(header('C3|'))).toEqual({ beams: 0, dashes: 2, dots: 0 });
+  });
+
+  it('用户裁决：3/8（附点四分音符，L:1/8 下写作 X3）→ 0 条延音线、1 个附点', () => {
+    expect(firstNote(header('C3|', 'M:4/4\nL:1/8\nK:C\n'))).toEqual({ beams: 0, dashes: 0, dots: 1 });
+  });
+
+  it('用户裁决：3/16（附点八分音符，L:1/4 下写作 C3/4）→ 减时线 1 条 + 附点 1 个，维持 decomposeDuration 原始结果（q<1 不触发换算，天然不碰减时线）', () => {
+    expect(firstNote(header('C3/4|'))).toEqual({ beams: 1, dashes: 0, dots: 1 });
+  });
+
   it('不可表示（1/12）→ **不画任何时值装饰**，不四舍五入到最近可表示时值', () => {
     const node = layout(header('C1/3 D|')).nodes.find((item) => item.kind === 'note');
     expect(node?.kind === 'note' && node.duration.unrepresentable).toBe(true);
@@ -438,47 +465,49 @@ describe('歌词（§24：按 NoteRef 对齐到列 x，多段逐行下排）', (
   });
 });
 
-describe('头部标签（§3.2 调号 / 拍号；P1-2：永不生成 1=<tonic>）', () => {
+describe('头部标签（§3.2 调号 / 拍号；U-Polish Phase A 二次裁决：声部行首恒不显示，由文档页眉承担，P1-2 改写）', () => {
   /**
-   * T5 修订：`key.absent` / `key.unresolved` / `key.mode-unrecognized` / `meter.raw`
-   * 四类诊断**不再由本层（`layoutJianpu` → `jianpuSections.buildHeaderLabels`）发出**
-   * ——它们是文档级事实，一份乐谱可能有多个 jianpu 声部，每个声部各发一遍会把同一件
-   * 事报告 N 次。现在只由 `notation/layout/scoreHeader.ts` 的 `layoutScoreHeader` 在
-   * 文档级发一次（且按「是否存在 jianpu 消费者」门控），对应测试见
-   * `jianpu.toSvg.test.ts` 的 `layoutScoreHeader` 描述块。本文件只保留「标签文本画对
-   * 了没有」——诊断与标签文本是两件事，`buildHeaderLabels` 现在只管后者。
+   * **本描述块的用例已翻转**（用户裁决）：`buildHeaderLabels` 原先按 `KeySignature`
+   * 四形态各画一种 `K: <值>` 文本，现在**恒返回空数组**——M2 没有「声部级调号/拍号」，
+   * `Score.key`/`Score.meter` 是文档级事实，文档级头部（`notation/layout/scoreHeader.ts`
+   * 的 `layoutScoreHeader` → `ScoreHeaderView`）已经承担这份展示（简谱成品视图下是
+   * `1=<tonic>` + 叠排拍号），声部行首再画一遍会在同一页面上同时出现两套（用户 Electron
+   * 实机截图证实：页眉 `1=G` + 简谱块左上 `K: G  3/4`）。
+   *
+   * 四类诊断（`key.absent` 等）本就不在这里发（T5 已经这样），继续只由
+   * `notation/layout/scoreHeader.ts` 在文档级发一次，对应测试见 `jianpu.toSvg.test.ts`
+   * 的 `layoutScoreHeader` 描述块，本次改写不影响诊断路径。
    */
-  function keyLabel(text: string): string | undefined {
-    return layout(text).labels.find((label) => label.kind === 'key')?.text.text;
-  }
-
-  it('全仓没有 `1=` 标签：所有标签文本都不含它', () => {
+  it('全仓没有 `1=` 标签：所有标签文本都不含它（`labels` 现在恒为空数组，这条不变量自动成立）', () => {
     for (const source of [header('C|'), header('C|', 'M:4/4\nL:1/4\nK:G\n')]) {
       for (const label of layout(source).labels) expect(label.text.text).not.toContain('1=');
     }
   });
 
-  it('形态一：tonic 有值 → 画 `K: <值>`', () => {
-    expect(keyLabel(header('C|', 'M:4/4\nL:1/4\nK:G\n'))).toBe('K: G');
-  });
-
-  it('形态二：tonic + 未知 mode → mode 原文一并显示，**不假设 major**', () => {
-    expect(keyLabel(header('C|', 'M:4/4\nL:1/4\nK:A Mix\n'))).toBe('K: A Mix');
-  });
-
-  it('形态三：只有 raw → 原样转述，**不从 alter 反推主音**', () => {
-    expect(keyLabel(header('C|', 'M:4/4\nL:1/4\nK:???\n'))).toBe('K: ???');
-  });
-
-  it('形态四：key 整个缺席 → 不画调号标签（默认调号无证据，§8.7）', () => {
-    const result = layout(header('C|', 'M:4/4\nL:1/4\n'));
+  it.each([
+    ['tonic 有值', 'M:4/4\nL:1/4\nK:G\n'],
+    ['tonic + 未知 mode', 'M:4/4\nL:1/4\nK:A Mix\n'],
+    ['只有 raw（未解析）', 'M:4/4\nL:1/4\nK:???\n'],
+    ['key 整个缺席', 'M:4/4\nL:1/4\n'],
+  ] as const)('%s → labels 里没有任何 kind === "key" 的标签（声部行首不再显示调号，由文档页眉承担）', (_label, fields) => {
+    const result = layout(header('C|', fields));
     expect(result.labels.some((label) => label.kind === 'key')).toBe(false);
   });
 
-  it('拍号：fraction 画 num/den；raw（`C`）原样显示，**不换算成 4/4**', () => {
-    expect(layout(header('C|')).labels.find((label) => label.kind === 'meter')?.text.text).toBe('4/4');
+  it('拍号（fraction / raw 两种形态）→ labels 里没有任何 kind === "meter" 的标签（声部行首不再显示拍号）', () => {
+    expect(layout(header('C|')).labels.some((label) => label.kind === 'meter')).toBe(false);
     const rawMeter = layout(header('C|', 'M:C\nL:1/4\nK:C\n'));
-    expect(rawMeter.labels.find((label) => label.kind === 'meter')?.text.text).toBe('C');
+    expect(rawMeter.labels.some((label) => label.kind === 'meter')).toBe(false);
+  });
+
+  it('`labels` 在任何输入下恒为空数组（`buildHeaderLabels` 的新契约）', () => {
+    for (const source of [
+      header('C|', 'M:4/4\nL:1/4\nK:G\n'),
+      header('C|', 'M:4/4\nL:1/4\n'),
+      header('C|', 'M:C\nL:1/4\nK:C\n'),
+    ]) {
+      expect(layout(source).labels).toEqual([]);
+    }
   });
 });
 

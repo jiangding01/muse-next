@@ -345,3 +345,61 @@ describe('layoutScoreHeader —— keyText 的「额外 mode 文本」判据（T
     }
   });
 });
+
+/**
+ * U-Polish Phase A 用户裁决补充：`layoutScoreHeader` 的 `jianpuTonicLabel` /
+ * `jianpuMeterFraction`（简谱成品视图专属字段，Phase A item 8）三态 + 门控测试。
+ *
+ * 边界裁决 1 的核实结论（写在这里而不是散落各处，方便一次看全）：这两个字段只面向
+ * `ScoreHeaderView`（文档级 HTML 头部），且只在 `score.voices` 至少含一个
+ * `style === 'jianpu'` 声部时才计算；`.key`/`.meter`（原始 `K:`/`M:` 转述，
+ * Source/Inspector/Document 侧栏消费）在任何情形下都不受影响，本描述块逐条验证这一点。
+ * 简谱声部**行首**的 `buildHeaderLabels`（`jianpuSections.ts`）画的是另一处头部，本文件
+ * 不测——那里永远是 `K: <raw>`，已由 `jianpu.layout.test.ts` 的「全仓没有 `1=` 标签」
+ * 钉住，且与这里的 `jianpuTonicLabel` 会在真实页面上**同时出现**（用户已用截图确认），
+ * 这是当前产品状态的如实呈现，不是本次改动引入的新行为，去留留给用户下一轮裁决。
+ */
+describe('layoutScoreHeader —— jianpuTonicLabel / jianpuMeterFraction 三态 + 门控（Phase A item 8）', () => {
+  function headerOf(key: string, meter: string, style: string): ReturnType<typeof layoutScoreHeader> {
+    const loaded = loadJcx(`%MUSE2\nX:1\n${meter}\n${key}\nV:1 ${style}\nC|\n`);
+    return layoutScoreHeader(loaded.score, measurer);
+  }
+
+  it('K:G + jianpu 声部 → jianpuTonicLabel === "1=G"，且不影响 .key（仍是 "K: G"）', () => {
+    const result = headerOf('K:G', 'M:4/4', 'style=jianpu');
+    expect(result.jianpuTonicLabel?.text).toBe('1=G');
+    expect(result.key?.text).toBe('K: G');
+  });
+
+  it('K:Eb + jianpu 声部 → jianpuTonicLabel === "1=Eb"（干净的规范拼写照常生成）', () => {
+    const result = headerOf('K:Eb', 'M:4/4', 'style=jianpu');
+    expect(result.jianpuTonicLabel?.text).toBe('1=Eb');
+    expect(result.key?.text).toBe('K: Eb');
+  });
+
+  it('K:Dm + jianpu 声部 → jianpuTonicLabel 为 undefined（含未识别 mode 文本，不猜），.key 仍原样转述 "K: Dm"（View 据此回退）', () => {
+    const result = headerOf('K:Dm', 'M:4/4', 'style=jianpu');
+    expect(result.jianpuTonicLabel).toBeUndefined();
+    expect(result.key?.text).toBe('K: Dm');
+  });
+
+  it('纯 staff 文档（无 jianpu 声部）→ jianpuTonicLabel / jianpuMeterFraction 均 undefined，.key / .meter 仍是 "K: G" / "3/4"', () => {
+    const result = headerOf('K:G', 'M:3/4', 'style=staff');
+    expect(result.jianpuTonicLabel).toBeUndefined();
+    expect(result.jianpuMeterFraction).toBeUndefined();
+    expect(result.key?.text).toBe('K: G');
+    expect(result.meter?.text).toBe('3/4');
+  });
+
+  it('M: 为 raw 形态（如 M:C）+ jianpu 声部 → jianpuMeterFraction 为 undefined，.meter 仍原样转述 "C"（View 据此回退单行显示）', () => {
+    const result = headerOf('K:G', 'M:C', 'style=jianpu');
+    expect(result.jianpuMeterFraction).toBeUndefined();
+    expect(result.meter?.text).toBe('C');
+  });
+
+  it('M:3/4 + jianpu 声部 → jianpuMeterFraction 结构化拆分为 { num: "3", den: "4" }', () => {
+    const result = headerOf('K:G', 'M:3/4', 'style=jianpu');
+    expect(result.jianpuMeterFraction).toEqual({ num: '3', den: '4' });
+    expect(result.meter?.text).toBe('3/4');
+  });
+});

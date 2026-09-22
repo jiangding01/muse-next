@@ -33,7 +33,8 @@ import type { TextMeasurer } from '../layout/textMeasurer';
 import { RENDER_DIAGNOSTIC_CODES as CODES, collectRenderDiagnostics } from '../model/diagnostics';
 import type { RenderDiagnosticDraft } from '../model/diagnostics';
 import type { RenderDiagnostic, RenderVoice } from '../model/types';
-import { buildUnitLengthMark, draftOf } from './jianpuGlyphs';
+import { buildUnitLengthMark } from './jianpuGlyphBuilders';
+import { draftOf } from './jianpuGlyphs';
 import type {
   DraftSink,
   JianpuArc,

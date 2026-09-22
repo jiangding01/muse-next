@@ -15,17 +15,37 @@ import type { ScoreHeaderLayout } from '../../../notation/layout/scoreHeader';
 
 const DOCUMENT_ANCHOR_KEY = anchorKey({ kind: 'document' });
 
+/**
+ * 头部「调号 / 拍号」这一格的展示文本（Phase A item 8，边界裁决 1）：`jianpuTonicLabel`
+ * 只在「至少一个 jianpu 声部 + `K:` 拼得出干净规范形式」时由 `layoutScoreHeader` 给出，
+ * 否则退回原始 `key`（`K: <raw>`）——纯 staff 文档、或 `K:` 含未解析 mode 文本的简谱文档
+ * 都会走这条退路，不猜测。 */
+function tonicOf(header: ScoreHeaderLayout): ScoreHeaderLayout['key'] {
+  return header.jianpuTonicLabel ?? header.key;
+}
+
 export function ScoreHeaderView({ header }: { readonly header: ScoreHeaderLayout }) {
+  const tonic = tonicOf(header);
   return (
     <header className="score-header" data-anchor-key={DOCUMENT_ANCHOR_KEY}>
       {header.title !== undefined && <h1 className="score-header-title">{header.title.text}</h1>}
       {header.subtitles.map((subtitle, index) => (
         <h2 key={index} className="score-header-subtitle">{subtitle.text}</h2>
       ))}
-      {(header.key !== undefined || header.meter !== undefined || header.tempo !== undefined) && (
+      {(tonic !== undefined || header.meter !== undefined || header.tempo !== undefined) && (
         <div className="score-header-meta">
-          {header.key !== undefined && <span className="score-header-meta-item">{header.key.text}</span>}
-          {header.meter !== undefined && <span className="score-header-meta-item">{header.meter.text}</span>}
+          {tonic !== undefined && <span className="score-header-meta-item">{tonic.text}</span>}
+          {header.jianpuMeterFraction !== undefined ? (
+            <span
+              className="score-header-meta-item score-header-meter-fraction"
+              aria-label={`${header.jianpuMeterFraction.num}/${header.jianpuMeterFraction.den}`}
+            >
+              <span className="score-header-meter-num">{header.jianpuMeterFraction.num}</span>
+              <span className="score-header-meter-den">{header.jianpuMeterFraction.den}</span>
+            </span>
+          ) : (
+            header.meter !== undefined && <span className="score-header-meta-item">{header.meter.text}</span>
+          )}
           {header.tempo !== undefined && <span className="score-header-meta-item">{header.tempo.text}</span>}
         </div>
       )}

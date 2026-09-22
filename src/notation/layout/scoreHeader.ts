@@ -27,7 +27,7 @@
  */
 
 import type { KeySignature, Meter, Score, Tempo, TextBlock } from '../../domain';
-import { keyHasExtraText } from './keySpelling';
+import { canonicalKeySpelling, keyHasExtraText } from './keySpelling';
 import type { RenderDiagnosticDraft } from '../model/diagnostics';
 import { RENDER_DIAGNOSTIC_CODES as CODES, collectRenderDiagnostics } from '../model/diagnostics';
 import type { Anchor, RenderDiagnostic } from '../model/types';
@@ -47,6 +47,12 @@ export interface ScoreHeaderTextBlockLayout {
   readonly closed: boolean;
 }
 
+/** 拍号「分子/分母」的结构化拆分，供 `ScoreHeaderView` 叠排成上下分数（Phase A item 8）。 */
+export interface ScoreHeaderMeterFraction {
+  readonly num: string;
+  readonly den: string;
+}
+
 export interface ScoreHeaderLayout {
   /** `Score.titles[0]`；`titles` 整体缺席时省略（不臆造 "Untitled"，那是 renderer 的展示决定）。 */
   readonly title?: ScoreHeaderTextLine;
@@ -54,9 +60,29 @@ export interface ScoreHeaderLayout {
   readonly subtitles: readonly ScoreHeaderTextLine[];
   readonly credits: readonly ScoreHeaderTextLine[];
   readonly notes: readonly ScoreHeaderTextLine[];
+  /** 原始 `K: <raw>` 转述，**语义不变**（Source / Inspector / Document 侧栏消费它）。 */
   readonly key?: ScoreHeaderTextLine;
+  /** 原始拍号转述（`num/den` 或 `raw`），**语义不变**（Source / Inspector / Document 侧栏消费它）。 */
   readonly meter?: ScoreHeaderTextLine;
   readonly tempo?: ScoreHeaderTextLine;
+  /**
+   * 简谱成品视图专属（Phase A item 8）：`1=<tonic>` 风格展示行。仅当 (a) 乐谱至少含一个
+   * `style === 'jianpu'` 声部、(b) `K:` 拼得出干净的规范形式（`!keyHasExtraText`，无
+   * mode/clef 等额外文本）时给出；任一条件不满足则省略，调用方（`ScoreHeaderView`）退回
+   * 展示 `.key`（原始 `K: <raw>`），不猜测。纯 staff 文档（无 jianpu 声部）恒为
+   * `undefined`——`1=<tonic>` 是首调唱名式简谱记法，不套用到纯五线谱视图。与
+   * `jianpuSections.buildHeaderLabels`（声部内联 `K: <raw>` 标签，P1-2「永不生成
+   * `1=<tonic>`」）是两处独立的头部：那里画在每个简谱声部自己的谱表行首，这里画在文档
+   * 级 HTML 头部，二者不会同时出现在同一处、也不会互相冲突。
+   */
+  readonly jianpuTonicLabel?: ScoreHeaderTextLine;
+  /**
+   * 简谱成品视图专属（Phase A item 8）：`meter.kind === 'fraction'` 时的结构化拆分，供
+   * `ScoreHeaderView` 用 HTML 叠排成上下分数。同 `jianpuTonicLabel` 的门控：只在存在
+   * jianpu 声部时给出；`raw` 形态拍号或无 jianpu 声部时省略，调用方退回展示 `.meter`
+   * （原始文本，含 `raw` 形态时的单行显示，即「不可行则退回 `1=G 3/4`」的退路）。
+   */
+  readonly jianpuMeterFraction?: ScoreHeaderMeterFraction;
   readonly textBlocks: readonly ScoreHeaderTextBlockLayout[];
   /** 只含「头部自己独有」的诊断（文本块未闭合）；不含 key/meter/tempo 的 fallback 诊断（见文件头）。 */
   readonly diagnostics: readonly RenderDiagnostic[];
@@ -160,6 +186,25 @@ function noopSink(): void {
 }
 
 /**
+ * `1=<tonic>` 展示文本（Phase A item 8）。**不发任何诊断**——四类 key/meter fallback
+ * 诊断已由 `keyText` 统一发出，这里只是同一份 `key` 事实的另一种呈现，重复发诊断会把
+ * 同一件事报告两次。`raw` 里有额外 mode/clef 文本（`keyHasExtraText`）时返回
+ * `undefined`：宁可调用方退回 `K: <raw>`，也不猜一个可能是错的 tonic。
+ */
+function jianpuTonicLabelText(key: KeySignature | undefined): string | undefined {
+  if (key === undefined || keyHasExtraText(key)) return undefined;
+  const canonical = canonicalKeySpelling(key);
+  return canonical === undefined ? undefined : `1=${canonical}`;
+}
+
+/** 拍号「分子/分母」拆分（Phase A item 8）：只认 `fraction` 形态，`raw` 原样交回调用方。 */
+function jianpuMeterFractionOf(meter: Meter | undefined): ScoreHeaderMeterFraction | undefined {
+  return meter !== undefined && meter.kind === 'fraction'
+    ? { num: String(meter.num), den: String(meter.den) }
+    : undefined;
+}
+
+/**
  * 纯函数：同一 `(score, measurer)` 必然得到逐字段相等的 `ScoreHeaderLayout`
  * （`measurer` 按 §2.8 的契约也必须是纯函数）。`score` 不被读取以外的方式使用。
  */
@@ -184,10 +229,21 @@ export function layoutScoreHeader(score: Score, measurer: TextMeasurer): ScoreHe
   );
   const keyMeterSink = hasKeyMeterConsumer ? collect : noopSink;
 
+  /**
+   * `1=<tonic>` / 拍号分数拆分只面向**简谱成品视图**（Phase A item 8，边界裁决 1）：
+   * `staff` 不在这个门里——五线谱自己画调号/拍号记谱，不该在共享的文档头部看见简谱专用
+   * 的首调唱名式写法。与上面 `hasKeyMeterConsumer`（决定发不发诊断）是两个独立的判据，
+   * 故意不合并：一份乐谱可能只有 `staff` 声部而没有 `jianpu` 声部，这时四类诊断仍要发
+   * （`staff` 也消费 `K:`/`M:`），但 `1=<tonic>` 不该出现。
+   */
+  const hasJianpuVoice = score.voices.some((voice) => voice.style === 'jianpu');
+
   const [primaryTitle, ...subtitleTexts] = score.titles;
   const key = keyText(score.key, keyMeterSink);
   const meter = meterText(score.meter, keyMeterSink);
   const tempo = tempoText(score.tempo);
+  const jianpuTonic = hasJianpuVoice ? jianpuTonicLabelText(score.key) : undefined;
+  const jianpuMeterFraction = hasJianpuVoice ? jianpuMeterFractionOf(score.meter) : undefined;
 
   return {
     ...(primaryTitle === undefined
@@ -199,6 +255,10 @@ export function layoutScoreHeader(score: Score, measurer: TextMeasurer): ScoreHe
     ...(key === undefined ? {} : { key: line(key, SCORE_HEADER_METRICS.metaFontSize, measurer) }),
     ...(meter === undefined ? {} : { meter: line(meter, SCORE_HEADER_METRICS.metaFontSize, measurer) }),
     ...(tempo === undefined ? {} : { tempo: line(tempo, SCORE_HEADER_METRICS.metaFontSize, measurer) }),
+    ...(jianpuTonic === undefined
+      ? {}
+      : { jianpuTonicLabel: line(jianpuTonic, SCORE_HEADER_METRICS.metaFontSize, measurer) }),
+    ...(jianpuMeterFraction === undefined ? {} : { jianpuMeterFraction }),
     textBlocks: score.textBlocks.map((block) => textBlockLayout(block, measurer, collect)),
     diagnostics: collectRenderDiagnostics(drafts),
   };

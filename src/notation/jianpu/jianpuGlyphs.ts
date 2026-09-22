@@ -1,18 +1,22 @@
 /**
- * notation/jianpu —— 简谱 layout 的**节点类型**与**字形几何**（M2 方案 v1.1.1 §3.2 / §2.7，
- * T4；自 `layoutJianpu.ts` 拆出）。拆分理由：`layoutJianpu.ts` 管切分 / 换行 / 关系 / 歌词 /
- * 诊断，必超 350 行上限；本文件的几何只认「一个基准点」，歌词行与头部标签另见
- * `jianpuSections.ts`。这些类型是**简谱自己的** layout model，不继承任何万能基类，也不与
- * `ChordLayout` / `TabLayout` / `StaffLayout` 互相转换（§2.7）。依赖方向单向
- * `layoutJianpu.ts → jianpuGlyphs.ts`，无环；尺寸一律取自 `metrics.ts` 的
- * `JIANPU_METRICS`（唯一来源），单位是 abstract unit（D6，不是像素）。
+ * notation/jianpu —— 简谱 layout 的**节点类型**与**基准几何**（M2 方案 v1.1.1 §3.2 / §2.7，
+ * T4；自 `layoutJianpu.ts` 拆出；U-Polish Phase A 再拆出字形构造函数到
+ * `jianpuGlyphBuilders.ts`）。拆分理由：`layoutJianpu.ts` 管切分 / 换行 / 关系 / 歌词 /
+ * 诊断，必超 350 行上限；`jianpuGlyphBuilders.ts` 管「给定基准点画出具体字形」，本文件只留
+ * 节点类型定义 + 少数**跨构造函数共享**的基准几何（`digitTop` / `digitBottom` /
+ * `digitMidline` / `barlineTop` / `barlineBottom`）——它们是多个构造函数（附点、延音线、
+ * 小节线、未知占位框、降级角标）共同的纵向参照系，留在类型文件里避免被拆散成不同文件里
+ * 各算各的坐标。歌词行与头部标签另见 `jianpuSections.ts`。这些类型是**简谱自己的**
+ * layout model，不继承任何万能基类，也不与 `ChordLayout` / `TabLayout` / `StaffLayout`
+ * 互相转换（§2.7）。依赖方向单向 `layoutJianpu.ts → jianpuGlyphBuilders.ts →
+ * jianpuGlyphs.ts`，无环；尺寸一律取自 `metrics.ts` 的 `JIANPU_METRICS`（唯一来源），
+ * 单位是 abstract unit（D6，不是像素）。
  */
 
-import type { Accidental, SourceRef } from '../../domain';
+import type { SourceRef } from '../../domain';
 import { JIANPU_METRICS } from '../layout/metrics';
 import type { Point } from '../layout/primitives';
 import type { RenderDiagnosticDraft } from '../model/diagnostics';
-import type { DurationDecomposition } from '../model/duration';
 import type { Anchor, RenderDiagnosticCode } from '../model/types';
 import type { JianpuPitch } from './pitchToNumber';
 
@@ -192,16 +196,48 @@ export interface JianpuUnitLengthMark {
   readonly segment: JianpuSegment;
 }
 // ---------------------------------------------------------------------------
-// 字形几何
+// 基准几何：多个构造函数共用的纵向参照系（Phase A 起也含 barline 专属参照）
 // ---------------------------------------------------------------------------
 
-/** 数字（1–7 / 休止 `0`）的上下边界，供小节线、弧线、括号共用同一套纵向基准。 */
+/**
+ * 数字（1–7 / 休止 `0`）的上下边界：`digitTop` 是「数字视觉框」的顶边（未知占位框、
+ * 降级角标、`L:` 变化标记用它），`digitBottom` 是同一个框的底边，也是**低八度点/
+ * 减时线均不存在时**低方向装饰的默认起点（`jianpuGlyphBuilders.ts` 的
+ * `lowOctaveDotBaseY` 在有减时线时会取比它更深的值，见该文件）。两者不是同一套「数字
+ * 实际字形高度」的对称量（数字无下伸部，视觉框顶边比底边离基线更远），这是历史取值，
+ * Phase A 未改动，只新增 `digitMidline` / `barlineTop` / `barlineBottom` 两套独立参照。
+ */
 export function digitTop(y: number): number {
   return y - JIANPU_METRICS.digitFontSize;
 }
 
 export function digitBottom(y: number): number {
   return y + JIANPU_METRICS.octaveDotFirstOffset;
+}
+
+/**
+ * 数字视觉框的纵向中线（`digitTop`/`digitBottom` 的中点）。Phase A 新增：附点「垂直
+ * 居中于数字中线」、延音线「在数字中线高度」都以它为基准，而不是像旧版那样直接摞在
+ * 数字基线（`baselineY`）上——基线是排印基线，不是数字字形的视觉中心。
+ */
+export function digitMidline(y: number): number {
+  return (digitTop(y) + digitBottom(y)) / 2;
+}
+
+/**
+ * 小节线**专属**的纵向参照（Phase A 新增，替换旧版直接复用 `digitTop`/`digitBottom`
+ * 的写法）：spec 只给了一句转述「小节线略高于数字」，本任务把它落成
+ * `JIANPU_METRICS.barlineTopOffset`/`barlineBottomOffset`——两者之和 ≈
+ * `digitFontSize × 1.2`（见 `metrics/jianpu.ts` 的推导注释），与 `digitTop`/`digitBottom`
+ * 各自独立、互不牵动：后者仍被未知占位框等其它构造函数使用，改小节线高度不该连带改
+ * 那些框的尺寸。
+ */
+export function barlineTop(y: number): number {
+  return y - JIANPU_METRICS.barlineTopOffset;
+}
+
+export function barlineBottom(y: number): number {
+  return y + JIANPU_METRICS.barlineBottomOffset;
 }
 
 export function glyph(text: string, x: number, y: number, fontSize: number): JianpuTextGlyph {
@@ -221,130 +257,4 @@ export function draftOf(
   return sourceRef === undefined
     ? { code, level, message, anchor }
     : { code, level, message, anchor, sourceRef };
-}
-
-/**
- * 减时线 / 延音线 / 附点：条数直接取 `decomposeDuration` 的 `{ beams, dashes, dots }`，
- * **不重新解释时值**、不涉及「拍」（P1-3）；tuplet 成员同路径、**不缩放**（P1-C）。
- */
-export function buildDurationGlyphs(
-  decomposition: DurationDecomposition,
-  x: number,
-  baselineY: number,
-): JianpuDurationGlyphs {
-  if (decomposition.kind === 'unrepresentable') {
-    return { beams: [], dashes: [], augmentationDots: [], unrepresentable: true };
-  }
-
-  const beams: JianpuSegment[] = [];
-  for (let i = 0; i < decomposition.beams; i += 1) {
-    const y = baselineY + JIANPU_METRICS.beamFirstOffset + i * JIANPU_METRICS.beamGap;
-    beams.push({ x1: x, y1: y, x2: x + JIANPU_METRICS.beamLength, y2: y });
-  }
-  const dashes: JianpuSegment[] = [];
-  const dashStep = JIANPU_METRICS.dashLength + JIANPU_METRICS.dashGap;
-  for (let i = 0; i < decomposition.dashes; i += 1) {
-    const sx = x + JIANPU_METRICS.dashFirstOffset + i * dashStep;
-    dashes.push({ x1: sx, y1: baselineY, x2: sx + JIANPU_METRICS.dashLength, y2: baselineY });
-  }
-  const augmentationDots: Point[] = [];
-  for (let i = 0; i < decomposition.dots; i += 1) {
-    const dx = JIANPU_METRICS.augmentationDotFirstOffset + i * JIANPU_METRICS.augmentationDotGap;
-    augmentationDots.push({ x: x + dx, y: baselineY });
-  }
-  return { beams, dashes, augmentationDots, unrepresentable: false };
-}
-
-/** 八度点与临时记号：点数与方向已由 `pitchToNumber` 判定，这里**不再判断**，只摆坐标。 */
-export function buildPitchGlyphs(
-  pitch: JianpuPitch,
-  x: number,
-  baselineY: number,
-): JianpuPitchGlyphs {
-  const above = pitch.octaveDotDirection === 'above';
-  const direction = above ? -1 : 1;
-  const dotBaseY = above ? digitTop(baselineY) : digitBottom(baselineY);
-  const octaveDots: Point[] = [];
-  for (let i = 0; i < pitch.octaveDots; i += 1) {
-    octaveDots.push({ x, y: dotBaseY + direction * i * JIANPU_METRICS.octaveDotGap });
-  }
-  const glyphs = { octaveDots };
-  return pitch.accidental === undefined
-    ? glyphs
-    : { ...glyphs, accidental: buildAccidentalGlyph(pitch.accidental, x, baselineY) };
-}
-
-/** 临时记号**原样渲染**：不因调号增删，也不做小节内延续推断（前提 P3）。 */
-export function buildAccidentalGlyph(
-  accidental: Accidental,
-  x: number,
-  baselineY: number,
-): JianpuTextGlyph {
-  const { accidentalOffsetX: dx, accidentalOffsetY: dy, annotationFontSize: size } = JIANPU_METRICS;
-  return glyph(accidental, x + dx, baselineY + dy, size);
-}
-
-/**
- * `BarlineEvent.raw` → 形态。表内只有四种 `CONFIRMED` 写法，其余一律 `unrecognized`：
- * 不按前缀/后缀去猜「它大概是个反复」——猜错等于把作者没写的反复语义画上谱面。
- */
-export function classifyBarline(raw: string): BarlineForm {
-  switch (raw) {
-    case '|':
-      return 'single';
-    case '|]':
-      return 'final';
-    case '|:':
-      return 'repeat-start';
-    case ':|':
-      return 'repeat-end';
-    default:
-      // `||` / `::` / `[|` / `[:]` / `[|]` 以及任何表外组合都走这里（spec §18 DOC-ONLY，语料 0）。
-      return 'unrecognized';
-  }
-}
-
-/** 形态 → 几何。`unrecognized` 与 `single` 共用同一根普通竖线（§3.2）。 */
-export function buildBarlineGlyphs(
-  form: BarlineForm,
-  x: number,
-  baselineY: number,
-): JianpuBarlineGlyphs {
-  const top = digitTop(baselineY);
-  const bottom = digitBottom(baselineY);
-  const line = (lx: number): JianpuSegment => ({ x1: lx, y1: top, x2: lx, y2: bottom });
-  const secondX = x + JIANPU_METRICS.barlineCompositeGap;
-  const pair = [line(x), line(secondX)];
-  const leftDots = repeatDots(x - JIANPU_METRICS.repeatDotOffsetX, baselineY);
-  const rightDots = repeatDots(secondX + JIANPU_METRICS.repeatDotOffsetX, baselineY);
-
-  switch (form) {
-    case 'final':
-      return { lines: pair, repeatDots: [], thickLineIndices: [1] };
-    case 'repeat-start':
-      return { lines: pair, repeatDots: rightDots, thickLineIndices: [0] };
-    case 'repeat-end':
-      return { lines: pair, repeatDots: leftDots, thickLineIndices: [1] };
-    case 'single':
-    case 'unrecognized':
-      return { lines: [line(x)], repeatDots: [], thickLineIndices: [] };
-    default: {
-      const exhaustive: never = form;
-      return exhaustive;
-    }
-  }
-}
-
-function repeatDots(x: number, y: number): readonly Point[] {
-  const dy = JIANPU_METRICS.repeatDotOffsetY;
-  return [
-    { x, y: y - dy },
-    { x, y: y + dy },
-  ];
-}
-
-/** `L:` 变化点的细标记：一段短竖线，画在列的左边界（§3.2）。 */
-export function buildUnitLengthMark(x: number, baselineY: number): JianpuSegment {
-  const top = digitTop(baselineY);
-  return { x1: x, y1: top - JIANPU_METRICS.unitLengthMarkHeight, x2: x, y2: top };
 }

@@ -28,9 +28,8 @@ import {
   buildDurationGlyphs,
   buildPitchGlyphs,
   classifyBarline,
-  draftOf,
-  glyph,
-} from './jianpuGlyphs';
+} from './jianpuGlyphBuilders';
+import { draftOf, glyph } from './jianpuGlyphs';
 import type {
   DraftSink,
   JianpuChordMemberGlyph,
@@ -95,9 +94,15 @@ function durationGlyphsOf(
     : buildDurationGlyphs(decomposeDuration(duration), x, y);
 }
 
-/** 和弦块纵向堆叠（§14.4：组时值取首音，Domain 已放在 `ChordEvent.duration`）。 */
+/**
+ * 和弦块纵向堆叠（§14.4：组时值取首音，Domain 已放在 `ChordEvent.duration`）。
+ *
+ * `beamCount`：整个和弦事件的减时线条数（组时值取首音，所有成员共用同一份
+ * `duration.beams`），传给 `buildPitchGlyphs` 驱动低八度点的减时线避让（U06 边界裁决 4：
+ * 固定层序，`beamCount` 只影响避让距离，不影响每个成员各画各的纵向堆叠位置）。
+ */
 function memberGlyph(
-  member: Note | Rest, index: number, x: number, y: number,
+  member: Note | Rest, index: number, x: number, y: number, beamCount: number,
 ): JianpuChordMemberGlyph {
   const memberY = y - index * JIANPU_METRICS.chordMemberGap;
   const size = JIANPU_METRICS.digitFontSize;
@@ -105,7 +110,7 @@ function memberGlyph(
   const pitch = pitchToNumber(member.pitch, member.accidental);
   return {
     memberIndex: index, text: glyph(String(pitch.number), x, memberY, size),
-    pitchGlyphs: buildPitchGlyphs(pitch, x, memberY),
+    pitchGlyphs: buildPitchGlyphs(pitch, x, memberY, beamCount),
   };
 }
 
@@ -178,7 +183,7 @@ export function buildNode(
         kind: 'note',
         pitch,
         text,
-        pitchGlyphs: buildPitchGlyphs(pitch, x, y),
+        pitchGlyphs: buildPitchGlyphs(pitch, x, y, duration.beams.length),
         duration,
       };
     }
@@ -203,7 +208,9 @@ export function buildNode(
     }
     case 'chord': {
       const duration = durationGlyphsOf(event.duration, x, y);
-      const members = event.members.map((member, index) => memberGlyph(member, index, x, y));
+      const members = event.members.map(
+        (member, index) => memberGlyph(member, index, x, y, duration.beams.length),
+      );
       // 组内各成员各画各的数字：弧线等需要对准的是「最宽那个数字」，不是整组的纵向堆叠范围。
       const glyphWidth = maxOrZero(
         members.map((member) => measurer.measure(member.text.text, { fontSize: JIANPU_METRICS.digitFontSize }).width),

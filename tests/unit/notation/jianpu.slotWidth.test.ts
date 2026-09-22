@@ -102,16 +102,44 @@ describe('widenForJianpuGlyphs 接入 layoutJianpu —— breve 不再右溢压�
   });
 
   it.each([
-    ['C6|', { num: 3, den: 2 }],
-    ['C7|', { num: 7, den: 4 }],
     ['C|', { num: 1, den: 4 }],
     ['C2|', { num: 1, den: 2 }],
     ['C4|', { num: 1, den: 1 }],
-  ] as const)('L:1/4 下 %s：槽宽与修复前一致，等于 timedSlotWidth(该 duration)', (body, duration) => {
+  ] as const)('L:1/4 下 %s：不含附点/换算不触发，槽宽与修复前一致，等于 timedSlotWidth(该 duration)', (body, duration) => {
     const result = layout(header(body));
     const note = result.nodes[0];
     if (note === undefined || note.kind !== 'note') throw new Error('第一个节点应是 note');
     expect(note.width).toBe(timedSlotWidth(duration));
+  });
+
+  /**
+   * 用户裁决补充（简谱惯例换算）之后的行为变化：`C6|`（附点二全音符，
+   * `duration = 3/2`，`decomposeDuration` 原始给 `base=1, dots=1, dashes=3`）与
+   * `C7|`（复附点二全音符，`duration = 7/4`，原始 `dots=2, dashes=3`）现在都落在
+   * `classifyQuarterMultiple` 的 `integer` 分支（`q = 6` / `q = 7`），换算成
+   * `dashes=5`/`dashes=6`、`dots=0`——比修复前的 3 条延音线更宽，不再等于
+   * `timedSlotWidth(duration)`（96 的 cap），需要与 `C8|`（breve）同一档核实
+   * 「放得下、不压线」而不是「与修复前一致」。
+   */
+  it.each([
+    ['C6|', 5],
+    ['C7|', 6],
+  ] as const)('L:1/4 下 %s：换算后延音线条数增加，槽宽相应加宽、放得下全部延音线，不压线', (body, expectedDashes) => {
+    const result = layout(header(body));
+    const note = result.nodes[0];
+    const barline = result.nodes[1];
+    if (note === undefined || barline === undefined) throw new Error('缺少节点');
+    if (note.kind !== 'note') throw new Error('第一个节点应是 note');
+    if (barline.kind !== 'barline') throw new Error('第二个节点应是 barline');
+
+    expect(note.duration.dashes).toHaveLength(expectedDashes);
+    expect(note.duration.augmentationDots).toHaveLength(0);
+    expect(note.width).toBeGreaterThanOrEqual(
+      requiredDashExtent(expectedDashes) + JIANPU_METRICS.dashGap,
+    );
+    const maxDashX2 = Math.max(...note.duration.dashes.map((segment) => segment.x2));
+    expect(maxDashX2).toBeLessThan(note.x + note.width);
+    expect(barline.x).toBeGreaterThan(maxDashX2);
   });
 
   it('不含 breve 的 measure：widenForJianpuGlyphs 返回同一个对象引用（无变化即不重建）', () => {

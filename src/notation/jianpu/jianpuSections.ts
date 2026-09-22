@@ -300,39 +300,37 @@ export function buildLyricNodes(
 }
 
 /**
- * 头部标签：`K: <值>` 与拍号。**没有任何分支输出 `1=<tonic>`**（P1-2）。
+ * 声部行首头部标签（**Phase A 二次裁决：取消调号/拍号，P1-2 改写**）。
  *
- * `KeySignature` 四形态 fallback 逐条对应 §3.2 的表——**但诊断不在这里发**（T5 修订）：
- * `key.absent` / `key.unresolved` / `key.mode-unrecognized` / `meter.raw` 现在只由
- * `notation/layout/scoreHeader.ts` 在文档级发一次。原因：`Score.key`/`Score.meter`
- * 是文档级事实，一份乐谱可以有多个 `style=jianpu` 声部，每个声部各自调用一次本函数
- * 若各自都发一遍，同一件事就会被报告 N 次（且两处各自独立走
- * `collectRenderDiagnostics` 时序号都从 0 起算，`(document, code)` 组合会撞出重复
- * id）。本函数因此**只负责画标签文本**，不产生任何 `RenderDiagnosticDraft`——
- * `sink` 参数保留只是为了与同文件其它段落（`relationLayout` / `buildLyricNodes`）
- * 签名一致，当前不会被调用。
+ * 原 P1-2 是「没有任何分支输出 `1=<tonic>`」；现改写为**「声部行首恒不显示调号/拍号，
+ * 由文档页眉承担」**——理由是用户 Electron 实机截图证实：M2 没有「声部级调号/拍号」这
+ * 回事，`Score.key`/`Score.meter` 是**文档级**事实，参考谱也只在页眉写一次。文档级头部
+ * （`notation/layout/scoreHeader.ts` 的 `layoutScoreHeader` → `ScoreHeaderView`）已经
+ * 承担这份展示（简谱成品视图下是 `1=<tonic>` + 叠排拍号，见该文件），本函数若继续在每个
+ * 声部自己的画布左上角再画一遍 `K: <raw>`/拍号，就会在同一页面上同时出现两套头部——
+ * 这正是用户截图里「页眉已是 `1=G` + 叠排拍号，简谱块左上却仍有 `K: G  3/4`」的根因，
+ * 定位到本函数（`layoutJianpu.ts` 调用它把结果放进 `JianpuLayout.labels`，
+ * `toSvg.ts` 的 `labelToSvg` 画在每个声部 SVG 的 `(0, labelFontSize)` 附近，即该声部
+ * 画布左上角）。
+ *
+ * 本函数因此**恒返回空数组**：`key`/`meter`/`measurer` 形参、`JianpuLabel` 类型的
+ * `'key'`/`'meter'` 变体、`JIANPU_METRICS.headerLabelGap`、`JianpuLayout.labels` 字段与
+ * `toSvg.ts` 的 `labelToSvg` 渲染路径**全部保留**——这是刻意的最小修法：只掐断「产出
+ * 这两类标签内容」这一步，不做更大范围的类型/字段删除（那会牵连 `toSvg.ts`/
+ * `layoutJianpu.ts`/多个测试文件的结构性改动，超出「查明来源、最小修」的授权范围）。
+ * `sink` 参数同样保留只是为了与同文件其它段落（`relationLayout` / `buildLyricNodes`）
+ * 签名一致，当前不会被调用——诊断（`key.absent` 等四类）仍只由
+ * `notation/layout/scoreHeader.ts` 在文档级发一次，本次改写不影响诊断路径。
+ *
+ * `L:` 变化点的行内细标记（`unitLengthMarks`，`layoutJianpu.ts` 里另一条独立路径）
+ * **不受影响**，继续按事件位置画——那不是「调号/拍号」，是时值解释切换的可视提示，
+ * 与本次裁决无关。
  */
 export function buildHeaderLabels(
-  key: KeySignature | undefined,
-  meter: Meter | undefined,
-  measurer: TextMeasurer,
+  _key: KeySignature | undefined,
+  _meter: Meter | undefined,
+  _measurer: TextMeasurer,
   _sink: DraftSink,
 ): readonly JianpuLabel[] {
-  const labels: JianpuLabel[] = [];
-  const anchor: Anchor = { kind: 'document' };
-  const size = JIANPU_METRICS.labelFontSize;
-  let x = 0;
-
-  if (key !== undefined) {
-    const text = `K: ${key.raw}`;
-    labels.push({ anchor, kind: 'key', text: glyph(text, x, size, size) });
-    x += measurer.measure(text, { fontSize: size }).width + JIANPU_METRICS.headerLabelGap;
-  }
-
-  if (meter !== undefined) {
-    const text = meter.kind === 'fraction' ? `${String(meter.num)}/${String(meter.den)}` : meter.raw;
-    labels.push({ anchor, kind: 'meter', text: glyph(text, x, size, size) });
-  }
-
-  return labels;
+  return [];
 }
