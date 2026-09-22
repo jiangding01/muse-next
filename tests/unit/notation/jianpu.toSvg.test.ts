@@ -301,3 +301,47 @@ describe('全 fixture glob 冒烟 —— 只对 jianpu 声部跑 jianpu 流水�
     expect(nonJianpuVoiceCount).toBeGreaterThan(0);
   });
 });
+
+/**
+ * T7.4 —— `layoutScoreHeader` 的 `keyText` 第三态修正 + `staff` 并入消费者谓词。
+ *
+ * 原判据 `key.raw.trim() !== key.tonic` 没把 `alter` 算进来：`K:Eb` 的 `tonic` 是 `E`，
+ * `raw` 是 `Eb`，于是一个干净的降 E 调被误报成「含未识别的调式文本」。现在改用
+ * `notation/layout/keySpelling.ts` 的 `keyHasExtraText`（先拼规范形式再比），与五线谱
+ * 「画不画调号」用的是同一个判断。
+ */
+describe('layoutScoreHeader —— keyText 的「额外 mode 文本」判据（T7.4 修正）', () => {
+  function keyCodes(source: string): readonly string[] {
+    const loaded = loadJcx(source);
+    return layoutScoreHeader(loaded.score, measurer).diagnostics.map((d) => d.code);
+  }
+
+  function header(key: string, style: string): string {
+    return `%MUSE2\nX:1\nM:4/4\nL:1/4\n${key}\nV:1 ${style}\nCDEF|\n`;
+  }
+
+  it.each(['K:Eb', 'K:F#', 'K:Bb'])('%s 是干净的调号拼写 → 不发 key.mode-unrecognized', (key) => {
+    expect(keyCodes(header(key, 'style=jianpu'))).not.toContain(CODES.keyModeUnrecognized);
+  });
+
+  it.each(['K:Dm', 'K:Eb major'])('%s 含规范拼写以外的文本 → 发 key.mode-unrecognized', (key) => {
+    expect(keyCodes(header(key, 'style=jianpu'))).toContain(CODES.keyModeUnrecognized);
+  });
+
+  it('干净的调号仍原样转述 raw（判据变了，展示文本没变）', () => {
+    const loaded = loadJcx(header('K:Eb', 'style=jianpu'));
+    expect(layoutScoreHeader(loaded.score, measurer).key?.text).toBe('K: Eb');
+  });
+
+  it('style=staff 也是 key/meter 的消费者（T7.4 起并入谓词）', () => {
+    const codes = keyCodes(header('K:Dm', 'style=staff'));
+    expect(codes).toContain(CODES.keyModeUnrecognized);
+  });
+
+  it('既无 jianpu 也无 staff 声部 → 四类 key/meter 诊断一条都不发', () => {
+    const codes = keyCodes(header('K:Dm', 'style=tab'));
+    for (const code of [CODES.keyAbsent, CODES.keyUnresolved, CODES.keyModeUnrecognized, CODES.meterRaw]) {
+      expect(codes).not.toContain(code);
+    }
+  });
+});

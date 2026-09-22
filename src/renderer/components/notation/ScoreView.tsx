@@ -8,8 +8,11 @@
  * 每个声部按 `voice.style` 分派（`buildVoiceRender`，见 `./voiceRender.ts`）：
  * - `jianpu` → `layoutJianpu` + `jianpuToSvg`；
  * - `tab` → `layoutTab` + `tabToSvg`（T6.4 新增，与 jianpu 分支同构）；
- * - `staff` → 本任务只显示「该记谱类型待 T7」的保守占位，**不是错误**，
- *   也**不产生新诊断**——阶段状态，不是渲染问题；
+ * - `staff` → `layoutStaff` + `StaffVoiceView`（T7.4）：与前两种**不同构**——SVG 由
+ *   VexFlow 在 `renderer/integrations/vexflow/**` 里直接画进 DOM，不经过 `SvgNode` 树，
+ *   而且绘制是**异步的**（要先 `await document.fonts.ready`）。异步这一点带来一个
+ *   真实后果：高亮 effect 必须能在 adapter 插完节点之后**再扫一次**，见
+ *   `renderGeneration`；
  * - 缺席 / 未知 → D12 方案 B 的保守占位（事件的文本化摘要，摘要函数在
  *   `notation/layout/fallbackSummary.ts`——本文件只消费字符串，不解释 `MusicEvent`
  *   的分支，那是需要单测覆盖的纯函数逻辑，不该藏在组件里），**不再造第二条诊断**：
@@ -39,7 +42,7 @@
  */
 
 import {
-  useEffect, useMemo, useRef, useState,
+  useCallback, useEffect, useMemo, useRef, useState,
   type MouseEvent as ReactMouseEvent, type RefObject,
 } from 'react';
 
@@ -52,10 +55,9 @@ import { anchorKey, type RenderDiagnostic } from '../../../notation/model/types'
 import { useMuseAppStore } from '../../app/store';
 import { DiagnosticsPanel } from './DiagnosticsPanel';
 import { ScoreHeaderView } from './ScoreHeaderView';
+import { StaffVoiceView } from './StaffVoiceView';
 import { SvgTree } from './SvgTree';
-import {
-  buildVoiceRender, computeAvailableWidthUnits, PENDING_STYLE_LABEL, type VoiceRender,
-} from './voiceRender';
+import { buildVoiceRender, computeAvailableWidthUnits, type VoiceRender } from './voiceRender';
 
 /** 生产与测试共用的确定性度量实现（§2.8：不接 DOM，避免布局随宿主字体漂移）。 */
 const MEASURER: TextMeasurer = createDeterministicTextMeasurer();
@@ -69,8 +71,12 @@ function canvasWidthPx(layoutWidth: number, zoom: number): string {
   return `${String(layoutWidth * SCORE_VIEW_METRICS.cssPixelsPerUnitAtZoom1 * zoom)}px`;
 }
 
-/** 三种声部渲染结果的外层都携带同一个 voice 级 `data-anchor-key`（P1-3）。 */
-function VoiceRenderView({ render, zoom }: { readonly render: VoiceRender; readonly zoom: number }) {
+/** 四种声部渲染结果的外层都携带同一个 voice 级 `data-anchor-key`（P1-3）。 */
+function VoiceRenderView({ render, zoom, onRendered }: {
+  readonly render: VoiceRender;
+  readonly zoom: number;
+  readonly onRendered: () => void;
+}) {
   const anchor = voiceAnchorKey(render.voiceId);
   if (render.kind === 'jianpu') {
     return (
@@ -92,12 +98,10 @@ function VoiceRenderView({ render, zoom }: { readonly render: VoiceRender; reado
       </section>
     );
   }
-  if (render.kind === 'pending') {
-    return (
-      <section className="score-voice score-voice-pending" data-voice-id={render.voiceId} data-anchor-key={anchor}>
-        <p className="score-voice-pending-label">{PENDING_STYLE_LABEL[render.style]}</p>
-      </section>
-    );
+  if (render.kind === 'staff') {
+    // 外层 `<section>`（含 voice 锚与 zoom 宽度）在 `StaffVoiceView` 内部，与前两种
+    // 记谱写法不同：内层 host div 必须由 VexFlow 独占，不能有 React 管的兄弟节点。
+    return <StaffVoiceView render={render} zoom={zoom} onRendered={onRendered} />;
   }
   return (
     <section className="score-voice score-voice-fallback" data-voice-id={render.voiceId} data-anchor-key={anchor}>
@@ -124,11 +128,18 @@ function nearestAnchorKey(target: EventTarget | null): string | undefined {
  * 依赖只写 `[selectedAnchorKey, voiceRenders]`：`containerRef` 是稳定的 ref 对象，
  * 列进依赖数组没有意义；`voiceRenders` 变化说明谱面 DOM 可能整体换了一批节点，
  * 需要重新扫描而不是依赖 `selectedAnchorKey` 恰好也变化。
+ *
+ * **`renderGeneration`（T7.4 新增）**：五线谱的 DOM 节点是 adapter 在
+ * `document.fonts.ready` 之后**异步**插进来的——effect 跑完时它们还不存在，只靠
+ * `[selectedAnchorKey, voiceRenders]` 这两个依赖，首次绘制以及 zoom / 换行导致的重绘
+ * 都会漏掉高亮。`StaffVoiceView.onRendered` 每画完一次就把这个计数 +1，effect 因此
+ * 重新扫一遍容器。它只是一个「DOM 可能变了」的信号，不携带任何语义。
  */
 function useAnchorHighlight(
   containerRef: RefObject<HTMLDivElement | null>,
   selectedAnchorKey: string | undefined,
   voiceRenders: readonly VoiceRender[],
+  renderGeneration: number,
 ): void {
   useEffect(() => {
     const container = containerRef.current;
@@ -139,7 +150,7 @@ function useAnchorHighlight(
       node.classList.toggle('render-anchor-highlighted', match);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- containerRef 是稳定 ref，不参与依赖
-  }, [selectedAnchorKey, voiceRenders]);
+  }, [selectedAnchorKey, voiceRenders, renderGeneration]);
 }
 
 /** `.score-voices` 的真实 CSS 宽度 → abstract unit（D7 + 文件头「可用宽度」说明，T6.4 纳入 zoom）。 */
@@ -199,7 +210,9 @@ export function ScoreView() {
         ...renderScore.diagnostics,
         ...header.diagnostics,
         ...voiceRenders.flatMap((render) =>
-          render.kind === 'jianpu' || render.kind === 'tab' ? render.diagnostics : [],
+          render.kind === 'jianpu' || render.kind === 'tab' || render.kind === 'staff'
+            ? render.diagnostics
+            : [],
         ),
       ]),
     [renderScore, header, voiceRenders],
@@ -210,8 +223,15 @@ export function ScoreView() {
     setSelectedAnchorKey(undefined);
   }, [score]);
 
+  // 见 `useAnchorHighlight` 的 JSDoc：staff 的 DOM 是异步插进来的，需要一个额外的
+  // 「重扫」信号。`useCallback` 保证 `onRendered` 引用稳定，不会把 effect 拖成死循环。
+  const [renderGeneration, setRenderGeneration] = useState(0);
+  const handleRendered = useCallback(() => {
+    setRenderGeneration((generation) => generation + 1);
+  }, []);
+
   const containerRef = useRef<HTMLDivElement | null>(null);
-  useAnchorHighlight(containerRef, selectedAnchorKey, voiceRenders);
+  useAnchorHighlight(containerRef, selectedAnchorKey, voiceRenders, renderGeneration);
 
   function handleContainerClick(event: ReactMouseEvent<HTMLDivElement>): void {
     const key = nearestAnchorKey(event.target);
@@ -222,7 +242,9 @@ export function ScoreView() {
     <div className="score-view" ref={containerRef} onClick={handleContainerClick}>
       <ScoreHeaderView header={header} />
       <div className="score-voices" ref={voicesRef}>
-        {voiceRenders.map((render) => <VoiceRenderView key={render.voiceId} render={render} zoom={zoom} />)}
+        {voiceRenders.map((render) => (
+          <VoiceRenderView key={render.voiceId} render={render} zoom={zoom} onRendered={handleRendered} />
+        ))}
       </div>
       <DiagnosticsPanel
         diagnostics={diagnostics}

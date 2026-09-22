@@ -246,6 +246,11 @@ export interface StaffKeySignature {
  * 只承诺 stave 自己的矩形（`x`/`y`/`width`），节点只承诺 `measureIndex` /
  * `systemIndex` / `slotIndex`，**谁都不承诺 glyph x**。
  *
+ * **行首预留含在行首 stave 的 `width` 里**（不是整行的左边距）：谱号 / 调号 / 拍号由
+ * 渲染器画在 stave **内部**（音符从三者之后才开始），所以每行第一个 stave 的 `x` 就是
+ * 该 system box 的左边，它的 `width` 比这一小节的内容宽多出一整份行首预留；同一
+ * system 内相邻 stave 首尾相接（`prev.x + prev.width === next.x`）。
+ *
  * `clef` / `keySignature` / `timeSignature` **只出现在每行谱的行首 stave**（五线谱
  * 每行重画谱号调号是记谱惯例，产品决定，不是 JCX 格式事实）。`beginBarline` /
  * `endBarline` 同样是「有就有、没有就省略」：后者存在当且仅当这一小节以一个

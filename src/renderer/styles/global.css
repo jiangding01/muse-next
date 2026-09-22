@@ -84,8 +84,25 @@ button { cursor: pointer; }
    缩放——这正是 zoom 的「外层像素换算」实现本身，不是另一套响应式拉伸）。 */
 .score-voice-tab .tab-canvas { max-width: 100%; }
 .score-voice-tab svg { width: 100%; height: auto; display: block; }
-.score-voice-pending, .score-voice-fallback { padding: 14px 16px; border: 1px dashed #cbc4b7; border-radius: 8px; background: rgba(249,247,241,.6); }
-.score-voice-pending-label { margin: 0; color: var(--ink-muted); font-size: 12px; }
+/* 五线谱画布（VexFlow 画的 SVG，`renderer/integrations/vexflow/renderStaff.ts`）：
+   外层 `.score-voice-staff` 的宽度由 ScoreView / StaffVoiceView 按
+   layout.width × cssPixelsPerUnitAtZoom1 × zoom 写成内联 px，内层 `.staff-canvas` 是
+   VexFlow 独占的 host（它的 inline width/height 由 `Renderer.resize()` 改，这里不碰）。
+   `resize()` 实测会写 `viewBox`，所以 svg 用 width:100%/height:auto 等比缩放即可。
+   VexFlow 的 `openGroup(cls)` 会给 class 加 `vf-` 前缀，故自绘组的选择器是 `.vf-staff-*`。
+   根 <svg> 带 pointer-events:none，可点击性靠各元素自带的透明热区，不在这里放开。 */
+.score-voice-staff .staff-canvas { max-width: 100%; }
+.score-voice-staff svg { width: 100%; height: auto; display: block; }
+.render-anchor-highlighted .vf-stavenote path,
+.render-anchor-highlighted .vf-stavenote text { fill: var(--accent); stroke: var(--accent); }
+.render-anchor-highlighted .vf-stavetie path { fill: var(--accent); stroke: var(--accent); }
+.vf-staff-placeholder text { fill: #a34632; }
+.vf-staff-chord-symbol text { fill: #6b6459; }
+.render-anchor-highlighted.vf-staff-placeholder text,
+.render-anchor-highlighted.vf-staff-chord-symbol text { fill: var(--accent); }
+.render-anchor-highlighted.vf-staff-tuplet path { stroke: var(--accent); }
+
+.score-voice-fallback { padding: 14px 16px; border: 1px dashed #cbc4b7; border-radius: 8px; background: rgba(249,247,241,.6); }
 .score-voice-fallback-label { margin: 0 0 6px; font-size: 11px; font-weight: 650; color: #8b6a1f; text-transform: uppercase; letter-spacing: .04em; }
 .score-voice-fallback-summary { margin: 0; font: 12px/1.6 "SFMono-Regular", Consolas, monospace; word-break: break-word; }
 

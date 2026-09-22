@@ -27,6 +27,7 @@
  */
 
 import type { KeySignature, Meter, Score, Tempo, TextBlock } from '../../domain';
+import { keyHasExtraText } from './keySpelling';
 import type { RenderDiagnosticDraft } from '../model/diagnostics';
 import { RENDER_DIAGNOSTIC_CODES as CODES, collectRenderDiagnostics } from '../model/diagnostics';
 import type { Anchor, RenderDiagnostic } from '../model/types';
@@ -73,7 +74,13 @@ function line(text: string, fontSize: number, measurer: TextMeasurer): ScoreHead
  * - `key` 缺席 → `key.absent`（info，默认调号无证据，spec §8.7）；
  * - `tonic` 缺失 → `key.unresolved`（warning，**不从 `alter` 反推主音**）；
  * - `raw` 含未识别的调式文本 → `key.mode-unrecognized`（info，**不假设 major**）；
- * - `tonic` 有值且 `raw` 就是它 → 无诊断。
+ * - `tonic` 有值且 `raw` 里没有规范拼写以外的文本 → 无诊断。
+ *
+ * **T7.4 修正**：第三态原先写的是 `key.raw.trim() !== key.tonic`，它**没把 `alter`
+ * 算进来**——`K:Eb` 的 `tonic` 是 `E`、`alter` 是 `-1`，`raw.trim()`（`Eb`）当然不等于
+ * `E`，于是一个干净的降 E 调被误报成「含未识别的调式文本」。现在改用
+ * `layout/keySpelling.ts` 的 `keyHasExtraText`（它先拼出规范形式 `Eb` 再与 `raw` 比），
+ * 与五线谱画不画调号用的是**同一个**判断，两处不会再各说各话。
  */
 function keyText(key: KeySignature | undefined, sink: (draft: RenderDiagnosticDraft) => void): string | undefined {
   if (key === undefined) {
@@ -92,7 +99,7 @@ function keyText(key: KeySignature | undefined, sink: (draft: RenderDiagnosticDr
       message: 'K: 未能解析出主音：原样转述 raw，不从 alter 反推主音（升降号数量到调的映射在大小调间二义）',
       anchor: DOCUMENT_ANCHOR,
     });
-  } else if (key.raw.trim() !== key.tonic) {
+  } else if (keyHasExtraText(key)) {
     sink({
       code: CODES.keyModeUnrecognized,
       level: 'info',
@@ -168,9 +175,13 @@ export function layoutScoreHeader(score: Score, measurer: TextMeasurer): ScoreHe
    * 不是「任何一份乐谱都要报告」的通用事实——没有任何声部在消费 `K:`/`M:` 时，
    * 报出「调号不可解」没有意义（连一个会显示它的地方都没有）。因此只在
    * `score.voices` 里存在至少一个 `style === 'jianpu'` 时才发这四类诊断。
-   * **T7 Staff 落地后若也消费 `Score.key`/`Score.meter`，把 `staff` 并进这个谓词即可**。
+   * **T7.4 起 `staff` 也在其中**：五线谱要画调号与拍号（`layoutStaff.ts` 的
+   * `staffKeySignature` / `staffTimeSignature` 直接消费 `Score.key` / `Score.meter`），
+   * 所以「调号不可解」「拍号是 raw 形态」对它同样是需要报告的事实。
    */
-  const hasKeyMeterConsumer = score.voices.some((voice) => voice.style === 'jianpu');
+  const hasKeyMeterConsumer = score.voices.some(
+    (voice) => voice.style === 'jianpu' || voice.style === 'staff',
+  );
   const keyMeterSink = hasKeyMeterConsumer ? collect : noopSink;
 
   const [primaryTitle, ...subtitleTexts] = score.titles;

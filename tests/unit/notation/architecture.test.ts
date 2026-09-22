@@ -349,10 +349,21 @@ describe('全仓 vexflow 守卫 —— vexflow 依赖边只能出现在 renderer
     return relative(SRC_DIR, file).split(sep).join('/');
   }
 
-  function importsVexflow(file: string): boolean {
-    return collectSpecifiers(readFileSync(file, 'utf8')).some((spec) =>
-      /(^|\/)vexflow(\/|$)/.test(spec),
-    );
+  /**
+   * 守的是**对 `vexflow` 这个 npm 包的依赖边**，所以只看 bare specifier
+   * （`'vexflow'` / `'vexflow/bravura'`）。相对路径（`./` / `../`）永远指向仓库内的
+   * 文件，够不到这个包——T7.4 的 `StaffVoiceView.tsx` import 的是
+   * `'../../integrations/vexflow/renderStaff'`，那是 adapter 的**入口函数**，正是这条
+   * 守卫希望出现的样子（组件只认识一个本地函数，认不得 VexFlow 的任何 API）。
+   * 把它当成依赖边会让守卫反过来禁止 adapter 被使用，那就没有意义了。
+   *
+   * 这不放宽任何约束：`src/notation/**` 走相对路径绕进 `renderer/integrations/vexflow/`
+   * 仍然被上面的 §2.1「不 import renderer/」那条用例挡住。
+   */
+  function importsVexflowPackage(file: string): boolean {
+    return collectSpecifiers(readFileSync(file, 'utf8'))
+      .filter((spec) => !spec.startsWith('.'))
+      .some((spec) => /^vexflow(\/|$)/.test(spec));
   }
 
   it('至少扫到 src/** 的一些文件（守卫没有扫空目录）', () => {
@@ -361,7 +372,7 @@ describe('全仓 vexflow 守卫 —— vexflow 依赖边只能出现在 renderer
 
   it('src/** 里任何 vexflow 依赖边只允许出现在 src/renderer/integrations/vexflow/**', () => {
     const offenders = srcFiles.filter(
-      (file) => importsVexflow(file) && !(file + sep).startsWith(VEXFLOW_ALLOWED_DIR + sep),
+      (file) => importsVexflowPackage(file) && !(file + sep).startsWith(VEXFLOW_ALLOWED_DIR + sep),
     );
     expect(offenders.map(relSrc)).toEqual([]);
   });
@@ -369,7 +380,26 @@ describe('全仓 vexflow 守卫 —— vexflow 依赖边只能出现在 renderer
   it('src/renderer/components/** 没有 vexflow 依赖边', () => {
     const COMPONENTS_DIR = join(SRC_DIR, 'renderer', 'components');
     const componentFiles = collectFiles(COMPONENTS_DIR);
-    const offenders = componentFiles.filter(importsVexflow);
+    const offenders = componentFiles.filter(importsVexflowPackage);
     expect(offenders.map(relSrc)).toEqual([]);
+  });
+
+  /** 反例：证明「只看 bare specifier」没有把守卫变成形同虚设。 */
+  it('反例：bare `vexflow` / `vexflow/bravura` 依旧被判为依赖边，相对路径不被误判', () => {
+    const bare = (source: string): boolean =>
+      collectSpecifiers(source)
+        .filter((spec) => !spec.startsWith('.'))
+        .some((spec) => /^vexflow(\/|$)/.test(spec));
+    expect(bare("import { Stave } from 'vexflow';")).toBe(true);
+    expect(bare("import VexFlow from 'vexflow/bravura';")).toBe(true);
+    expect(bare("export * from 'vexflow';")).toBe(true);
+    expect(bare("const V = await import('vexflow/core');")).toBe(true);
+    expect(bare("import { renderStaff } from '../../integrations/vexflow/renderStaff';")).toBe(false);
+  });
+
+  it('adapter 目录确实存在且确实 import 了 vexflow 包（守卫不是在对着空目录绿）', () => {
+    const adapterFiles = collectFiles(VEXFLOW_ALLOWED_DIR);
+    expect(adapterFiles.length).toBeGreaterThan(0);
+    expect(adapterFiles.some(importsVexflowPackage)).toBe(true);
   });
 });

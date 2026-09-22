@@ -12,11 +12,24 @@
  * 宽度**与换行；`slot.x` 是 packing 的输入，**不是**最终音符 x（stave 内音符 x 由
  * 渲染器的 formatter 排，T7.4）。节点只带 `measureIndex`/`systemIndex`/`slotIndex`。
  *
- * **行首预留参与换行判定**：五线谱每行谱都要重画谱号 + 调号 + 拍号（记谱惯例，
- * **产品决定**，不是 JCX 格式事实），因此 packing 的可用宽度先扣掉一整份
- * `lineHeaderReserve`，排完再把内容整体右移这么多——不是先排完再给行首那一小节追加
- * 宽度（那样行首的谱号会把已经排满的一行挤超宽）。**零 VexFlow 编码**：调号只给
- * `{ tonic, alter }` 这种 renderer-neutral 形状，T7.4 才翻译成渲染器的调号名。
+ * **行首预留参与换行判定，但预留空间归行首 stave 自己**：五线谱每行谱都要重画谱号 +
+ * 调号 + 拍号（记谱惯例，**产品决定**，不是 JCX 格式事实），因此 packing 的可用宽度
+ * 先扣掉一整份 `lineHeaderReserve`——不是先排完再给行首那一小节追加宽度（那样行首的
+ * 谱号会把已经排满的一行挤超宽）。
+ *
+ * 预留出来的那段空间**加在行首 stave 的 `width` 上，而不是把整行内容右移**（T7.4 修正）：
+ * 谱号 / 调号 / 拍号是**画在 stave 内部**的（渲染器从 stave 左缘起依次排它们，音符从
+ * 三者之后才开始），所以「把所有 stave 右移 reserve」会在每行左侧留下一段谁都不画的
+ * 死区，同时行首小节的音符区还被压掉同样宽度。正确的几何是：
+ * - 行首 stave：`x = placement.x`（即 system box 的左边），`width = 内容宽 + reserve`；
+ * - 非行首 stave：`x = placement.x + reserve`（因为行首 stave 变宽了），`width` 不变。
+ *
+ * 两条不变式因此成立：同一 system 内相邻 stave 首尾相接
+ * （`prev.x + prev.width === next.x`），且最后一个 stave 的右缘
+ * `x + width ≤ ctx.availableWidth`（packing 用的是 `availableWidth - reserve`）。
+ *
+ * **零 VexFlow 编码**：调号只给 `{ tonic, alter }` 这种 renderer-neutral 形状，
+ * T7.4 才翻译成渲染器的调号名。
  *
  * T7.3 接上 tie / tuplet：拆段与诊断在 `staffRelations.ts`，本文件只负责把
  * 「事件 → 节点」的映射喂给它，并把结果放进 `ties` / `tuplets`。
@@ -222,9 +235,10 @@ export function layoutStaff(voice: RenderVoice, ctx: StaffContext): StaffLayout 
     staves.push({
       systemIndex: placement.systemIndex,
       measureIndex,
-      x: lineHeaderReserve + placement.x,
+      // 见文件头「行首预留」：reserve 是行首 stave 的一部分，不是整行的左边距。
+      x: lineStart ? placement.x : placement.x + lineHeaderReserve,
       y: system.box.origin.y,
-      width: spacing.width,
+      width: lineStart ? spacing.width + lineHeaderReserve : spacing.width,
       ...(lineStart ? { clef } : {}),
       ...(lineStart && keySignature !== undefined ? { keySignature } : {}),
       ...(lineStart && timeSignature !== undefined ? { timeSignature } : {}),

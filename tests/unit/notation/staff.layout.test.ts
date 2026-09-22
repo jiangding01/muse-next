@@ -466,18 +466,90 @@ describe('stave 规格与换行', () => {
     }
   });
 
-  it('行首预留参与换行判定：每行 stave 右缘不超过 availableWidth', () => {
+  /**
+   * T7.4 修正：行首预留**加在行首 stave 的 `width` 上**，不是把整行内容右移。
+   * 谱号 / 调号 / 拍号是渲染器画在 stave **内部**的，右移整行只会在每行左侧留下一段
+   * 谁都不画的死区，同时把行首小节的音符区压掉同样宽度（实测过：五线谱每行左边空一
+   * 大块）。下面四条断言把新几何钉死。
+   */
+  describe('行首预留的几何（T7.4 修正）', () => {
     const availableWidth = 260;
-    const result = layout(header(BODY), availableWidth);
-    for (const stave of result.staves) {
-      expect(stave.x + stave.width).toBeLessThanOrEqual(availableWidth);
-    }
-    // 行首 stave 的 x 正是那一整份预留（谱号 + 调号 + 拍号都存在）。
     const reserve = STAFF_METRICS.headerReserve;
-    const expected = reserve.clefWidth
+    const RESERVE = reserve.clefWidth
       + reserve.keySignatureWidthPerAccidental * reserve.keySignatureAccidentalReserve
       + reserve.timeSignatureWidth;
-    expect(result.staves[0]?.x).toBe(expected);
+
+    function lineStartStaves(result: ReturnType<typeof layout>): ReadonlyMap<number, number> {
+      const first = new Map<number, number>();
+      for (const [index, stave] of result.staves.entries()) {
+        if (!first.has(stave.systemIndex)) first.set(stave.systemIndex, index);
+      }
+      return first;
+    }
+
+    it('每行 stave 右缘不超过 availableWidth（packing 用的是 availableWidth − reserve）', () => {
+      const result = layout(header(BODY), availableWidth);
+      for (const stave of result.staves) {
+        expect(stave.x + stave.width).toBeLessThanOrEqual(availableWidth);
+      }
+    });
+
+    it('行首 stave 的 x 就是所属 system box 的左边（不再被右移一份 reserve）', () => {
+      const result = layout(header(BODY), availableWidth);
+      const starts = lineStartStaves(result);
+      expect(starts.size).toBe(result.systems.length);
+      for (const [systemIndex, staveIndex] of starts) {
+        const stave = result.staves[staveIndex];
+        expect(stave?.x).toBe(result.systems[systemIndex]?.box.origin.x);
+      }
+    });
+
+    it('行首 stave 的 width 比同一小节的内容宽**正好**多出一份 reserve（直接对照：去掉 K:/M: 后差值等于它们的预留）', () => {
+      // 同一段 body、同样的可用宽度，只把 `K:`/`M:` 拿掉：reserve 少了调号与拍号两块，
+      // 行首 stave 的 width 就该少同样多，而内容宽（这一小节的音符列）一个字都没变。
+      const withKeyMeter = layout(header('CDEF|'), WIDE);
+      const clefOnly = layout(
+        '%MUSE2\nX:1\nL:1/4\nV:1 style=staff\nCDEF|\n',
+        WIDE,
+      );
+      const delta = reserve.keySignatureWidthPerAccidental * reserve.keySignatureAccidentalReserve
+        + reserve.timeSignatureWidth;
+      const a = withKeyMeter.staves[0];
+      const b = clefOnly.staves[0];
+      expect(a?.keySignature).toBeDefined();
+      expect(a?.timeSignature).toBeDefined();
+      expect(b?.keySignature).toBeUndefined();
+      expect(b?.timeSignature).toBeUndefined();
+      expect((a?.width ?? 0) - (b?.width ?? 0)).toBe(delta);
+      // 两种情形下行首 stave 都贴着 box 左边——reserve 从来不是左边距。
+      expect(a?.x).toBe(0);
+      expect(b?.x).toBe(0);
+    });
+
+    it('只有行首 stave 带 clef / 调号 / 拍号，非行首一律缺席', () => {
+      const result = layout(header(BODY), availableWidth);
+      const startIndexes = new Set(lineStartStaves(result).values());
+      for (const [index, stave] of result.staves.entries()) {
+        if (startIndexes.has(index)) {
+          expect(stave.clef).toBeDefined();
+          expect(stave.width).toBeGreaterThan(RESERVE);
+        } else {
+          expect(stave.clef).toBeUndefined();
+          expect(stave.keySignature).toBeUndefined();
+          expect(stave.timeSignature).toBeUndefined();
+        }
+      }
+    });
+
+    it('同一 system 内相邻 stave 首尾相接：prev.x + prev.width === next.x', () => {
+      const result = layout(header(BODY), availableWidth);
+      for (const [index, stave] of result.staves.entries()) {
+        const prev = result.staves[index - 1];
+        if (prev === undefined || prev.systemIndex !== stave.systemIndex) continue;
+        expect(prev.x + prev.width).toBe(stave.x);
+      }
+    });
+
   });
 
   it('每个 (system, measure) 一条 stave，与 measures 同序；y 取所属 system 的顶边', () => {
