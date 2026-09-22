@@ -2,7 +2,7 @@
 
 > 面向后续实现 Agent 的项目交接文档  
 > 项目代号：`muse-next`  
-> 当前阶段：**M0–M1.8 已封板；M2 Notation Rendering T0–T9 已全部完成（Chord / Jianpu / TAB / Staff 四种记谱可渲染 + T8 render matrix 契约测试 + T9 文档封板），✅ 2026-09-22 封板（CI run 35700198783）；下一步是 M3 前的 UI 设计（功能清单 + 设计要求）**（详见 §30 里程碑表、§30.1「M2 进行中状态」、§69「当前明确的下一任务」）  
+> 当前阶段：**M0–M1.8 已封板；M2 Notation Rendering T0–T9 已全部完成（Chord / Jianpu / TAB / Staff 四种记谱可渲染 + T8 render matrix 契约测试 + T9 文档封板），✅ 2026-09-22 封板（原始 seal CI run 35700198783；T8.1 post-seal 契约收紧 run 35702615344；当前 HEAD run 35702885112 三平台全绿）；下一步是 M3 前的 UI 设计（功能清单 + 设计要求）**（详见 §30 里程碑表、§30.1「M2 进行中状态」、§69「当前明确的下一任务」）  
 > 核心目标：以现代 TypeScript 技术栈重建已停止维护的 **Muse Pro 2.70** 的核心能力，并优先恢复其 `.jcx` 乐谱格式、谱面渲染、编辑与播放能力。
 
 ---
@@ -2405,7 +2405,7 @@ T8 最终 render matrix（契约 C1/C2/C3）→ T9 文档封板）。T0–T5 已
 GitHub Actions run 35087178952 三平台全绿；随后按真实语料（corpus#10，一份
 两声部 TAB+简谱成品）人工 smoke 的发现做了 **T5.2 real-world hardening**
 （四个 fix 提交 + 一个 breve 时值能力提交，见下）；随后 **T6 TAB 六线谱 T6.1–T6.5 全部完成**（见下），
-历史规划中的下一步曾是 T7 Staff + VexFlow adapter；该阶段已于 2026-09-22 完成并封板（见下方 T7 状态段）。`src/renderer` 里只剩五线谱声部显示「五线谱渲染待 T7」占位。随后 **T8 render matrix**（C1/C2/C3 三条契约对四种记谱的用例矩阵）与 **T9 文档封板**（本节与 CHANGELOG / VALIDATION / README 的同步）均已完成（见下方 T8/T9 状态段），M2 T0–T9 全部完成，已推送，待三平台 CI 全绿后由 seal commit 把 §30 的 M2 行标 ✅。
+历史规划中的下一步曾是 T7 Staff + VexFlow adapter；该阶段已于 2026-09-22 完成并封板（见下方 T7 状态段）。`src/renderer` 里只剩五线谱声部显示「五线谱渲染待 T7」占位。随后 **T8 render matrix**（C1/C2/C3 三条契约对四种记谱的用例矩阵）与 **T9 文档封板**（本节与 CHANGELOG / VALIDATION / README 的同步）均已完成（见下方 T8/T9 状态段），M2 T0–T9 全部完成并于 2026-09-22 封板（原始 seal 依据 CI run 35700198783；seal 后的 T8.1 契约收紧由 run 35702615344 三平台全绿背书；T8.1 文档收尾 HEAD 3055fae 对应 run 35702885112 亦全绿）。
 
 **管线与边界**（已由测试守住）：`loadJcx → {Score, DomainIndex} → RenderInput
 → src/notation/model（纯函数、flat 投影，不加 Measure）→ src/notation/{chord,
@@ -4163,12 +4163,11 @@ Chord / Jianpu / TAB / Staff 四种记谱可渲染（T0–T7，T7 Staff + VexFlo
 恢复时：
 
 ```text
-1. 先阅读 §30.1 的 T0–T9 完整状态与「M2 遗留债务总表」；
-2. seal M2：push 后确认三平台 CI 全绿，由 seal commit 把 §30 的
-   M2 行标 ✅；
-3. seal 之后下一步不是 M3 编码，而是先做 M3 前的 UI 设计
-   （功能清单 + 设计要求，交给用户去 Claude Design）；
-4. UI 设计确认后再回来规划 M3 Editor Core 的实现任务序。
+1. 先阅读 §30.1 的 T0–T9 完整状态与「M2 遗留债务总表」（M2 已封板，
+   T8.1 post-seal 契约收紧亦已三平台全绿，M2 代码不再改动）；
+2. 下一步不是 M3 编码，而是先做 M3 前的 UI 设计
+   （功能清单 + 设计要求见 `docs/UI_DESIGN_BRIEF.md`，交给用户去 Claude Design）；
+3. UI 设计确认后再回来规划 M3 Editor Core 的实现任务序。
 ```
 
 **M2 入口要求**（§40/§41/§52）：从 `src/domain/` 的 `Score` 出发画谱面，

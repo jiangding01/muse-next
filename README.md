@@ -180,7 +180,7 @@ projectionEquals(before, after); // true 表示语义往返无损
   Staff 的 adapter，依赖方向固定为 `Domain Model → Adapter → VexFlow` 单向，
   `src/renderer/integrations/vexflow/**` 是全仓唯一允许 import VexFlow 的目录，
   `JCX Parser → VexFlow objects` 未被短路。渲染层有覆盖四种记谱的 C1/C2/C3 契约
-  测试矩阵（详见 `HANDOFF.md` §30.1「M2 进行中状态」），待三平台 CI 全绿后封板。
+  测试矩阵（详见 `HANDOFF.md` §30.1「M2 进行中状态」），已于 2026-09-22 经三平台 CI 全绿封板。
   全仓测试规模（`npm test`）：74 个测试文件 / 5642 个用例全部通过。
 
 下一阶段：
