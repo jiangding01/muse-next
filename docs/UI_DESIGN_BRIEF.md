@@ -1,6 +1,8 @@
 # Muse Next — UI 设计需求说明（M3 前置）
 
-> 版本：v1.2 — 2026-09-22：新增目标谱面版式（成品谱参考）与 M2.5 路线项
+> 版本：v1.3 — 2026-09-22：M2.5 架构边界修正（chord overlay、system 高度、
+> bracket 语义、同名和弦图）；10.17 / 10.18 正式裁决
+> （v1.2 — 2026-09-22：新增目标谱面版式（成品谱参考）与 M2.5 路线项）
 > （v1.1 — 2026-09-22：吸收用户对 §10 的 15 条裁决；诊断码计数修正为 39）
 > （v1.0 — 2026-09-22，M2 Notation Rendering 封板之后、M3 Editor Core 之前）
 > 适用范围：桌面端 Electron 应用 Muse Next 的整体界面设计
@@ -86,13 +88,20 @@ macOS 与 Windows 桌面（Electron 44，React 19）。Linux 有打包器配置�
 
 ### 1.5 里程碑速查（设计稿标注用）
 
-`M2 Notation Rendering`（✅ 2026-09-22 封板，四种记谱可渲染、按声部堆叠）→
-**`M2.5 乐谱系统版式`（本文档新提，建议插在 M3 之前，待用户确认：§2.7.6 / §10.17）** →
-`M3 Editor Core`（§44）→ `M4 Playback`（§46/§47）→ `M5 Import/Export/Print`（§48/§49）→
-`M6 Compatibility / Packaging`。
+正式路线（§10.17 已裁决）：
 
-> 权威里程碑表在 `HANDOFF.md` §30；M2.5 目前**只存在于本文档的建议中**，
-> 未写入 HANDOFF，确认后才由里程碑表收编。
+```text
+M2 Notation Rendering            ✅ 已封板（四种记谱可渲染，按声部堆叠）
+UI 目标版式                       ✅ 本文档（§2.7 Guitar Arrangement System Profile）
+M2.5 System Layout               → 系统交错版式（§2.7.6）
+M3A source / save / history      → 源码编辑、保存、撤销重做
+M3B selection + 三向同步          → 依赖 M2.5 的 systemIndex / measure 几何 / x,y / voice grouping
+M3C visual editing               → 可视化编辑
+M4 Playback → M5 Import/Export/Print → M6 Compatibility / Packaging
+```
+
+> 权威里程碑表在 `HANDOFF.md` §30；M2.5 与 M3A/B/C 的拆分目前**只写在本文档里**，
+> 需由后续 commit 同步进 HANDOFF 的里程碑表。
 
 ---
 
@@ -240,6 +249,21 @@ macOS 与 Windows 桌面（Electron 44，React 19）。Linux 有打包器配置�
 > "跨声部对齐不在 M2 范围（多声部先各画各的），所以这里不带 voice 维度"）。
 > 设计稿按目标版式画，实现分阶段补齐（见 2.7.6）。
 
+#### 2.7.0 版式命名与底层模型（措辞约定）
+
+参考图描述的四层结构称为 **「Guitar Arrangement System Profile」**——它是**一个
+profile**，不是唯一版式。System Layout 的底层模型写成：
+
+```text
+System = overlay layers（chord diagrams）
+       + ordered voice layers（TAB / Jianpu / Staff）
+       + attached layers（lyrics）
+```
+
+未来的 Staff + Staff、Jianpu only、TAB only、Staff + lyrics 等组合都是**其它
+profile**，各自选择哪些层、以什么顺序出现，**不推翻 M2.5 的模型**。本节其余内容
+是 Guitar Arrangement profile 的具体规格。
+
 #### 2.7.1 页面
 
 - A4 纵向，白底黑墨。
@@ -262,7 +286,14 @@ macOS 与 Windows 桌面（Electron 44，React 19）。Linux 有打包器配置�
   **和弦名在图的上方**（如 `G`、`D/#F`、`Em7`、`Bm`）。
 - 图形数据来自 `%%gchord` 定义，**按和弦名查表**。
   → **这要求 D11（和弦符号按名关联和弦图）在本版式下必须开启**（M2 默认关闭，
-  见 §3.6 C4）。**未定义的和弦只写名、不画图**，不得留空也不得猜形。
+  见 §3.6 C4）。
+- **同名 `%%gchord` 的边界**：解析层对同名定义**不去重、不覆盖**，按文档顺序
+  **全部**进入 `Score.chordShapes`。因此查表策略必须显式：
+  - **0 个匹配** → **只画和弦名**；
+  - **恰 1 个匹配** → **和弦名 + 小图**；
+  - **> 1 个同名** → **不猜**：只画和弦名 + 一条 **ambiguity 诊断**（新诊断码，
+    M2.5 追加）。
+  找到 Muse Pro 的真实选择规则之前，不得按"取第一个/取最后一个"擅自决定。
 
 **第 2 层 · 六线谱层**
 
@@ -274,6 +305,14 @@ macOS 与 Windows 桌面（Electron 44，React 19）。Linux 有打包器配置�
   三连音 `3` 标记、连音/延音弧线。
   → **beam grouping 是当前 TAB 的已知 debt**（见 2.6），目标版式要求必须有。
 - 小节线与下层简谱**严格对齐**。
+
+> **`bracket=N` 的语义边界**：spec §12 只说明 `bracket=N` 表示**从当前声部起 N 行谱
+> 用方括号连接**——它证明的是**视觉分组**，**不等价于节奏同步**。因此 M2.5 方案
+> 必须单独定义 **cross-voice measure mismatch policy**；最保守的版本（写进本文档，
+> 具体策略由 M2.5 方案敲定）：
+> ① measure index 能对齐 → **共用 system measure 几何**；
+> ② 某 voice 缺该 measure → **该层留空，但保留公共宽度**；
+> ③ barline / 小节结构明显冲突 → **fallback + 诊断**，**不偷偷重写事件**。
 
 **第 3 层 · 简谱层**
 
@@ -294,7 +333,10 @@ macOS 与 Windows 桌面（Electron 44，React 19）。Linux 有打包器配置�
 
 - 四层（和弦图 → 六线谱 → 简谱 → 歌词）之间**紧凑**；
 - **系统与系统之间留明显空白**；
-- **每个系统高度固定**，页面按系统整数切分。
+- **同一版式 profile 下，系统保持稳定的基础高度与层间距**；实际 system height
+  **由活跃层与内容决定**（现有 `restackSystems` 已经是 `base + extraHeight` 模型，
+  M2.5 沿用这一形状，不要设计成"所有系统像素等高"）；
+- **分页只允许在 system 边界切分，不拆开单个 system**。
 
 #### 2.7.4 与当前实现的差距（设计时必须知道）
 
@@ -320,15 +362,18 @@ macOS 与 Windows 桌面（Electron 44，React 19）。Linux 有打包器配置�
    完整呈现；主窗口浏览态可简化，但不能与打印稿矛盾。
 4. 系统之间的空白是重要的呼吸节奏，**不要为了塞进更多内容而压缩**。
 
-#### 2.7.6 建议新增里程碑 M2.5「乐谱系统版式」（待用户确认，见 §10.17）
+#### 2.7.6 里程碑 M2.5「乐谱系统版式」（已裁决排在 M3 之前，见 §10.17）
 
-**建议插在 M3 之前**：M3 Editor Core 的选区与三向同步都建立在"谱面元素的位置"
-之上，先把版式从"按声部堆叠"改成"系统交错"，可以避免 M3 做完再返工一次选区几何。
+**排在 M3 之前**（正式裁决）：M3B 的 selection / 三向定位 / anchor highlight /
+可视化编辑**全部依赖最终谱面元素的 `systemIndex`、measure 几何、x/y、voice
+grouping**——先把版式从"按声部堆叠"改成"系统交错"，才不会在 M3 完成后返工选区几何。
 
-**M2.5 范围建议**：
+**M2.5 范围**：
 
 1. **跨声部按小节对齐的统一 spacing**（同一小节在所有声部层取同一宽度与同一 x）；
-2. **`bracket=N` 把声部连成系统**（spec §12.2 已解析该属性）；
+2. **`bracket=N` 把声部连成系统**（spec §12.2 已解析该属性）——注意它只证明
+   **视觉分组**，节奏同步要靠 **cross-voice measure mismatch policy**（见 §2.7.2
+   的保守版本），该策略由 M2.5 方案敲定；
 3. **和弦名 → `%%gchord` 图形关联开启**（D11），和弦图就地画在谱上；
 4. **TAB beam grouping**（清 2.6 的视觉 debt）；
 5. **简谱减时线**——已实现，无需新增，只需纳入系统级对齐；
@@ -341,8 +386,13 @@ macOS 与 Windows 桌面（Electron 44，React 19）。Linux 有打包器配置�
 - `src/notation/layout/spacing.ts` 需要增加一个**"系统级"层**：现在的列宽求解是
   **声部内**的，系统版式要求先在跨声部维度上求出每个小节/每一列的公共宽度，
   再分发给各声部；
-- **四种 layout（jianpu / tab / staff / chord）都要能接受外部给定的小节宽度**，
-  而不是各自决定——这是接口形状的改动，不只是数值；
+- **职责切分**：新增的 **System Layout** 负责**统一 measure grid 与 system
+  packing**；**jianpu / tab / staff 三个 voice layout 接受外部给定的 system /
+  measure 几何**（接口形状的改动，不只是数值）；
+- **Chord Diagram 不是第四种声部 layout**：它是 **system composer 放置的 overlay
+  层**——**时间位置由 `ChordSymbolEvent` 决定，图形由 `Score.chordShapes` 提供**，
+  而 `layoutChord(GuitarChord) → ChordLayout` **保持 document 级不变**（与 T8.1
+  "chord 退出 voice matrix、独立 document chord matrix"的架构一致）；
 - `ScoreView` 由**"每声部一块"改为"每系统一块"**：DOM 结构、锚点归属、
   `availableWidth` 的消费方式都随之变化；VexFlow 的 staff 也要按系统切分喂入；
 - 契约测试矩阵（C1/C2/C3）的"每声部一个 layout"假设需要复核。
@@ -372,8 +422,8 @@ macOS 与 Windows 桌面（Electron 44，React 19）。Linux 有打包器配置�
 |---|---|---|---|---|---|
 | V1 | 四种记谱渲染 | P0 | `HANDOFF.md` §30.1、`src/notation/{chord,jianpu,tab,staff}` | 声部区 | 已实现。Jianpu/TAB/Chord 自绘 SVG，Staff 走 VexFlow |
 | V2 | **系统交错（目标）/ 声部堆叠（现状）** | P0（现状）+ P1（目标） | §2.7 成品谱参考、`ScoreView.tsx`、`primitives.ts` | 声部区整体结构 | **目标**：各声部按小节对齐成一个"系统"（和弦图 / 六线谱 / 简谱 / 歌词四层）。**现状**：每个声部独立布局、纵向堆叠，间距固定 24px，没有声部名标签、没有括号连接（`bracket` 已解析未渲染）。差距见 2.7.4 |
-| V2a | 跨声部按小节对齐的统一 spacing | P1 | M2.5（§2.7.6） | 谱面全局 | 未实现。需要 `spacing.ts` 增加系统级层，四种 layout 接受外部给定小节宽度 |
-| V2b | `bracket=N` 连成系统 | P1 | spec §12.2、M2.5 | 谱面行首 | 属性已解析，未渲染 |
+| V2a | 跨声部按小节对齐的统一 spacing | P1 | M2.5（§2.7.6） | 谱面全局 | 未实现。新增 System Layout 负责 measure grid 与 system packing；**jianpu / tab / staff 三个 voice layout** 接受外部几何；**和弦图是 overlay 层，不是第四种声部 layout** |
+| V2b | `bracket=N` 连成系统 | P1 | spec §12.2、M2.5 | 谱面行首 | 属性已解析，未渲染。**只证明视觉分组，不等价于节奏同步**——需配套 cross-voice measure mismatch policy（§2.7.2） |
 | V2c | 行内两端对齐（撑满行宽） | P1 | §2.7.2、M2.5 | 谱面 | 未实现（Staff 已记为 debt） |
 | V2d | TAB beam grouping | P1 | §2.7.2、M2.5、2.6 debt | 六线谱节奏层 | 未实现（当前各画各的减时线） |
 | V2e | 歌词音节居中跟随简谱 | P1 | §2.7.2、M2.5、2.6 debt | 歌词层 | 简谱歌词已实现但左对齐 |
@@ -433,7 +483,7 @@ macOS 与 Windows 桌面（Electron 44，React 19）。Linux 有打包器配置�
 | C1 | `%%gchord` 和弦图 | P0 | spec §25.4、`ChordDiagram.tsx`、§2.7.2 | **目标：谱上小图**（4 品 × 6 弦、`×`/`○`、名在图上方）；现状：纸面底部总表 | 图形已实现（品位标签、`×`/`○`、指法数字）；**位置形态待改**（§10.16） |
 | C2 | 指法数字开关 `%%showfinger` | P0 | spec §10.2、`layoutChord.ts` 三态 | 由文件驱动 | 已实现，**无 UI 开关**；spec 另有 `showname`/`showcheck`/`showpattern` 等 DOC-ONLY 指令 |
 | C3 | 横按渲染 | P2 | spec §10.1 横按记法 UNVERIFIED | 和弦图 | **不渲染**（无证据，不猜） |
-| C4 | 和弦名 → 和弦图的关联（D11） | **P1** | D11（按名关联，INFERRED，M2 默认关闭）、§2.7.2、§10.16 | 谱上小和弦图 | **目标版式要求开启**：每次和弦变化处按和弦名查 `%%gchord` 表就地画图，未定义的和弦只写名不画图。当前 Domain 里和弦图是**文档级**对象、与事件无映射，开启属 M2.5 范围 |
+| C4 | 和弦名 → 和弦图的关联（D11） | **P1** | D11（按名关联，INFERRED，M2 默认关闭）、§2.7.2、§10.16 | 谱上小和弦图 | **目标版式要求开启**：每次和弦变化处按和弦名查 `%%gchord` 表就地画图。**同名定义不去重**，故策略为 0 个→只写名 / 恰 1 个→名 + 图 / >1 个→不猜，只写名 + ambiguity 诊断（新码，M2.5 追加）。当前 Domain 里和弦图是**文档级**对象、与事件无映射，开启属 M2.5 范围 |
 | C5 | 谱面内和弦符号 `"..."` | P0 | spec §25.1、T6.5 | 谱面 | 已实现。显示时去掉外层一对引号；**不占时间槽**（overlay 宽度 0） |
 | C6 | 歌词 `w:` | P0 | spec §24、T5.2-A | 简谱谱面 | 简谱已实现（三级归属 + 按 system 分行）；**TAB 与五线谱不画歌词**（Staff 发声部级 info） |
 
@@ -861,7 +911,8 @@ loading / error（如适用）八态，浅色与深色各一套。
 | 10.14 | 简谱附点位置（现为 `X . _ _ _`）？ | **设计稿明确画出正确目标：附点在延音线之后** | 实现**另开视觉 polish task**，不与 M3 Editor Core 混做 |
 | 10.15 | 窗口标题栏用系统原生还是自绘？ | **macOS：hiddenInset + 自绘 toolbar；Windows：原生标题栏 + 独立 toolbar** | 平台差异**显式设计**，不追求两端像素一致 |
 | 10.16 | 和弦图画在哪？ | **方案 B：每次和弦变化处，在六线谱正上方画小和弦图，和弦名标在图的上方**（§2.7.2） | **页首/纸面底部的和弦图总表不作为主要形式**，可保留为**可选的附录区**；本裁决要求开启 D11（和弦名 → `%%gchord` 按名查表），未定义的和弦只写名不画图 |
-| 10.17 | M2.5「乐谱系统版式」是否插在 M3 之前？ | **建议是——待用户最终确认** | 理由：M3 的选区与三向同步建立在谱面元素位置之上，先把版式从"按声部堆叠"改成"系统交错"，可避免 M3 完成后再返工选区几何。范围与架构影响点见 §2.7.6 |
+| 10.17 | M2.5「乐谱系统版式」是否插在 M3 之前？ | **是。M2.5 排在 M3 之前** | 理由：M3B 的 selection / 三向定位 / anchor highlight / 可视化编辑**全部依赖最终谱面元素的 `systemIndex`、measure 几何、x/y、voice grouping**。正式路线：M2 ✅ → UI 目标版式 ✅ → **M2.5 System Layout** → M3A source/save/history → M3B selection + 三向同步 → M3C visual editing。范围与架构影响点见 §2.7.6 |
+| 10.18 | 每行放几小节由什么决定？ | **交互式 Score View 自动求解**（`availableWidth` + `zoom` + 内容最小宽度）；**Print Preview / PDF 在解析成功且放得下时优先尊重 `%%barsperstaff`**，否则按可打印宽度自动求解 | `%%barsperstaff` 当前是 **DOC-ONLY**（只在 lexer 词表 `lineVocabulary.ts`，未进 Domain）。若将来支持：屏幕端把它当作者给出的**上限/期望**——窄窗口允许提前换行，**不为硬塞而缩坏谱面**。优先级 —— **打印**：显式 `barsperstaff` > 页面/谱宽约束 > auto；**屏幕**：可用宽度 / zoom > `barsperstaff` 作上限。参考图的"每行 5 小节"**只是该成品谱的示例，不是默认值** |
 
 ---
 
@@ -976,5 +1027,6 @@ loading / error（如适用）八态，浅色与深色各一套。
 | 12 | 打印时降级角标是否打印 | §10.9 只裁决「打印用独立 token」，角标是否进打印稿未裁决；倾向不打印 |
 | 13 | `showname`/`showcheck`/`showpattern` 等和弦图开关是否要做 UI | 均为 DOC-ONLY，语义未验证 |
 | 14 | 性能上限 | 现有语料最大 23KB；真实用户是否有几百小节的大谱未知（§10.11 的离散档位已消除拖拽滑块的重排风险） |
-| 15 | M2.5 是否插在 M3 之前、其范围是否就是 §2.7.6 的 8 项 | §10.17 已给出"建议是"，**等用户最终确认**；确认后需同步写入 `HANDOFF.md` §30 里程碑表 |
-| 16 | 目标版式下"每行几小节"由什么决定 | 参考图为每行 5 小节且两端对齐；是按可用宽度自动求解、还是受 `barsperstaff`（DOC-ONLY）之类指令控制，未确认 |
+| 15 | M2.5 / M3A / M3B / M3C 的拆分何时写进 `HANDOFF.md` §30 | 顺序本身已由 §10.17 正式裁决；**同步进里程碑表的 commit 尚未做** |
+| 16 | cross-voice measure mismatch policy 的最终形态 | §2.7.2 只写了最保守版本（对齐 / 留空保宽 / fallback+诊断），具体策略由 M2.5 方案敲定 |
+| 17 | 同名 `%%gchord` 的 Muse Pro 真实选择规则 | 现策略是 >1 同名就不猜、只写名 + ambiguity 诊断；真实规则未知，找到后可升级 |

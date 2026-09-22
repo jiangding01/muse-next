@@ -1781,6 +1781,12 @@ T7 ✅ 2026-09-22 封板（CI run 35696163723）；M2 ✅ 2026-09-22 封板：24
 GitHub Actions run 35700198783 macOS/Ubuntu/Windows 三平台 typecheck / test / fixture-report 全绿；
 现状与债务总表见 §30.1「M2 进行中状态」）
 
+→ M2.5
+Score System Layout（乐谱系统版式：跨声部按小节对齐的统一 spacing、`bracket=N` 视觉分组成系统、
+和弦图作为 system overlay（开启 D11 和弦名→`%%gchord`，同名 >1 不猜只画名 + 诊断）、TAB beam grouping、
+两端对齐、歌词随简谱行、按系统分页；目标版式与架构边界见 `docs/UI_DESIGN_BRIEF.md` §2.7 / §10.16–10.18；
+2026-09-22 用户裁决插在 M3 之前，方案未起草）
+
 → M3
 Editor Core
 
@@ -2644,7 +2650,7 @@ visual debt、T7 第 6 条），按 视觉 / 架构 / 测试 分类，每行注�
 | 测试 | `spacing.ts` 里 `chordSymbol` 的两处判定点（`itemSlotWidth` 的 overlay 判定先行截断，`timedDurationOf` 穷尽性 `switch` 里再列一遍 `timed: false`）靠代码注释纪律保持一致，缺自动化的防分叉单测（两处改动不同步时不会有测试报警） | T6 |
 | 测试 | VexFlow adapter（`renderer/integrations/vexflow/**`）无自动化 DOM 测试，人工 smoke 覆盖；不引入 jsdom 的理由是 5642 个用例（T8.1 后）全基于 Node 纯函数，不是「VexFlow 明示不兼容 jsdom」 | T7 |
 
-**M2 seal 与 M3 前置（T9 之后，恢复时从这里继续）**：T0–T9 已全部完成并推送，
+**M2 seal 与 M3 前置（T9 之后，恢复时从这里继续）**：**2026-09-22 追加裁决：M2 与 UI 目标版式确认之后、M3 之前先做 M2.5 Score System Layout（见 §30 路线表与 `docs/UI_DESIGN_BRIEF.md` §2.7.6、§10.17/10.18）；M2.5 的 System 模型 = overlay layers（chord diagrams）+ ordered voice layers（TAB/Jianpu/Staff 接受外部 system/measure 几何）+ attached layers（lyrics），chord 不是第四种声部 layout，system 高度由内容决定、分页只在 system 边界，`bracket` 只证明视觉分组、需定义 cross-voice measure mismatch policy。**原文：T0–T9 已全部完成并推送，
 下一步不是继续写渲染代码，而是：
 
 1. **M2 seal**：push 后确认三平台（macOS/Windows/Ubuntu）CI 全绿，再由一次独立
@@ -4168,9 +4174,12 @@ Chord / Jianpu / TAB / Staff 四种记谱可渲染（T0–T7，T7 Staff + VexFlo
    Claude Design 出第一轮 8 张核心画面并确认后再继续；
 1. 先阅读 §30.1 的 T0–T9 完整状态与「M2 遗留债务总表」（M2 已封板，
    T8.1 post-seal 契约收紧亦已三平台全绿，M2 代码不再改动）；
-2. 下一步不是 M3 编码，而是先做 M3 前的 UI 设计
-   （功能清单 + 设计要求见 `docs/UI_DESIGN_BRIEF.md`，交给用户去 Claude Design）；
-3. UI 设计确认后再回来规划 M3 Editor Core 的实现任务序。
+2. UI 设计目标版式已确认（Brief v1.3 §2.7，Guitar Arrangement System Profile：
+   和弦图 → 六线谱 → 简谱 → 歌词，系统交错）；设计稿第一轮 8 张画面仍在用户侧进行；
+3. 代码侧下一步是 **M2.5 Score System Layout**（用户 2026-09-22 裁决插在 M3 前）：
+   先按 Brief §2.7.6 起草方案给用户审（跨声部 spacing 层、system 模型、measure
+   mismatch policy、D11 同名策略、barsperstaff 规则），批准后再派发；
+4. M2.5 封板后再规划 M3A（source/save/history）→ M3B（selection + 三向同步）→ M3C（可视化编辑）。
 ```
 
 **M2 入口要求**（§40/§41/§52）：从 `src/domain/` 的 `Score` 出发画谱面，
