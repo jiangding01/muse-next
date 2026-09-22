@@ -6,15 +6,19 @@
  * 时值/音高/升降号记号、`w`/`h`/`q` 时值码），不 import 也不提及 VexFlow API。
  * 转换到 VexFlow 编码是 T7.4 在 `src/renderer/integrations/vexflow/**` 里做的事。
  *
- * 依赖方向：只 type-only import `../../domain`；**不** import `jianpu/**`、
- * `tab/**`、`chord/**`（守卫见 architecture 测试，本文件手动遵守同一条规则）。
+ * 依赖方向：只 type-only import `../../domain` 与 `../layout` / `../model` 的既有
+ * 类型；**不** import `jianpu/**`、`tab/**`、`chord/**`（手动遵守同一条规则）。
  *
- * 本文件里 `StaffEventNode` / `StaffStaveSpec` / `StaffTie` / `StaffTupletBracket` /
- * `StaffLayout` 只是**类型骨架 + JSDoc**——具体产出这些值的算法（`layoutStaff.ts`
- * 等）是后续任务（T7.2+）的事，本任务只把字段语义钉死，不写任何构造逻辑。
+ * T7.2 把 `StaffEventNode` / `StaffStaveSpec` / `StaffLayout` 从骨架补成实际契约
+ * （构造逻辑在 `staffEventNodes.ts` / `layoutStaff.ts`，本文件仍然只有类型）；
+ * `StaffTie` / `StaffTupletBracket` 维持骨架，T7.3 才产出，T7.2 一律给空数组。
  */
 
-import type { Accidental, EventId, RelationId, VoiceId } from '../../domain';
+import type { Accidental, RelationId, SourceRef, VoiceId } from '../../domain';
+import type { MeasureSlice } from '../layout/systems';
+import type { SpacedSlot } from '../layout/spacing';
+import type { System } from '../layout/primitives';
+import type { Anchor, RenderDiagnostic } from '../model/types';
 
 // ---------------------------------------------------------------------------
 // 谱号 / 音高 / 时值——本任务的核心产出，`staffPitch.ts` / `staffDurations.ts` 消费。
@@ -39,8 +43,7 @@ export interface StaffPitch {
 }
 
 /**
- * Staff 语义下的升降号**显示类别**——renderer-neutral 命名，不是 VexFlow 的
- * `'#'`/`'b'`/`'n'` 单字符记号。用于「这个音符要不要画一个可见的升降号符号」
+ * 升降号的**显示类别**（renderer-neutral 命名）：用于「要不要画一个可见的升降号」
  * 这类展示判断（如同一小节内是否已出现过），不参与音高计算。
  */
 export type StaffAccidentalDisplay = 'sharp' | 'doubleSharp' | 'flat' | 'doubleFlat' | 'natural';
@@ -66,17 +69,14 @@ export interface StaffDuration {
  * `toStaffDuration` 的返回形状——判别联合，覆盖三种互斥结果：
  * - `representable`：能画出具体的符头/附点组合；
  * - `beyondGlyphRange`：`decomposeDuration` 能分解，但细过本层的 glyph 范围上限
- *   （128th 分音符，产品决定，见 `staffDurations.ts`），`exponent` 原样带回
- *   `decomposeDuration` 给出的 `k`（`base = 2^-k`）供诊断消息使用；
+ *   （128th，产品决定，见 `staffDurations.ts`），`exponent` 原样带回 `k`（`base = 2^-k`）；
  * - `unrepresentable`：`decomposeDuration` 本身分解不成立，或输入时值缺失。
  *
- * **⚠️ `undefined` 与分解失败共享 `unrepresentable`**：本类型没有单独的「时值缺失」
- * 分支——`toStaffDuration(undefined)` 与 `toStaffDuration(<不可分解的 Rational>)`
- * 得到的是同一个 `{ kind: 'unrepresentable' }`，从这个返回值本身**无法**区分两者。
- * 调用方（构造 `StaffEventNode.fallbackReason` 的算法）必须在调用 `toStaffDuration`
- * **之前**自行检查原始 `duration === undefined`，据此在 `durationUnresolved`
- * （缺失）与 `durationUnrepresentable`（分解失败）两条诊断 code 之间做选择——
- * 不得依赖 `StaffDurationResult` 事后反推。
+ * **⚠️ `undefined` 与分解失败共享 `unrepresentable`**：两者得到同一个
+ * `{ kind: 'unrepresentable' }`，从返回值本身**无法**区分。调用方必须在调用
+ * `toStaffDuration` **之前**自行检查原始 `duration === undefined`，据此在
+ * `durationUnresolved`（缺失）与 `durationUnrepresentable`（分解失败）之间选择，
+ * 不得依赖 `StaffDurationResult` 事后反推（`staffEventNodes.ts` 即按此写）。
  */
 export type StaffDurationResult =
   | { readonly kind: 'representable'; readonly duration: StaffDuration }
@@ -110,17 +110,16 @@ export type StaffBarlineForm =
   | 'unrecognized';
 
 // ---------------------------------------------------------------------------
-// 布局节点骨架（T7.2+ 填充逻辑，本任务只钉字段语义）。
+// 布局节点（T7.2：从骨架补成实际契约）。
 // ---------------------------------------------------------------------------
 
 /**
- * 降级原因：与既有各记谱的 fallback 语义保持同一套判断口径（能确定原因就不要留空）。
- * - `unknown`：`UnknownEvent`；
- * - `outOfScope`：TAB 专属事件落在了 staff 声部（`staffEventOutOfScope`）；
- * - `durationUnresolved` / `durationUnrepresentable` / `durationBeyondGlyphRange`：
- *   对应 `toStaffDuration` 的三种非 `representable` 结果；
- * - `decoration`：`DecorationEvent`，只画占位；
- * - `grace`：倚音，`staffGraceNotModeled`（本任务只发诊断，不建模倚音专属几何）。
+ * 降级原因（能确定原因就不要留空，与既有各记谱同一口径）：`unknown` = `UnknownEvent`；
+ * `outOfScope` = TAB 专属事件落在 staff 声部；`durationUnresolved` /
+ * `durationUnrepresentable` / `durationBeyondGlyphRange` 对应 `toStaffDuration` 的三种
+ * 非 `representable` 结果；`decoration` 只画占位；`grace` 倚音不建模专属几何；
+ * `chordAllMembersRest` = 和弦块成员**全部**是休止（`[zz]`），没有音头可画但事件不能
+ * 凭空消失（C1），整块降级成一个可见占位。
  */
 export type StaffFallbackReason =
   | 'unknown'
@@ -129,49 +128,130 @@ export type StaffFallbackReason =
   | 'durationUnrepresentable'
   | 'durationBeyondGlyphRange'
   | 'decoration'
-  | 'grace';
+  | 'grace'
+  | 'chordAllMembersRest';
 
-/**
- * 单个音符列在 system 内的几何占位——**是 system packing 的输入，不是最终 glyph x**：
- * `slotIndex` 定序，`width` 参与 `spacing.ts` 式的列宽累加，真正落到 `<svg>` 上的
- * x 坐标由布局算法（T7.2+）二次计算，本类型不直接携带最终坐标。
- */
+/** 列的几何占位：`slotIndex` 定序，`width` 是该列的宽度需求；**不含最终 glyph x**。 */
 export interface StaffSlotGeometry {
   readonly slotIndex: number;
   readonly width: number;
 }
 
 /**
- * 一个事件在 Staff 布局里的节点骨架。
- *
- * `pitches` 为空数组表示这不是音高事件（休止/小节线/装饰等），非空时可能不止一个
- * （和弦块）。`fallback` 为真时 `fallbackReason` 必须存在——本任务只声明这条约束，
- * 不写运行时校验（那是构造该值的算法自己的职责）。
+ * 所有 Staff 节点共有的字段。**刻意不带 x / y**（与 `TabNode` 的最大差别）：stave 内
+ * 音符的绝对 x 由渲染器的 formatter 排（T7.4），本层只承诺次序与列宽需求，详见
+ * `StaffStaveSpec`。`anchor` 与诊断共享同一定义（§0d-1）；`sourceRef` 纯透传。
  */
-export interface StaffEventNode {
-  readonly eventId: EventId;
+export interface StaffNodeBase {
+  readonly anchor: Anchor;
+  readonly sourceRef: SourceRef;
   readonly slot: StaffSlotGeometry;
-  readonly pitches: readonly StaffPitch[];
-  readonly duration: StaffDurationResult;
+  readonly measureIndex: number;
+  readonly systemIndex: number;
   readonly fallback: boolean;
-  readonly fallbackReason?: StaffFallbackReason;
-}
-
-/** 一行谱的谱表规格：谱号 + 固定线数（`STAFF_METRICS.lineCount`，本类型不重复携带这个格式事实）。 */
-export interface StaffStaveSpec {
-  readonly clef: StaffClef;
 }
 
 /**
- * tie（连音线）在 Staff 布局里的骨架。
+ * 音符 / 和弦块：`pitches` 非空（成员里的休止已剔除并发诊断）。`duration` 是**已经
+ * 能画出符头**的时值——非 `representable` 的三种结果一律走 `StaffPlaceholderNode`。
+ */
+export interface StaffNoteNode extends StaffNodeBase {
+  readonly kind: 'note';
+  readonly pitches: readonly StaffPitch[];
+  readonly duration: StaffDuration;
+}
+
+/** 休止：`variant` 原样透传（`z` / `Z` / `@` 不合并，spec §15.2/§15.3）。 */
+export interface StaffRestNode extends StaffNodeBase {
+  readonly kind: 'rest';
+  readonly variant: 'z' | 'Z' | '@';
+  readonly duration: StaffDuration;
+}
+
+/** 和弦符号（spec §25）：overlay 列，零宽，不占节奏位置；`text` 已剥掉 JCX 的定界引号。 */
+export interface StaffChordSymbolNode extends StaffNodeBase {
+  readonly kind: 'chordSymbol';
+  readonly text: string;
+}
+
+/** 小节线：`raw` 原文 + 归类后的 `form`（表外形态归 `unrecognized`，画普通单线）。 */
+export interface StaffBarlineNode extends StaffNodeBase {
+  readonly kind: 'barline';
+  readonly raw: string;
+  readonly form: StaffBarlineForm;
+}
+
+/**
+ * 可见占位：画不出正规字形时的降级产物，`fallback` 恒为真。`text` 是**原样转述**
+ * （音名 + 原始时值文本、装饰原文、未知 token 原文……），不假装是任何一种记谱法。
+ */
+export interface StaffPlaceholderNode extends StaffNodeBase {
+  readonly kind: 'placeholder';
+  readonly text: string;
+  readonly reason: StaffFallbackReason;
+}
+
+/** 一个事件在 Staff 布局里的节点——**每个事件恰好一个**（契约 C1）。 */
+export type StaffEventNode =
+  | StaffNoteNode
+  | StaffRestNode
+  | StaffChordSymbolNode
+  | StaffBarlineNode
+  | StaffPlaceholderNode;
+
+// ---------------------------------------------------------------------------
+// 谱表规格（每个 (system, measure) 一条）。
+// ---------------------------------------------------------------------------
+
+/** 拍号：`Meter` 的 `fraction` 分支直译；`raw` 分支与缺席一律省略整个字段（adapter 不画拍号）。 */
+export interface StaffTimeSignature {
+  readonly numerator: number;
+  readonly denominator: number;
+}
+
+/**
+ * 调号：**renderer-neutral**——`tonic` 是音名原文，`alter` 是它自己的升降记号
+ * （`-1`/`0`/`1`），**不是**渲染器的调号名，也不是「调号里有几个升降号」。
+ */
+export interface StaffKeySignature {
+  readonly tonic: string;
+  readonly alter?: number;
+}
+
+/**
+ * 一个 (system, measure) 的谱表规格——**adapter 建 stave 的唯一输入**。
  *
- * `segment` 区分「完整画在一行内」还是「跨行谱续行的哪一半」：
- * - `whole`：起止都在同一行谱内，画一条完整弧；
- * - `start`：本行谱只画到 tie 的起点，弧延伸到下一行谱；
- * - `end`：本行谱只画 tie 落到本行谱内的终点那一半。
+ * **横向布局的真源在哪里**（T7.2 裁决，务必照此消费）：`layout/spacing.ts` +
+ * `layout/systems.ts` 只负责 measure / system 切分、system 打包、每个 stave 的**目标
+ * 宽度**与换行的确定性。`SpacedSlot.slot.x` 是 system packing 的**输入**，**不是**
+ * 最终音符 x——stave 内每个音符画在哪里由渲染器的 formatter 决定（T7.4）。故本类型
+ * 只承诺 stave 自己的矩形（`x`/`y`/`width`），节点只承诺 `measureIndex` /
+ * `systemIndex` / `slotIndex`，**谁都不承诺 glyph x**。
  *
- * `status` 原样透传 Domain `Tie.status`（`resolved` / `unresolved`），`unresolved`
- * 画半开弧（悬空端），同 jianpu/tab 既有约定。
+ * `clef` / `keySignature` / `timeSignature` **只出现在每行谱的行首 stave**（五线谱
+ * 每行重画谱号调号是记谱惯例，产品决定，不是 JCX 格式事实）。`beginBarline` /
+ * `endBarline` 同样是「有就有、没有就省略」：后者存在当且仅当这一小节以一个
+ * `BarlineEvent` 收尾，前者存在当且仅当这一小节的**首项**就是小节线（`|: CDE` 的
+ * 起始线自成一个 measure）。缺席表示作者没写，**不代表「普通单线」**。
+ */
+export interface StaffStaveSpec {
+  readonly systemIndex: number;
+  readonly measureIndex: number;
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly clef?: StaffClef;
+  readonly keySignature?: StaffKeySignature;
+  readonly timeSignature?: StaffTimeSignature;
+  readonly beginBarline?: StaffBarlineForm;
+  readonly endBarline?: StaffBarlineForm;
+}
+
+// 关系骨架（T7.3 填充；T7.2 一律产出空数组）。
+/**
+ * tie（连音线）骨架。`segment` 区分「完整画在一行内」（`whole`）还是跨行谱续行的
+ * 哪一半（`start` 只画到起点、弧延伸到下一行；`end` 只画落在本行的终点那一半）。
+ * `status` 原样透传 Domain `Tie.status`，`unresolved` 画半开弧，同既有约定。
  */
 export interface StaffTie {
   readonly relationId: RelationId;
@@ -181,8 +261,7 @@ export interface StaffTie {
 
 /**
  * tuplet 括号骨架——**只带 `label` 与 `status`，不带时值缩放**（M2 不按 `p`/`q`
- * 推算 effective duration，`q === 0` 语义 UNVERIFIED，见 `model/duration.ts`）。
- * `status: 'incomplete'` 时括号按已有成员范围画，缺失端不补，同既有约定。
+ * 推算 effective duration，`q === 0` UNVERIFIED）；`incomplete` 时缺失端不补。
  */
 export interface StaffTupletBracket {
   readonly relationId: RelationId;
@@ -190,11 +269,28 @@ export interface StaffTupletBracket {
   readonly status: 'complete' | 'incomplete';
 }
 
-/** 一个声部在 Staff 记谱下的完整布局产出骨架（T7.2+ 填充）。 */
+// 布局产出。
+/**
+ * 一个声部在 Staff 记谱下的完整布局产出（`layoutStaff.ts`）。与 `TabLayout` /
+ * `JianpuLayout` **互不继承、互不转换**（§2.7）。`diagnostics` 只含**本层新发**的：
+ * `durationUnresolved` / `durationUnrepresentable` 已由 `buildRenderScore` 在 event
+ * 级发出，本层只产可见占位，不重复报告（§4.2）。
+ */
 export interface StaffLayout {
   readonly voiceId: VoiceId;
-  readonly stave: StaffStaveSpec;
-  readonly events: readonly StaffEventNode[];
+  /** 本声部采用的谱号（`voice.clef` 缺席 / 不可识别时已降级成默认值并发过诊断）。 */
+  readonly clef: StaffClef;
+  readonly systems: readonly System[];
+  readonly measures: readonly MeasureSlice[];
+  readonly slots: readonly SpacedSlot[];
+  /** 每个 (system, measure) 一条，与 `measures` 同序。 */
+  readonly staves: readonly StaffStaveSpec[];
+  readonly nodes: readonly StaffEventNode[];
+  /** T7.3 填充；T7.2 恒为空数组。 */
   readonly ties: readonly StaffTie[];
+  /** T7.3 填充；T7.2 恒为空数组。 */
   readonly tuplets: readonly StaffTupletBracket[];
+  readonly width: number;
+  readonly height: number;
+  readonly diagnostics: readonly RenderDiagnostic[];
 }

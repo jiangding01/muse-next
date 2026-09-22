@@ -40,8 +40,19 @@ export const STAFF_METRICS = {
   headerReserve: {
     /** 谱号符号预留宽度。 */
     clefWidth: 28,
-    /** 调号每个升降号符号预留的宽度（乘以调号里实际的升降号个数）。 */
+    /** 调号每个升降号符号预留的宽度（乘以下面的 `keySignatureAccidentalReserve`）。 */
     keySignatureWidthPerAccidental: 8,
+    /**
+     * 画调号时按几个升降号**保守预留**（T7.2 追加，产品决定）。
+     *
+     * `KeySignature.alter` 是**主音自己的升降记号**（`Eb` → `-1`），**不是**调号里
+     * 升降号的个数——由主音推出个数需要一张「调 → 升降号数」的表，而 `K:` 的 mode
+     * 在 spec §8.7 是 `DOC-ONLY`（同一个主音在大小调下调号不同），本层没有依据去查
+     * 这张表。因此 notation 层**不计算实际个数**（那是 T7.4 的 adapter 交给渲染器
+     * 决定的事），只按西方记谱法的上限 7 个升降号预留水平空间：宁可行首多留一点
+     * 空白，也不让调号把排好的一行挤超宽。
+     */
+    keySignatureAccidentalReserve: 7,
     /** 拍号预留宽度（分子/分母两行数字合计）。 */
     timeSignatureWidth: 20,
   },
