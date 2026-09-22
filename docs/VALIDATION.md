@@ -54,8 +54,8 @@ tie、三连音、`Z` 休止、反复线、未知事件占位）。
 
 | 发现 | 根因 | 修复 |
 |---|---|---|
-| staff SVG 不随 zoom 缩放 | VexFlow `SVGContext.resize()` 写 inline `width`/`height` 覆盖样式表 | resize 后写 `viewBox`、清 inline 尺寸，zoom 宽度放外层 section（`6f5bc6d`） |
-| 同小节内 tie 视觉塌缩 | 端点解析正确，但实测符头间距仅 4.7px，弧跨不足以可辨 | `STAFF_METRICS.minNoteSlotWidth` 16 → 40（最宽 Bravura 符头 24 + 最小可辨弧跨 16），修复后 tie 跨度 36.7px（`6f5bc6d`） |
+| staff SVG 不随 zoom 缩放 | VexFlow `SVGContext.resize()` 写 inline `width`/`height` 覆盖样式表 | resize 后写 `viewBox`、清 inline 尺寸，zoom 宽度放外层 section（`93cc62a`） |
+| 同小节内 tie 视觉塌缩 | 端点解析正确，但实测符头间距仅 4.7px，弧跨不足以可辨 | `STAFF_METRICS.minNoteSlotWidth` 16 → 40（最宽 Bravura 符头 24 + 最小可辨弧跨 16），修复后 tie 跨度 36.7px（`93cc62a`） |
 
 **复验结果**：
 
@@ -104,12 +104,12 @@ Electron 窗口里人工检查简谱声部，逐轮修复后复验：
 
 | 发现 | 根因 | 修复 |
 |---|---|---|
-| 简谱随窗口宽度等比缩放 | SVG `width:100%` 拉伸 | `d34978b` 固定比例绘制、按容器宽度换行 |
-| 歌词全部堆在文末、`*` 占位画成星号矩阵 | 歌词基线全局、skip 也画字形 | `1cba425` 歌词按 system 归属，skip 不可见 |
-| tie/slur 画成顶部长横线、跨行关系反向拉回行首 | 弧高固定、不跨行切段 | `9f2f1cb` 弧高随跨度、跨行切段 |
-| 歌词首行被低八度点/减时线压住 | `lyricFirstOffset` 小于最深装饰 | `59b1082` 抬高并加几何不变量测试 |
-| 连到全音符/breve 的弧落在延音线中间 | 端点取槽位中心 | `60fb332` 端点取数字字形中心 |
-| 3 处 `2/1`（breve）只占宽不画延音线 | 时值分解上限 k ≥ 0 | `de23124` 单点放行 `2/1` → 7 条延音线，简谱槽宽随之加宽 |
+| 简谱随窗口宽度等比缩放 | SVG `width:100%` 拉伸 | `b2b254d` 固定比例绘制、按容器宽度换行 |
+| 歌词全部堆在文末、`*` 占位画成星号矩阵 | 歌词基线全局、skip 也画字形 | `5ae5a7b` 歌词按 system 归属，skip 不可见 |
+| tie/slur 画成顶部长横线、跨行关系反向拉回行首 | 弧高固定、不跨行切段 | `3539e5f` 弧高随跨度、跨行切段 |
+| 歌词首行被低八度点/减时线压住 | `lyricFirstOffset` 小于最深装饰 | `add5af9` 抬高并加几何不变量测试 |
+| 连到全音符/breve 的弧落在延音线中间 | 端点取槽位中心 | `b85f8a6` 端点取数字字形中心 |
+| 3 处 `2/1`（breve）只占宽不画延音线 | 时值分解上限 k ≥ 0 | `f77d3d2` 单点放行 `2/1` → 7 条延音线，简谱槽宽随之加宽 |
 
 复验结果：短弧只跨相邻音、跨行关系两端各一小段、歌词与装饰不再相交。breve 修复
 只读 smoke：`muse.render.duration.unrepresentable` 3 → 0，三处延音线严格在槽内且

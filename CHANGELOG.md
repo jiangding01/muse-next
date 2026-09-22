@@ -81,6 +81,8 @@ matrix（C1/C2/C3 三条契约对四种记谱的用例矩阵）、T9 文档封�
 
 ### Changed
 
+- 2026-09-22 用 `git filter-repo` 重写了全部提交历史并 force push：早期 `package-lock.json` 中的内部 npm 源 URL 改写为 `registry.npmjs.org`，匿名化之前的真实语料文件名改写为 `corpus#NN`；HEAD 的文件树与重写前逐字节一致，但所有 commit SHA 已变化（本文档与 HANDOFF 中的 SHA 已按映射表同步更新；重写前的历史保留在维护者本地的私有镜像备份中）。
+
 - 断行规划把「未闭合括号上下文之后恢复出的 barline token」也算作断行点，使 canonical
   输出第一趟即可达到不动点，缩小闭包矩阵需要迭代的场景面（M1.8）。
 - Fixture 名称在文档/测试/报告脚本之间统一改用 `/` 分隔，不再受运行平台路径分隔符
@@ -135,4 +137,4 @@ M1.8 实施记录为准；`README.md` 只维护使用入口与指标口径：
   GB18030 文件）。
 - 测试套件：47 个测试文件 / 3352 个用例全部通过；`npm run typecheck` 无错误。
 - CI：GitHub Actions 在 macOS / Windows / Ubuntu 三平台矩阵上 typecheck / test /
-  fixture 矩阵报告全部 success（run `35054230663`，commit `3f578fe`）。
+  fixture 矩阵报告全部 success（run `35054230663`，commit `3042659`）。

@@ -1777,7 +1777,7 @@ Round-trip compatibility（fixture 矩阵 + closure + CI 看板，见 §30.1「M
 ✅ M2
 Notation Rendering（T0–T9 已完成，已推送：Chord / Jianpu / TAB / Staff 四种记谱可渲染，
 T8 render matrix 契约测试（C1/C2/C3）与 T9 文档封板均已完成；
-T7 ✅ 2026-09-22 封板（CI run 35696163723）；M2 ✅ 2026-09-22 封板：2ce3e6b 推送后
+T7 ✅ 2026-09-22 封板（CI run 35696163723）；M2 ✅ 2026-09-22 封板：24d233c 推送后
 GitHub Actions run 35700198783 macOS/Ubuntu/Windows 三平台 typecheck / test / fixture-report 全绿；
 现状与债务总表见 §30.1「M2 进行中状态」）
 
@@ -1890,7 +1890,7 @@ npm run jcx:scan
   未解释的 syntax residual**：JCX_SPEC §19.2 / Appendix A U26 已经调查过它，
   结论是更像笔误而非跳房子记号，证据不足以实现任何语义，Lossless AST 按设计
   原样保留，不猜测语义，留给 M1.6 或后续更多证据出现时再处理。
-- Lexer `N/` 修复（`53d97d3`）：ABC 2.1 §4.3 的 `N/` 简写（等价 `N/2`）此前被
+- Lexer `N/` 修复（`9c812f1`）：ABC 2.1 §4.3 的 `N/` 简写（等价 `N/2`）此前被
   切成两个 duration token，`D3/` 这种写法因此不能被 note 完整吸收；修复后
   `DURATION_RE` 按 `N/N` → `N/` → `N` 的顺序尝试最长匹配，语料里唯一一处
   `D3/`（`corpus#08`）不再产生孤立 duration 叶子。
@@ -2269,12 +2269,12 @@ M1.8 T0–T4 全部完成（逐条证据见本小节末尾）并于 2026-09-16 �
 GitHub Actions run 35054230663 在 macOS/Windows/Ubuntu 三平台上 typecheck、
 `npm test`、`jcx:fixture-report` 三步全绿（首次 run 35054050143 的 Windows
 失败是 fixture 名路径分隔符问题，已在 `fixtureNames` 生产端归一化为 `/`，
-见 3f578fe）。**护栏定位**：本里程碑的产出是
+见 3042659）。**护栏定位**：本里程碑的产出是
 断言、fixture、CI 产物，`src/` 是**零行为变更**——唯一 approved 例外是 T1
 在 `canonical/body.ts` 加的一条谓词：`breaksLineAfter` 把
 `UnknownEvent(tokenKind: 'barline')` 也算作断行点。作用域仅限断行规划，不
 改变任何事件的语义分类；对 11 个真实语料文件，canonical 输出相对
-`8df1aa0`（M1.8 T0，本里程碑改动前的最后一个提交）逐字节不变——真实语料
+`2975c1e`（M1.8 T0，本里程碑改动前的最后一个提交）逐字节不变——真实语料
 从未触发这条断行规则的差异面（该规则只影响限制①命中的畸形输入）。
 
 **fixture 矩阵**（`tests/fixtures/jcx/**/*.jcx`，运行时 glob，实测
@@ -2390,7 +2390,7 @@ tests/unit/jcx/serialize` 各跑 3 次取中位数，均为 warm run）：本文
 **验收边界（重要）**：以上全部数字来自本地 `npm run typecheck && npx
 vitest run && npm run jcx:corpus-test && npm run jcx:fixture-report` 跑绿，
 **只证明 workflow 配置与脚本本身正确**；封板证据是 push 后的实际运行：
-GitHub Actions run 35054230663（commit 3f578fe）在 macOS/Windows/Ubuntu
+GitHub Actions run 35054230663（commit 3042659）在 macOS/Windows/Ubuntu
 三平台上 `npm run typecheck`、`npm test`、`jcx:fixture-report` 全部 success，
 见 §60 后勾选表最后一条。
 
@@ -2435,30 +2435,30 @@ UnknownEvent 恰一个可见节点；C2：fallback 节点至少一条诊断）�
 
 **T5.2 real-world hardening（人工 smoke corpus#10 后的四个 fix + E）**：
 
-- A `1cba425` 歌词：两趟布局（横向 system 打包 → 歌词三级归属
+- A `5ae5a7b` 歌词：两趟布局（横向 system 打包 → 歌词三级归属
   target / 行内最后对齐 / `bodyRange` / 兜底 → 每 system rows →
   `restackSystems`），`*` skip 不可见不推进 tailX，y 由所属 system 推导；
   该谱歌词节点 567 → 192，可见 skip 0。
-- B `9f2f1cb` 弧线：`jianpu/jianpuArcs.ts`，弧高
+- B `3539e5f` 弧线：`jianpu/jianpuArcs.ts`，弧高
   `clamp(arcHeight + |span| × arcHeightFactor, arcHeightMin, arcHeightMax)`，
   跨 system 的 tie/slur 切成 start/middle/end 段，每段 y 取所属 system 几何、
   弧高取本段跨度，各段共用同一 `anchor`、诊断只发一次；缺 system 几何直接抛错
   不兜底。该谱 104 relation → 107 段，3 条跨行。
-- C `59b1082` 歌词间距：`lyricFirstOffset` 18 → 30（推导：两个低八度点
+- C `add5af9` 歌词间距：`lyricFirstOffset` 18 → 30（推导：两个低八度点
   14.5u + 字号 12u + 余量）；`jianpu.clearance.test.ts` 守「歌词字顶严格低于
   同行所有减时线/附点/八度点」。
-- D `60fb332` 弧线端点：节点新增 `glyphWidth`（主字形 visual bbox span，非槽位宽），
+- D `b85f8a6` 弧线端点：节点新增 `glyphWidth`（主字形 visual bbox span，非槽位宽），
   tie/slur 端点改用字形中心，连到全音符/breve 的弧不再落在延音线中间；
   tuplet 括号与跨行续行端仍用槽位边界。
-- E `de23124` breve：`duration.ts` 单点放行 `2/1`（dots=0）→ 7 条延音线；
+- E `f77d3d2` breve：`duration.ts` 单点放行 `2/1`（dots=0）→ 7 条延音线；
   新 `jianpu/jianpuSlotWidths.ts` 让简谱槽宽 ≥ `requiredDashExtent + dashGap`
   （7 条 = 120u + 6u），在 `layoutSystems` 前重累计 slot.x/width/measure.width；
   共享 `spacing.ts` 与 `maxSlotWidth = 96` 未动，`3/2`/`7/4` 槽宽不变。corpus#10：
   `unrepresentable` 3 → 0，仅 3 个 breve 槽变宽，之前节点无漂移。
 
-**T6 TAB 六线谱（T6.1–T6.5 全部完成，✅ 2026-09-17 封板：8f58fcb 推送后 GitHub Actions run 35192708064 macOS/Ubuntu/Windows 三平台 typecheck / test / fixture-report 全绿）**：
+**T6 TAB 六线谱（T6.1–T6.5 全部完成，✅ 2026-09-17 封板：3d7c018 推送后 GitHub Actions run 35192708064 macOS/Ubuntu/Windows 三平台 typecheck / test / fixture-report 全绿）**：
 
-- T6.1 `7b99950` 地基：`src/notation/tab/{tabGlyphs,tabEventNodes,tabSlotWidths,layoutTab}.ts`
+- T6.1 `f9dc692` 地基：`src/notation/tab/{tabGlyphs,tabEventNodes,tabSlotWidths,layoutTab}.ts`
   + `TAB_METRICS`（`stringCount: 6` 是唯一格式事实，其余产品决定）。`RenderVoice →
   layoutTab → TabLayout`，与 jianpu **平行独立**（不共享节点类型、互不 import）。
   第 1 弦最上；多位品位一个 text；品位白底遮弦线；小节线只认 CONFIRMED 四形态；
@@ -2466,15 +2466,15 @@ UnknownEvent 恰一个可见节点；C2：fallback 节点至少一条诊断）�
   UnknownEvent 恰一可见节点；同弦重复成员全部照画 + fallback + warning
   （`tab.group-duplicate-string`）。实测：TAB 模式下大写字母是 UnknownEvent、
   混排 grace 不可达、`V[...]` 组级前缀不回填。
-- metrics 拆分 `eb26103`：`layout/metrics.ts` → `layout/metrics/` 目录，九个导出逐字
+- metrics 拆分 `beafacd`：`layout/metrics.ts` → `layout/metrics/` 目录，九个导出逐字
   相等，numeric-guard 排除改目录前缀，architecture 守卫按文件枚举多出 24 条通过用例。
-- T6.2 `ef5eb3a` 时值装饰：`tabDurationGlyphs.ts`，由 `decomposeDuration` 推导，画在
+- T6.2 `bb0ee51` 时值装饰：`tabDurationGlyphs.ts`，由 `decomposeDuration` 推导，画在
   第 6 弦下方（base ≤ 1/4 符干 + 减时线；1/2 短符干；≥ 1 延音短横线；附点），组时值用
   Domain 已算好的末音值不重算；unrepresentable 不画 + fallback（诊断由 buildRenderScore
   发，不重发）；`requiredDurationExtent`（含附点 + 留白）并入 TAB-local 槽宽；
   `layoutTab` 两趟布局，按 `requiredSystemDepth` 用 `restackSystems` 逐行补高
   （`systemHeight` 92 覆盖到十六分音符）。
-- T6.3 `44431ba` 关系与 stroke：`tabRelations.ts`（`-S-/-H-/-P-` **同弦**关系线，
+- T6.3 `6f8db32` 关系与 stroke：`tabRelations.ts`（`-S-/-H-/-P-` **同弦**关系线，
   跨弦由 parse 判 `jcx.parse.tab-relation.cross-string` 不建关系、渲染层不重报；端点
   按 `TabFretGlyph.memberIndex` 身份查找，不重放排序；`relationEndGap` 留白且 x1 ≤ x2；
   跨行 start/end 段同 anchor、label 只在 start）；`tabStrokes.ts`（`TabNote.stroke`
@@ -2484,13 +2484,13 @@ UnknownEvent 恰一个可见节点；C2：fallback 节点至少一条诊断）�
   （`TabNote.stroke`，parse 层已填充），不支持组级的方向记号（`TabGroupEvent.stroke`，
   parse 层从不填充，M1.8 已知限制②）——每 TAB 声部一条 info
   `tab.group-stroke-not-modeled`，措辞不得写成「扫弦方向不可用」。
-- T6.4 `7d711d8` SVG 与 renderer：`tab/toSvg.ts`（与 jianpu 同约定：每节点一个 `<g>`
+- T6.4 `bce5e7a` SVG 与 renderer：`tab/toSvg.ts`（与 jianpu 同约定：每节点一个 `<g>`
   带 `data-anchor-key`、fallback 角标、unknown 虚线框）；`renderer/components/notation/
   voiceRender.ts` 分派 tab；store `zoom`（clamp 到 `SCORE_VIEW_METRICS.zoomMin/Max`，
   非有限值拒绝）+ Toolbar 控件；**zoom 只作用渲染层像素换算**：画布宽 =
   `layout.width × cssPixelsPerUnitAtZoom1 × zoom`，`availableWidth = 容器像素 ÷
   (cssPixelsPerUnitAtZoom1 × zoom)`，layout 数值不变（D6），换行随之调整（D7）。
-- T6.5 `57670e2` hardening（人工复验真实语料后）：① jianpu 跨行 tie/slur 续行段最小
+- T6.5 `8727c51` hardening（人工复验真实语料后）：① jianpu 跨行 tie/slur 续行段最小
   可见跨度 `arcContinuationMinSpan`（末段曾退化成 4u 尖角）；② TAB 关系续行段同规则
   `relationContinuationMinSpan`；③ **和弦符号不再占时间槽**：`SlotWidthKind` 新增
   `'overlay'`（width 0，x 贴后续第一个有宽度列或段末；等距降级下仍 0；decoration
@@ -2500,19 +2500,19 @@ UnknownEvent 恰一个可见节点；C2：fallback 节点至少一条诊断）�
 - 测试：tab.layout 27 / tab.duration 23 / tab.relations 25+3 / tab.toSvg 12 /
   scoreView.voiceRender 7 / spacing.overlay 12 / chordSymbolDisplay 9；全量 4140。
 
-**T7 Staff + VexFlow（T7.0–T7.5 全部完成，✅ 2026-09-22 封板：05760d9 推送后 GitHub Actions run 35696163723 macOS/Ubuntu/Windows 三平台 typecheck / test / fixture-report 全绿）**：
+**T7 Staff + VexFlow（T7.0–T7.5 全部完成，✅ 2026-09-22 封板：3f00d35 推送后 GitHub Actions run 35696163723 macOS/Ubuntu/Windows 三平台 typecheck / test / fixture-report 全绿）**：
 
-- T7.0 `99f0f3d` 地基：引入 `vexflow@5.0.0`（精确版本），全仓 vexflow 守卫
+- T7.0 `f97b1cd` 地基：引入 `vexflow@5.0.0`（精确版本），全仓 vexflow 守卫
   （`tests/unit/notation/architecture.test.ts`）扫 `src/**`，唯一允许目录
   `src/renderer/integrations/vexflow/**`；守卫在该目录尚不存在时也必须通过
   （先立守卫、后写实现）。
-- T7.1 `63932fe` renderer-neutral 语义：`notation/staff/{staffPitch,staffDurations}.ts`
+- T7.1 `aa860f2` renderer-neutral 语义：`notation/staff/{staffPitch,staffDurations}.ts`
   等，`StaffPitch {letter, octave}` 用 scientific pitch notation 绝对八度号（中央
   C = octave 4），**大写字母 = 4、小写字母 = 5**（INFERRED / product decision，spec
   只钉死大小写的相对关系，没钉死绝对八度号）；语义时值 `'quarter'` 等由
   `decomposeDuration` 换算，`k ∈ [8,10]`（1/256 及更短）落 `beyondGlyphRange`（产品
   决定，范围收紧到 128th）；全程零 VexFlow 编码。
-- T7.2 `8c4b44b` `StaffLayout` 排布：`notation/staff/layoutStaff.ts`，纯数据、不碰
+- T7.2 `c9ff3f7` `StaffLayout` 排布：`notation/staff/layoutStaff.ts`，纯数据、不碰
   vexflow；`STAFF_METRICS`（`src/notation/layout/metrics/staff.ts`，除 `lineCount: 5`
   外每项都是产品决定）；clef 只读 `voice.clef ∈ {treble,bass,alto,tenor}`（INFERRED
   扩展，不是已确认 JCX 能力），缺席 → treble + `staff.clef-absent`（info），其它值 →
@@ -2522,13 +2522,13 @@ UnknownEvent 恰一个可见节点；C2：fallback 节点至少一条诊断）�
   time）预留并入行首 stave 宽度、参与换行判定，预留空间归行首 stave 自己（不整体右移，
   避免死区）；范围外事件（越界 pitch 等）可见占位 + `staff.event-out-of-scope`
   （warning）；同修复 `K:Eb` 被 scoreHeader 误判为 mode 的 bug。
-- T7.3 `3335037` 关系：tie 与 tuplet bracket 的 renderer-neutral 类型
+- T7.3 `8cbe6c0` 关系：tie 与 tuplet bracket 的 renderer-neutral 类型
   （`staffRelationTypes.ts`）与构造（`staffRelations.ts`）；不用 VexFlow `Tuplet`，
   自有 bracket 只画括号 + 数字（暂缓自动缩放裁决）；slur/lyrics 不画，voice 级发
   `staff.slur-not-modeled` / `staff.lyrics-not-modeled`（info）；grace 占位、逐 event
   发 `staff.grace-not-modeled`（info）；和弦成员里的休止占位 + `staff.chord-member-
   rest-not-modeled`（info）。9 条新诊断码（见下）在本轮与 T7.2 一起补齐。
-- T7.4 `5128855` VexFlow 5 真实渲染：`renderer/integrations/vexflow/renderStaff.ts`
+- T7.4 `49ac5f1` VexFlow 5 真实渲染：`renderer/integrations/vexflow/renderStaff.ts`
   为**全仓唯一允许 import vexflow 的目录**（不是单文件），入口固定 `vexflow/bravura`
   （内嵌 Bravura/Academico 字体，仓库不放字体文件，调用方需先
   `await document.fonts.ready`）；横向真源：`notation/**` 只管 measure/system 切分与
@@ -2540,7 +2540,7 @@ UnknownEvent 恰一个可见节点；C2：fallback 节点至少一条诊断）�
   `<g>` 才能回写 `data-anchor-key`）；draw 后经 `getSVGElement()`/`openGroup` 回写
   anchor 属性；React 外层 wrapper + VexFlow 内层 host，`renderGeneration` 触发高亮
   重扫，StrictMode 幂等；每 stave try/catch 退化。
-- T7.5 `6f5bc6d` 修复（Electron 人工 smoke 后）：① staff SVG 不随 zoom 缩放——根因
+- T7.5 `93cc62a` 修复（Electron 人工 smoke 后）：① staff SVG 不随 zoom 缩放——根因
   VexFlow `SVGContext.resize()` 写 inline `width`/`height` 覆盖样式表，修法 resize
   后写 `viewBox`、清 inline 尺寸、zoom 宽度放外层 section；② 同小节 tie 塌缩——端点
   解析正确，实测符头间距仅 4.7px，`STAFF_METRICS.minNoteSlotWidth` 16 → 40（最宽
@@ -2561,7 +2561,7 @@ UnknownEvent 恰一个可见节点；C2：fallback 节点至少一条诊断）�
   `grep -c artifactory package-lock.json` = 0；CI 三平台绿（run `35688854397`
   覆盖 T7.0–T7.4，run `35690835529` 覆盖 T7.5 修复）。
 
-**T8 render matrix（✅ 已完成：`4d2bcfe` 只加测试，不改 `src/**`）**：为 C1/C2/C3
+**T8 render matrix（✅ 已完成：`72f14eb` 只加测试，不改 `src/**`）**：为 C1/C2/C3
 三条契约在 Chord / Jianpu / TAB / Staff 四种记谱上补齐用例，新增
 `tests/unit/notation/render.matrix.test.ts`（317 行）+
 `tests/unit/notation/renderMatrix.helpers.ts`（237 行，机械操作与契约/覆盖表的
@@ -2604,14 +2604,14 @@ seal 流程与 M3 前的 UI 设计；把散落在 §30.1 第 5 条（T7 遗留�
 
 **已知观察 / 待裁决（非债务，决策与说明记录，恢复时先看）**：
 
-1. ~~duration capability（breve）~~ 已由 T5.2-E `de23124` 解决（见上）。
+1. ~~duration capability（breve）~~ 已由 T5.2-E `f77d3d2` 解决（见上）。
 2. 16 分音符最小槽宽 12u = 减时线长 12u，相邻减时线相连是正确写法，但紧跟小节线
    时显得拥挤（`12|`）；T4 间距设计，未动。
 3. `[V:1]` 段内 inline `L:` 同时进入两个声部的 `unitLengthChanges`：**非 bug**，
    parse 诊断 `jcx.parse.unit-length.body-scope` 已按 U06「从该行起生效直到
    被下一条 L: 覆盖」处理。
 
-**T8.1 `b2dbc17`（M2 seal 之后的测试补丁，只改 tests）**：按用户六条补充裁决收紧矩阵——chord 退出 voice matrix，改为独立 document chord matrix（C1/C2 标 N/A，无 fake voice adapter）；D12 style 缺席/未知按声部级 fallback summary 测（两码各恰一条 + voice anchor 可解析 + `summarizeEvents` 确定性）；C3 加 ownership（event 的 voiceId 一致；relation 必须在该 Voice 的 ties/slurs/tuplets/tabRelations/brokenRhythms 之一）与 `anchorKey` 稳定/单射断言；C2 只并 RenderScore + layout 诊断，C3 另并 `layoutScoreHeader` 诊断；C1 只数 `layout.nodes` 的 event anchor（TAB stroke overlay 不重复计数有正面用例）；无硬编码 fixture 数。矩阵 1434→1194 用例（去掉 chord 空转），全量 74 文件 / 5642 用例；只读审查通过。
+**T8.1 `a3fa0fd`（M2 seal 之后的测试补丁，只改 tests）**：按用户六条补充裁决收紧矩阵——chord 退出 voice matrix，改为独立 document chord matrix（C1/C2 标 N/A，无 fake voice adapter）；D12 style 缺席/未知按声部级 fallback summary 测（两码各恰一条 + voice anchor 可解析 + `summarizeEvents` 确定性）；C3 加 ownership（event 的 voiceId 一致；relation 必须在该 Voice 的 ties/slurs/tuplets/tabRelations/brokenRhythms 之一）与 `anchorKey` 稳定/单射断言；C2 只并 RenderScore + layout 诊断，C3 另并 `layoutScoreHeader` 诊断；C1 只数 `layout.nodes` 的 event anchor（TAB stroke overlay 不重复计数有正面用例）；无硬编码 fixture 数。矩阵 1434→1194 用例（去掉 chord 空转），全量 74 文件 / 5642 用例；只读审查通过。
 
 **M2 遗留债务总表（T9 整合，恢复 M3 前或做视觉 polish 时先查这里）**：下表合并了
 T5.2/T6/T7 各阶段散落记录的债务（原 §30.1 第 5 条「T9 需记入文档的债务」、T6 TAB
@@ -3790,7 +3790,7 @@ DoD 打勾只按最终实际结果给，不支持的条目不勾并写原因；�
   `grace-unclosed.jcx` 是自建测试样本，不是语料，允许出现）。
 - [x] **CI 三平台（macOS/Windows/Ubuntu，见 `.github/workflows/ci.yml`
   `strategy.matrix.os`）在 `npm run jcx:fixture-report` 步骤上实际跑绿** ——
-  2026-09-16 GitHub Actions run 35054230663（commit 3f578fe）三平台的
+  2026-09-16 GitHub Actions run 35054230663（commit 3042659）三平台的
   typecheck / `npm test` / fixture report 步骤均 success。首次 run
   35054050143 的 Windows `npm test` 失败为 fixture 名反斜杠分隔符问题，
   已在 `roundtrip.helpers.ts` 归一化后重跑通过。

@@ -92,7 +92,7 @@ The scaffold currently contains the implemented subset of this tree. Directories
 ## 5. Current vertical slice
 
 > **现状（M1.8 后）**：下面的流程图是 M0 阶段的最小验证 slice，`parseJcx()` /
-> `MuseScoreDocument` 已在 M1.6 封板时删除（`git log` 提交 `fc3fc9e`），不再存在于
+> `MuseScoreDocument` 已在 M1.6 封板时删除（`git log` 提交 `551b9b1`），不再存在于
 > 代码库中。实际管线是：
 >
 > ```text
