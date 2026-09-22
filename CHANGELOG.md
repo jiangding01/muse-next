@@ -15,10 +15,11 @@ evidence level 以 [`docs/JCX_SPEC.md`](docs/JCX_SPEC.md) 为准。
 
 ### Current milestone
 
-M1.8「Round-trip Guardrails」已封板。**M2 — Notation Rendering 进行中**：T0–T5
-（渲染模型、SVG 基础设施、Chord 图、Jianpu 排布/换行/SVG、React 视图）与 T5.2
-real-world hardening 已完成，下一步 T6 TAB → T7 Staff（VexFlow adapter）→ T8
-render matrix → T9 文档封板。现状与恢复位置见 `HANDOFF.md` §30.1「M2 进行中状态」。
+M1.8「Round-trip Guardrails」已封板。**M2 — Notation Rendering 进行中**：T0–T7
+（渲染模型、SVG 基础设施、Chord 图、Jianpu 排布/换行/SVG、React 视图、T5.2
+real-world hardening、TAB 六线谱、Staff + VexFlow adapter）已推送、**T7 待
+seal**；seal 后主动暂停，不自动启动 T8，恢复时从 T8 render matrix 开始 → T9
+文档封板。现状与恢复位置见 `HANDOFF.md` §30.1「M2 进行中状态」。
 
 ### Added
 
@@ -45,8 +46,14 @@ render matrix → T9 文档封板。现状与恢复位置见 `HANDOFF.md` §30.1
   槽宽随之加宽、未知事件保守占位 + 诊断）；
   吉他六线谱 TAB 布局（第 1 弦最上、品位白底遮弦线、时值装饰在第 6 弦下方、`-S-/-H-/-P-`
   同弦关系线、单音级扫弦记号、和弦符号作为零宽标注不占时间槽、未知与越界事件可见占位）；
-  Electron 渲染进程的 `ScoreView` / 渲染诊断面板 / 缩放控件（缩放只改像素换算与换行，
-  不缩放 SVG）。五线谱尚未渲染（T7）。
+  五线谱 `notation/staff/**` renderer-neutral 布局（`StaffPitch {letter, octave}`、
+  语义时值、Domain accidental，零 VexFlow 编码）+ `renderer/integrations/vexflow/**`
+  （全仓唯一允许 import vexflow 的目录，入口 `vexflow/bravura`，VexFlow 5 真实渲染
+  五线谱；clef 只读 `voice.clef ∈ {treble,bass,alto,tenor}`，缺席/未知回退 treble +
+  诊断；`M:` raw 不画拍号也不做 tick 校验；调号只在 canonical spelling 与 raw 一致
+  时画；不做 beam、不用 VexFlow `Tuplet`（自绘括号）、slur/lyrics 不画、grace 占位；
+  9 条新诊断码 `muse.render.staff.*`）；Electron 渲染进程的 `ScoreView` / 渲染诊断
+  面板 / 缩放控件（缩放只改像素换算与换行，不缩放 SVG）。
 - L2 语义投影 `projectScore` 及配套 round-trip 验证矩阵，用于比较「原始解析结果」与
   「canonical 输出重新解析后的结果」在语义层是否等价（M1.7）。
 - Round-trip 兼容性护栏（M1.8）：
@@ -72,12 +79,26 @@ render matrix → T9 文档封板。现状与恢复位置见 `HANDOFF.md` §30.1
 - 仓库内的语料引用一律匿名化为 `corpus#01`–`corpus#11` 编号或纯数字统计，真实文件名
   只保留在 git 忽略的本地映射表中；不改变任何 evidence level、统计数字、spec 结论或
   UNVERIFIED 判定（M1.7 收尾 hygiene）。
+- 五线谱曾经是 `pending` 分支的占位声部，现改为真实渲染；`scoreHeader` 的消费方
+  （调号解析等）现在也覆盖 staff 声部（M2 T7）。
+- `src/renderer/integrations/vexflow/renderStaff.ts` 成为全仓唯一允许 import
+  `vexflow` 的**目录**（此前 HANDOFF 曾误写「唯一文件」，本轮一并更正为「唯一目录」，
+  含 `vexTickables.ts` / `vexRelations.ts` / `vexAnchors.ts` / `vexEncoding.ts` 等
+  同目录下的多个模块）（M2 T7）。
 
 ### Fixed
 
 - Windows CI 上 fixture 名称因使用反斜杠路径分隔符而与测试内固定名称不匹配，统一改为
   `/` 分隔后三平台一致通过（M1.8）。
 - `N/` 时值词法误切分为多个 token 的问题，改为单一 token（M1.5）。
+- `K:Eb` 被 scoreHeader 误判为 mode（大小调）而非纯调号的问题（M2 T7.2）。
+- Staff 声部 SVG 不随 zoom 缩放：根因 VexFlow `SVGContext.resize()` 写 inline
+  `width`/`height` 覆盖样式表，改为 resize 后写 `viewBox`、清 inline 尺寸、zoom
+  宽度放到外层 section（M2 T7.5）。
+- 同小节内 tie 视觉塌缩：端点解析本身正确，实测符头间距仅 4.7px 不足以画出可辨的弧，
+  `STAFF_METRICS.minNoteSlotWidth` 由 16 调整为 40（M2 T7.5）。
+- 五线谱行首（谱号/调号/拍号）预留空间此前会在每行左侧留下死区、同时压掉行首小节的
+  音符区，改为预留空间归行首 stave 自己、非行首 stave 整体右移（M2 T7.2）。
 
 ### Compatibility / Known limitations
 

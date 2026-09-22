@@ -2,7 +2,7 @@
 
 > 面向后续实现 Agent 的项目交接文档  
 > 项目代号：`muse-next`  
-> 当前阶段：**M0–M1.8 已封板；M2 Notation Rendering 进行中（T0–T6 已完成：Chord / Jianpu / TAB 三种记谱可渲染，T7 Staff + VexFlow 未开始）**（详见 §30 里程碑表、§30.1「M2 进行中状态」、§69「当前明确的下一任务」）  
+> 当前阶段：**M0–M1.8 已封板；M2 Notation Rendering 进行中（T0–T7 已完成：Chord / Jianpu / TAB / Staff 四种记谱可渲染；T7 已推送待 seal，seal 后主动暂停，不自动启动 T8；恢复时从 T8 render matrix 开始）**（详见 §30 里程碑表、§30.1「M2 进行中状态」、§69「当前明确的下一任务」）  
 > 核心目标：以现代 TypeScript 技术栈重建已停止维护的 **Muse Pro 2.70** 的核心能力，并优先恢复其 `.jcx` 乐谱格式、谱面渲染、编辑与播放能力。
 
 ---
@@ -1775,8 +1775,9 @@ Round-trip compatibility（fixture 矩阵 + closure + CI 看板，见 §30.1「M
 三平台 typecheck / test / fixture report 全绿后封板）
 
 🟡 M2
-Notation Rendering（进行中：T0–T6 已推送，Chord / Jianpu / TAB 可渲染；T7 Staff +
-VexFlow → T8 render matrix → T9 文档封板未开始；现状与恢复位置见 §30.1「M2 进行中状态」）
+Notation Rendering（进行中：T0–T7 已推送，Chord / Jianpu / TAB / Staff 四种记谱可渲染；
+T7 待 seal，seal 后主动暂停 → T8 render matrix → T9 文档封板未开始；现状与恢复位置见
+§30.1「M2 进行中状态」）
 
 → M3
 Editor Core
@@ -2393,7 +2394,7 @@ GitHub Actions run 35054230663（commit 3f578fe）在 macOS/Windows/Ubuntu
 
 **M1.8 §60 DoD 逐条证据**：见 §60 后的勾选表。
 
-### M2 进行中状态（Notation Rendering，T0–T5.2 已提交，未封板）
+### M2 进行中状态（Notation Rendering，T0–T7 已提交，未封板）
 
 **恢复位置（2026-09-16，最后一次实跑：typecheck 绿、vitest 58 文件 3907 用例绿、`jcx:corpus-test` 与 `jcx:fixture-report` 未受 M2 影响）**：M2 方案 v1.1.1 已冻结（任务序 T0 模型+守卫 → T1
 `buildRenderScore` → T2 SVG 基础设施+度量 → T3 Chord → T4 排布/换行+Jianpu
@@ -2402,7 +2403,7 @@ T8 最终 render matrix（契约 C1/C2/C3）→ T9 文档封板）。T0–T5 已
 GitHub Actions run 35087178952 三平台全绿；随后按真实语料（corpus#10，一份
 两声部 TAB+简谱成品）人工 smoke 的发现做了 **T5.2 real-world hardening**
 （四个 fix 提交 + 一个 breve 时值能力提交，见下）；随后 **T6 TAB 六线谱 T6.1–T6.5 全部完成**（见下），
-**下一步是 T7 Staff + VexFlow adapter**。`src/renderer` 里只剩五线谱声部显示「五线谱渲染待 T7」占位。
+**下一步是 T7 Staff + VexFlow adapter**（历史记录：T7 已于 2026-09-22 完成并推送，见下方 T7 状态段）。`src/renderer` 里只剩五线谱声部显示「五线谱渲染待 T7」占位。
 
 **管线与边界**（已由测试守住）：`loadJcx → {Score, DomainIndex} → RenderInput
 → src/notation/model（纯函数、flat 投影，不加 Measure）→ src/notation/{chord,
@@ -2497,6 +2498,68 @@ UnknownEvent 恰一个可见节点；C2：fallback 节点至少一条诊断）�
 - 测试：tab.layout 27 / tab.duration 23 / tab.relations 25+3 / tab.toSvg 12 /
   scoreView.voiceRender 7 / spacing.overlay 12 / chordSymbolDisplay 9；全量 4140。
 
+**T7 Staff + VexFlow（T7.0–T7.5 全部完成，已推送、**待 seal**——seal commit 要等 push
+后三平台 CI 再次确认全绿才补 §30 的 ✅）**：
+
+- T7.0 `99f0f3d` 地基：引入 `vexflow@5.0.0`（精确版本），全仓 vexflow 守卫
+  （`tests/unit/notation/architecture.test.ts`）扫 `src/**`，唯一允许目录
+  `src/renderer/integrations/vexflow/**`；守卫在该目录尚不存在时也必须通过
+  （先立守卫、后写实现）。
+- T7.1 `63932fe` renderer-neutral 语义：`notation/staff/{staffPitch,staffDurations}.ts`
+  等，`StaffPitch {letter, octave}` 用 scientific pitch notation 绝对八度号（中央
+  C = octave 4），**大写字母 = 4、小写字母 = 5**（INFERRED / product decision，spec
+  只钉死大小写的相对关系，没钉死绝对八度号）；语义时值 `'quarter'` 等由
+  `decomposeDuration` 换算，`k ∈ [8,10]`（1/256 及更短）落 `beyondGlyphRange`（产品
+  决定，范围收紧到 128th）；全程零 VexFlow 编码。
+- T7.2 `8c4b44b` `StaffLayout` 排布：`notation/staff/layoutStaff.ts`，纯数据、不碰
+  vexflow；`STAFF_METRICS`（`src/notation/layout/metrics/staff.ts`，除 `lineCount: 5`
+  外每项都是产品决定）；clef 只读 `voice.clef ∈ {treble,bass,alto,tenor}`（INFERRED
+  扩展，不是已确认 JCX 能力），缺席 → treble + `staff.clef-absent`（info），其它值 →
+  treble + `staff.clef-unrecognized`（warning）；调号只在 canonical spelling 与 raw
+  一致时画（新 `layout/keySpelling.ts`），`keySignatureAccidentalReserve` 固定按 7
+  个升降号保守预留；`M:` raw 不画拍号、不做 tick 校验（SOFT voice）；行首（clef/key/
+  time）预留并入行首 stave 宽度、参与换行判定，预留空间归行首 stave 自己（不整体右移，
+  避免死区）；范围外事件（越界 pitch 等）可见占位 + `staff.event-out-of-scope`
+  （warning）；同修复 `K:Eb` 被 scoreHeader 误判为 mode 的 bug。
+- T7.3 `3335037` 关系：tie 与 tuplet bracket 的 renderer-neutral 类型
+  （`staffRelationTypes.ts`）与构造（`staffRelations.ts`）；不用 VexFlow `Tuplet`，
+  自有 bracket 只画括号 + 数字（暂缓自动缩放裁决）；slur/lyrics 不画，voice 级发
+  `staff.slur-not-modeled` / `staff.lyrics-not-modeled`（info）；grace 占位、逐 event
+  发 `staff.grace-not-modeled`（info）；和弦成员里的休止占位 + `staff.chord-member-
+  rest-not-modeled`（info）。9 条新诊断码（见下）在本轮与 T7.2 一起补齐。
+- T7.4 `5128855` VexFlow 5 真实渲染：`renderer/integrations/vexflow/renderStaff.ts`
+  为**全仓唯一允许 import vexflow 的目录**（不是单文件），入口固定 `vexflow/bravura`
+  （内嵌 Bravura/Academico 字体，仓库不放字体文件，调用方需先
+  `await document.fonts.ready`）；横向真源：`notation/**` 只管 measure/system 切分与
+  stave 目标宽，stave 内音符 x 全部交给 `Formatter().joinVoices([voice])
+  .formatToStave(...)`，任何 pre-layout 的 `slot.x` 不参与最终定位；placeholder 用
+  `TextNote`，chordSymbol 挂 `Annotation` 到下一 tickable、段末 zero-tick `TextNote`
+  （保持 T6.5 overlay 契约）；barline 节点不生成 tickable，begin/end 分表映射；逐
+  tickable 绘制而非 `voice.draw()`（`TextNote.draw()` 不 `openGroup`，需要手动包
+  `<g>` 才能回写 `data-anchor-key`）；draw 后经 `getSVGElement()`/`openGroup` 回写
+  anchor 属性；React 外层 wrapper + VexFlow 内层 host，`renderGeneration` 触发高亮
+  重扫，StrictMode 幂等；每 stave try/catch 退化。
+- T7.5 `6f5bc6d` 修复（Electron 人工 smoke 后）：① staff SVG 不随 zoom 缩放——根因
+  VexFlow `SVGContext.resize()` 写 inline `width`/`height` 覆盖样式表，修法 resize
+  后写 `viewBox`、清 inline 尺寸、zoom 宽度放外层 section；② 同小节 tie 塌缩——端点
+  解析正确，实测符头间距仅 4.7px，`STAFF_METRICS.minNoteSlotWidth` 16 → 40（最宽
+  Bravura 符头 24 + 最小可辨弧跨 16），修复后 tie 跨度 36.7px。
+- 诊断码新增 9 条（`src/notation/model/diagnostics.ts`）：`staff.clef-absent`(info)、
+  `staff.clef-unrecognized`(warning)、`staff.event-out-of-scope`(warning)、
+  `staff.octave-mixed`(warning)、`staff.duration-beyond-glyph-range`(warning)、
+  `staff.grace-not-modeled`(info，逐 event)、`staff.slur-not-modeled`(info)、
+  `staff.lyrics-not-modeled`(info)、`staff.chord-member-rest-not-modeled`(info)。
+- T7.5 smoke（人工，记录见 `docs/VALIDATION.md`）：Electron 桌面窗口，顺序
+  corpus#05（含唯一 staff 声部的真实语料）→ 6 个 `tests/fixtures/jcx/*` 中
+  `style=staff` 的 fixture → 一份合成 stress 样例（`K:Eb`、`M:3/4`、treble/bass/
+  未知 clef 三声部、五种升降号、和弦、同小节与跨小节 tie、三连音、`Z` 休止、反复线、
+  未知事件占位）。复验：50% 六小节一行缩进页宽，100%/150% 等比缩放、换行随 zoom
+  变化，tie/升降号/三连音/bass 加线/反复线/占位角标/`clef` 三态诊断均正确。
+- 数字：全量 vitest 73 文件 / 4448 用例；corpus smoke 11/11；vite renderer 打包
+  1.39 MB（`vexflow/bravura` 比全字体入口省约 400 kB）；
+  `grep -c artifactory package-lock.json` = 0；CI 三平台绿（run `35688854397`
+  覆盖 T7.0–T7.4，run `35690835529` 覆盖 T7.5 修复）。
+
 **已知观察 / 待裁决 / visual debt（恢复时先看）**：
 
 0. TAB visual debt：`x` 品位字形比数字矮，按 `fretBaselineRatio` 定位后略高于弦线
@@ -2518,14 +2581,21 @@ UnknownEvent 恰一个可见节点；C2：fallback 节点至少一条诊断）�
    `src/renderer/dist` 产物入库待清理；语料时值 `5/8` 2 处 unrepresentable；
    `syllableKind` 类型可收窄；350 行上限无自动守卫；歌词居中 polish。
 
-**T7 Staff + VexFlow 派发要点（方案 §T7，未变）**：`notation/staff/layoutStaff.ts`
-（纯数据，不碰 vexflow）+ `renderer/integrations/vexflow/renderStaff.ts`（全仓唯一
-import vexflow）+ `ScoreView` staff 分派 + `package.json`（`vexflow@5.0.0`）+
-`tests/unit/notation/staff.layout.test.ts`；必须真实渲染出五线谱；T0 的 vexflow 守卫
-仍绿；`M:` 为 raw 时不喂 VexFlow；clef 未解析回退 treble + 诊断；范围外事件可见占位
-+ 诊断；完成前本地 Electron 人工 smoke；`package-lock.json` 不计文件预算但
-`grep -c artifactory package-lock.json` 必须为 0。然后 T8 最终 render matrix（Opus）
-→ T9 文档封板。
+6. T7 追加的 visual debt（T9 前不处理，供 T8/T9 参考）：`STAFF_METRICS.lineGap` 8u
+   与 VexFlow 实际谱线距 10px 不一致（仅影响自绘 tuplet bracket / 热区偏移，不影响
+   VexFlow 自己画的谱线）；`keySignatureAccidentalReserve` 固定按 7 个升降号预留，
+   偏保守（多数调号用不到这么宽）；不做 beam（暂缓单独裁决）；slur/lyrics 未画（voice
+   级 info 占位）；行内不做两端对齐、密度校准（40u）待后续 engraving 轮次；极窄容器
+   （`availableWidth` < 行首预留）时单小节超宽未测；adapter 无自动化 DOM 测试（不引
+   jsdom 的理由：4400+ 用例全基于 Node 纯函数，不是「VexFlow 明示不兼容」）；`'256'`
+   时值码字形未核实。
+
+**T8 派发要点（M2 T7 之后、主动暂停，恢复时从这里继续）**：T8 是最终 render
+matrix（建议 Opus），补齐 C1/C2/C3 三条契约对 Chord / Jianpu / TAB / Staff **四种
+记谱（含 T7 新增的 Staff）**的用例——C1 每个事件恰好一个可见节点、C2 降级节点必带
+`fallback: true` 且至少一条诊断、C3 诊断 `anchor` 指向正确的事件/关系。完成后进
+T9 文档封板 → M2 seal（三平台 CI 全绿后由 seal commit 把 §30 的 M2 行、T7 行标
+✅）→ 提醒用户做 M3 前的 UI 设计（功能清单 + 设计要求）。
 
 **工作流约束**（M2 全程）：每轮改动 → typecheck / vitest / corpus → 只读
 `/check` 审查 → 修复复审 → 提交；里程碑 ✅ 只在 push 后三平台 CI 全绿后由
@@ -4023,17 +4093,17 @@ M1.3 / M1.4 / M1.5 / M1.6 / M1.7 / M1.8 已完成
 （§30.1 有文件结构、Domain 边界、归一化规则、evidence 策略、Serializer
 模块清单/canonical 规则摘要、语料四级回归结果、以及 M1.8 T0–T4 的 fixture
 矩阵/closure/CI 看板完整现状快照；§55–§60 DoD 已逐条打勾给证据，M1.8 于
-2026-09-16 经 GitHub Actions 三平台全绿封板）。**M2 已完成到 T6，TAB 六线谱已于
-2026-09-17 封板**（§30.1「M2 进行中状态」有 T0–T6 完整状态、T6 visual debt、
-待裁决事项与 T7 派发要点）。**当前项目在 T6 后主动暂停，不自动启动 T7。**
+2026-09-16 经 GitHub Actions 三平台全绿封板）。**M2 已完成到 T7，Staff + VexFlow
+已推送、待 seal**（§30.1「M2 进行中状态」有 T0–T7 完整状态、T7 visual debt、
+待裁决事项与 T8 派发要点）。**当前项目在 T7 后主动暂停，不自动启动 T8。**
 
 恢复时：
 
 ```text
-1. 先阅读 §30.1 的 T6 完整状态与 visual debt；
-2. 若决定继续 M2，再从 T7 Staff / VexFlow 的前置规划开始
-   （T7 Staff/VexFlow → T8 render matrix → T9 文档封板 → M2 seal）；
-3. 当前不要继续 T7。
+1. 先阅读 §30.1 的 T7 完整状态与 visual debt；
+2. 若决定继续 M2，再派 T8 render matrix（Opus）
+   （T8 render matrix → T9 文档封板 → M2 seal）；
+3. 当前不要继续 T8。
 ```
 
 **M2 入口要求**（§40/§41/§52）：从 `src/domain/` 的 `Score` 出发画谱面，

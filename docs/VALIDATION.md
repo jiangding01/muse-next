@@ -16,6 +16,37 @@
 > 重复维护。下面保留的是历史上第一条验证记录，作为项目验证方式演进的起点，不代表
 > 当前的验证覆盖范围。
 
+## 2026-09-22 — M2 五线谱（Staff + VexFlow）渲染：人工 smoke + 修复复验（Electron 桌面窗口）
+
+**人工 smoke 顺序**：corpus#05（含唯一 staff 声部的真实语料）→ 6 个
+`tests/fixtures/jcx/*` 中 `style=staff` 的 fixture → 一份合成 stress 样例
+（`K:Eb`、`M:3/4`、treble/bass/未知 clef 三声部、五种升降号、和弦、同小节与跨小节
+tie、三连音、`Z` 休止、反复线、未知事件占位）。
+
+**发现并修复的两项**：
+
+| 发现 | 根因 | 修复 |
+|---|---|---|
+| staff SVG 不随 zoom 缩放 | VexFlow `SVGContext.resize()` 写 inline `width`/`height` 覆盖样式表 | resize 后写 `viewBox`、清 inline 尺寸，zoom 宽度放外层 section（`6f5bc6d`） |
+| 同小节内 tie 视觉塌缩 | 端点解析正确，但实测符头间距仅 4.7px，弧跨不足以可辨 | `STAFF_METRICS.minNoteSlotWidth` 16 → 40（最宽 Bravura 符头 24 + 最小可辨弧跨 16），修复后 tie 跨度 36.7px（`6f5bc6d`） |
+
+**复验结果**：
+
+| 项 | 结果 |
+|---|---|
+| 50% 缩放 | 六小节一行缩进页宽 |
+| 100% / 150% 缩放 | 等比缩放，换行随 zoom 变化，SVG 未被整体拉伸 |
+| tie / 升降号 / 三连音 | 正确 |
+| bass 谱号加线 | 正确 |
+| 反复线 | 正确 |
+| 占位角标（未知事件 / 降级节点） | 正确 |
+| `clef` 三态诊断（正常 / 缺席 info / 未知 warning） | 正确 |
+
+每项修复都有自造 fixture 的单元测试守住（`tests/unit/notation/staff.layout.test.ts`
+等），真实语料仅用于人工复验，不进入测试。全量 vitest 73 文件 / 4448 用例；
+corpus smoke 11/11；`grep -c artifactory package-lock.json` = 0；CI 三平台绿
+（run `35688854397` 覆盖 T7.0–T7.4，run `35690835529` 覆盖 T7.5 修复）。
+
 ## 2026-09-17 — M2 TAB 六线谱渲染：全语料只读 smoke + 人工复验（Electron 桌面窗口）
 
 **只读 smoke**（脚本在会话 scratchpad，不入库）：11 个真实语料文件中的 8 个 TAB 声部与
