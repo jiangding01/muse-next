@@ -4196,7 +4196,8 @@ Chord / Jianpu / TAB / Staff 四种记谱可渲染（T0–T7，T7 Staff + VexFlo
    和弦图 → 六线谱 → 简谱 → 歌词，系统交错）；设计稿第一轮 8 张画面仍在用户侧进行；
 3. 代码侧下一步是 **M2.5 Score System Layout**（用户 2026-09-22 裁决插在 M3 前）：
    方案已冻结为 `docs/M2.5_SYSTEM_LAYOUT_PLAN.md` v1.0（派发要点见 §30.1）；
-   前置 formats preflight（`TabGroupEvent.stroke` 回填）已完成（2026-09-22）；**T0 启动需用户明确指令**；
+   前置 formats preflight（`TabGroupEvent.stroke` 回填）已完成（`a358760`）；
+   Jianpu Polish Phase A 已完成（`80edda1`），**当前主动暂停**；Phase B 与 **T0 启动均需用户明确指令**；
 4. M2.5 封板后再规划 M3A（source/save/history）→ M3B（selection + 三向同步）→ M3C（可视化编辑）。
 ```
 
