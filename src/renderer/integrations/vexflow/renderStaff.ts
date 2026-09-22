@@ -85,6 +85,46 @@ export interface StaffRenderHandle {
 
 const NOOP_HANDLE: StaffRenderHandle = { dispose: () => undefined };
 
+/**
+ * 把 VexFlow 写死的画布尺寸改回「跟着容器走」（T7.4 修正 P0）。
+ *
+ * 实测 `node_modules/vexflow/build/esm/src/svgcontext.js:133-141` 的 `resize()`：
+ * ```
+ * this.element.style.width = width.toString();   // host div
+ * this.svg.style.width  = width.toString();      // <svg> 的 **inline style**
+ * this.svg.style.height = height.toString();
+ * this.applyAttributes(this.svg, { width, height });  // 外加 width/height 属性
+ * this.scale(...)  →  setViewBox(0, 0, w, h)
+ * ```
+ * 浏览器实测结果是 `<svg style="width: 664px; height: 96px">`——**inline style 的优先级
+ * 高于样式表**，于是 `global.css` 里的 `.score-voice-staff svg { width: 100% }` 完全不
+ * 生效（`getComputedStyle(svg).width` 在 zoom 0.5 / 1 / 1.5 下恒为 `664px`）。后果就是
+ * 五线谱永远按 1:1 像素画：缩小时超出页面右缘，放大时音符不变大、只占页面一小块，
+ * 与 TAB / 简谱（React `SvgTree` + `width:100%` + viewBox）的 D6/D7 语义对不上。
+ *
+ * `viewBox` 本身是**在的**（实测 `"0 0 664 96"`），所以只要把写死的尺寸清掉、让
+ * `width:100%; height:auto` 生效，整张谱就会按外层 wrapper 的像素宽（= `layout.width ×
+ * cssPixelsPerUnitAtZoom1 × zoom`）等比缩放。这里仍显式写一遍 `viewBox`：它是本函数
+ * 成立的前提，不该依赖 VexFlow 内部某条分支恰好设过。
+ */
+function fitSvgToContainer(
+  host: HTMLDivElement,
+  svg: SVGSVGElement,
+  width: number,
+  height: number,
+): void {
+  svg.setAttribute('viewBox', `0 0 ${String(width)} ${String(height)}`);
+  svg.removeAttribute('width');
+  svg.removeAttribute('height');
+  svg.style.width = '100%';
+  svg.style.height = 'auto';
+  svg.style.display = 'block';
+  // host div 的 inline 尺寸同样是 `resize()` 写的（React 不给它写任何 style）：清掉，
+  // 让 CSS 的 `.staff-canvas { width: 100% }` 说了算。
+  host.style.removeProperty('width');
+  host.style.removeProperty('height');
+}
+
 /** 谱表在 system box 内的垂直位置：`STAFF_METRICS.staffTopOffset` 换算成 VexFlow 的「线数」。 */
 function staveOptions(): { readonly spaceAboveStaffLn: number } {
   return { spaceAboveStaffLn: STAFF_METRICS.staffTopOffset / VexFlow.STAVE_LINE_DISTANCE };
@@ -227,14 +267,15 @@ export function renderStaff(host: HTMLDivElement, layout: StaffLayout): StaffRen
   const width = Math.max(layout.width, 1);
   const height = Math.max(layout.height, 1);
   const renderer = new Renderer(host, Renderer.Backends.SVG);
-  // `resize` 实测会 `scale(1,1) → setViewBox(0, 0, w, h)`，所以 CSS 的
-  // `width:100%; height:auto` 能让整张谱按容器等比缩放（与简谱/TAB 的 `<svg>` 同语义）。
+  // `resize` 会建立 `viewBox`，但同时把 width/height 写成 inline style（优先级高于样式
+  // 表）——随后由 `fitSvgToContainer` 清掉，见该函数的实测记录。
   renderer.resize(width, height);
   const ctx = renderer.getContext();
   if (!(ctx instanceof SVGContext)) {
     console.warn('[staff] 渲染上下文不是 SVGContext，跳过五线谱绘制');
     return NOOP_HANDLE;
   }
+  fitSvgToContainer(host, ctx.svg, width, height);
 
   const grouped = groupNodesByMeasure(layout.nodes);
   const time = voiceTimeOf(layout);

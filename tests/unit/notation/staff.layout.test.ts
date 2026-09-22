@@ -473,7 +473,14 @@ describe('stave 规格与换行', () => {
    * 大块）。下面四条断言把新几何钉死。
    */
   describe('行首预留的几何（T7.4 修正）', () => {
-    const availableWidth = 260;
+    /**
+     * 取 600 而不是别处用的 260：`STAFF_METRICS.minNoteSlotWidth` 在 T7.4 按真实符头
+     * 重新标定成 40 之后，`CDEF |` 一小节就要 5 × 40 = 200u，再加一份行首预留 104u
+     * 就是 304u——**单个小节比整行还宽**时任何布局器都只能溢出，这里断言的
+     * 「右缘 ≤ availableWidth」对那种退化情形本来就不成立。600u 能放下两小节并仍然
+     * 换行（BODY 有 6 小节），既检验得到不变式，也检验得到换行本身。
+     */
+    const availableWidth = 600;
     const reserve = STAFF_METRICS.headerReserve;
     const RESERVE = reserve.clefWidth
       + reserve.keySignatureWidthPerAccidental * reserve.keySignatureAccidentalReserve

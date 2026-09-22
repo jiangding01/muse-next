@@ -18,7 +18,7 @@
  * `pitches.findIndex((entry) => entry.memberIndex === endpoint.memberIndex)`。
  */
 
-import { StaveTie, type SVGContext, type StaveNote } from 'vexflow/bravura';
+import { StaveTie, type SVGContext, type StaveNote, type TieNotes } from 'vexflow/bravura';
 
 import type { EventId } from '../../../domain';
 import { STAFF_METRICS } from '../../../notation/layout/metrics';
@@ -50,26 +50,38 @@ function keyIndexes(index: StaffRelationIndex, endpoint: StaffRelationEndpoint):
 }
 
 /**
- * 画一段 tie。`segment` 决定给 `StaveTie` 喂哪一端：
- * `whole` 两端都给；`start`（含 `status === 'unresolved'`——它本就只有一个 `start` 段）
- * 只给 `firstNote`；`end` 只给 `lastNote`。缺端的那一侧**不补**，交给 VexFlow 的
- * partial 行为画到行末 / 从行首起。
+ * 把一段 `StaffTie` 解析成 `StaveTie` 的构造参数。**导出是为了可单测**：端点落在哪个
+ * `StaveNote`、用哪个 keys 下标，是这一层唯一有判断的地方（几何交给 VexFlow），而它
+ * 不需要 DOM，node 下就能钉住（见 `tests/unit/renderer/vexTickables.test.ts`）。
+ *
+ * `segment` 决定给哪一端：`whole` 两端都给；`start`（含 `status === 'unresolved'`
+ * ——它本就只有一个 `start` 段）只给 `firstNote`；`end` 只给 `lastNote`。缺端的那一侧
+ * **不补**，交给 VexFlow 的 partial 行为画到行末 / 从行首起。两端都找不到音符时返回
+ * `undefined`（没有可画的东西）。
  */
-function drawTie(ctx: SVGContext, tie: StaffTie, index: StaffRelationIndex): void {
+export function resolveTieNotes(
+  tie: StaffTie,
+  index: StaffRelationIndex,
+): TieNotes | undefined {
   const fromEndpoint = tie.segment === 'end' ? undefined : tie.from;
   const toEndpoint = tie.segment === 'start' ? undefined : tie.to;
   const first = fromEndpoint === undefined ? undefined : index.staveNotes.get(fromEndpoint.eventId);
   const last = toEndpoint === undefined ? undefined : index.staveNotes.get(toEndpoint.eventId);
-  if (first === undefined && last === undefined) return;
-
-  const staveTie = new StaveTie({
+  if (first === undefined && last === undefined) return undefined;
+  return {
     ...(first === undefined || fromEndpoint === undefined
       ? {}
       : { firstNote: first, firstIndexes: keyIndexes(index, fromEndpoint) }),
     ...(last === undefined || toEndpoint === undefined
       ? {}
       : { lastNote: last, lastIndexes: keyIndexes(index, toEndpoint) }),
-  });
+  };
+}
+
+function drawTie(ctx: SVGContext, tie: StaffTie, index: StaffRelationIndex): void {
+  const notes = resolveTieNotes(tie, index);
+  if (notes === undefined) return;
+  const staveTie = new StaveTie(notes);
   staveTie.setContext(ctx).draw();
   // `StaveTie.renderTie()` 实测会 `openGroup('stavetie', id)`，所以这里拿得到 `<g>`。
   applyAnchorAttrs(staveTie.getSVGElement(), tie.anchor);

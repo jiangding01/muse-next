@@ -56,8 +56,24 @@ export const STAFF_METRICS = {
     /** 拍号预留宽度（分子/分母两行数字合计）。 */
     timeSignatureWidth: 20,
   },
-  /** 单个音符列（time-slot）的最小宽度下界；比 `SLOT_SPACING_METRICS.minSlotWidth` 略宽，给符头留出空间（产品决定）。 */
-  minNoteSlotWidth: 16,
+  /**
+   * 单个音符列（time-slot）的最小宽度下界（产品决定）。
+   *
+   * **T7.4 按渲染器实测重新标定：16 → 40。** 原值只是「比
+   * `SLOT_SPACING_METRICS.minSlotWidth`(12) 略宽」的估计，从未对着真实符头量过。接上
+   * 渲染器后在浏览器里量到的 Bravura 符头包围盒（含符干、含升降号修饰）是
+   * **12–24 CSS px**，而当时一个四分音符列只有 `SLOT_SPACING_METRICS.quarterWidth`
+   * = 24u，于是相邻两个符头之间只剩 ≈5u 的空隙——同一小节内的延音线被压成一个看不出
+   * 弧形的小点（跨小节的因为多了小节线的空档反而正常），密集处符头几乎相接。
+   *
+   * 标定方式：最宽的一个符头（带升降号，24）+ 一段「至少看得出是条弧」的跨度
+   * （复用本表已有的 `tieContinuationMinSpan` = 16）= **40**。
+   *
+   * 这是 Staff **自己**的下界，`staffSlotWidths.ts` 只加宽不缩窄，`SLOT_SPACING_METRICS`
+   * 的共享上下界一个字没动——简谱 / TAB 的列宽不受影响。副作用是同样一段音乐在五线谱
+   * 下比简谱占更多横向空间、换行更早，这是记谱形式本身的事实，不是缺陷。
+   */
+  minNoteSlotWidth: 40,
   /** 「越界 / 无法建模」占位文本的度量字号（产品决定）。 */
   placeholderFontSize: 10,
   /** 占位文本左右留白（产品决定）。 */

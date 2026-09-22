@@ -3,10 +3,13 @@
  *
  * **两层 DOM，所有权泾渭分明**：
  * - 外层 `section.score-voice.score-voice-staff` 是 **React 拥有**的——voice 级
- *   `data-anchor-key`、CSS 宽度（`layout.width × cssPixelsPerUnitAtZoom1 × zoom`，与
+ *   `data-anchor-key` 与 CSS 宽度（`layout.width × cssPixelsPerUnitAtZoom1 × zoom`，与
  *   jianpu / tab 完全相同的 zoom 语义）都在这一层；
- * - 内层 `div.staff-canvas` 是 **VexFlow 独占**的 host：`renderStaff` 会往里塞一个
- *   `<svg>`，并且 `Renderer.resize()` 会改这个 host 与 svg 的 inline width/height。
+ * - 内层 `div.staff-canvas` 是 **VexFlow 独占**的 host：`renderStaff` 往里塞 `<svg>`，
+ *   而 `Renderer.resize()` 实测会给**这个 host 和 svg 都写 inline width/height**
+ *   （`svgcontext.js:133-141`）。所以 zoom 宽度**必须写在外层**——写在 host 上会和
+ *   VexFlow 抢同一个 inline style，谁最后写谁赢。host 自己只有 CSS 的 `width:100%`，
+ *   adapter 画完会把 VexFlow 写的 inline 尺寸清掉（`fitSvgToContainer`）。
  *   React 永远不往这层塞 children，两边才不会打架。
  *
  * **本文件不 import vexflow**（`components/**` 有专门的守卫用例）：只 import adapter
@@ -66,10 +69,11 @@ export function StaffVoiceView({ render, zoom, onRendered }: StaffVoiceViewProps
   return (
     <section
       className="score-voice score-voice-staff"
+      style={{ width: widthPx }}
       data-voice-id={render.voiceId}
       data-anchor-key={anchorKey({ kind: 'voice', voiceId: render.voiceId })}
     >
-      <div className="staff-canvas" style={{ width: widthPx }} ref={hostRef} />
+      <div className="staff-canvas" ref={hostRef} />
     </section>
   );
 }

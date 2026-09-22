@@ -85,13 +85,15 @@ button { cursor: pointer; }
 .score-voice-tab .tab-canvas { max-width: 100%; }
 .score-voice-tab svg { width: 100%; height: auto; display: block; }
 /* 五线谱画布（VexFlow 画的 SVG，`renderer/integrations/vexflow/renderStaff.ts`）：
-   外层 `.score-voice-staff` 的宽度由 ScoreView / StaffVoiceView 按
-   layout.width × cssPixelsPerUnitAtZoom1 × zoom 写成内联 px，内层 `.staff-canvas` 是
-   VexFlow 独占的 host（它的 inline width/height 由 `Renderer.resize()` 改，这里不碰）。
-   `resize()` 实测会写 `viewBox`，所以 svg 用 width:100%/height:auto 等比缩放即可。
+   zoom 宽度写在**外层** `.score-voice-staff` 的内联 px 上（见 StaffVoiceView）；内层
+   `.staff-canvas` 是 VexFlow 独占的 host，只靠这里的 width:100%——`Renderer.resize()`
+   会往 host 与 svg 的 **inline style** 写死像素尺寸（svgcontext.js:133-141），那会盖过
+   样式表，所以 adapter 画完用 `fitSvgToContainer` 把它们清掉并显式写 viewBox；
+   svg 随后才吃得到下面这条 width:100%/height:auto，按容器等比缩放。
    VexFlow 的 `openGroup(cls)` 会给 class 加 `vf-` 前缀，故自绘组的选择器是 `.vf-staff-*`。
    根 <svg> 带 pointer-events:none，可点击性靠各元素自带的透明热区，不在这里放开。 */
-.score-voice-staff .staff-canvas { max-width: 100%; }
+.score-voice-staff { max-width: 100%; }
+.score-voice-staff .staff-canvas { width: 100%; }
 .score-voice-staff svg { width: 100%; height: auto; display: block; }
 .render-anchor-highlighted .vf-stavenote path,
 .render-anchor-highlighted .vf-stavenote text { fill: var(--accent); stroke: var(--accent); }

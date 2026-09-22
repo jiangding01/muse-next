@@ -12,13 +12,15 @@
  * 「和弦符号 = 普通四分 TextNote + ignoreTicks」会把后面每个音符顶右一个四分音符。
  */
 import { describe, expect, it } from 'vitest';
-import { StaveNote, TextNote } from 'vexflow/bravura';
+import { Formatter, Stave, StaveNote, StaveTie, TextNote, Voice, VoiceMode } from 'vexflow/bravura';
 
 import { loadJcx } from '../../../src/formats/jcx';
 import { createDeterministicTextMeasurer } from '../../../src/notation/layout/textMeasurer';
 import { buildRenderScore } from '../../../src/notation/model/buildRenderScore';
 import { layoutStaff } from '../../../src/notation/staff/layoutStaff';
 import type { StaffEventNode, StaffLayout } from '../../../src/notation/staff/staffTypes';
+import { STAFF_METRICS } from '../../../src/notation/layout/metrics';
+import { resolveTieNotes } from '../../../src/renderer/integrations/vexflow/vexRelations';
 import { buildMeasureTickables } from '../../../src/renderer/integrations/vexflow/vexTickables';
 
 const measurer = createDeterministicTextMeasurer();
@@ -109,5 +111,100 @@ describe('显式 accidental 双写：key string 带记号 + Accidental 修饰', 
     if (!(note instanceof StaveNote)) throw new Error('应当是 StaveNote');
     expect(note.getKeys()).toEqual(['c/4']);
     expect(note.getModifiersByType('Accidental')).toHaveLength(0);
+  });
+});
+
+/**
+ * T7.4 P1 回归 —— **同一小节内的 tie**。
+ *
+ * 现象：`"Bb"B2- B2 c2 |` 的延音线被画成一个看不出弧形的小点，而跨小节线的
+ * `g4 e2- | e2` 正常。浏览器实测定位到真正的原因**不在端点解析**——画出来的 path 是
+ * `M135.796 45 … 140.521 45`，恰好等于第一个音符的 `getTieRightX()` 与第二个音符的
+ * `getTieLeftX()`，端点一个都没错；错的是**两个符头之间只剩 ≈5px**：当时一个四分音符
+ * 列只有 24u，而 Bravura 符头（含符干/升降号）实测 12–24px 宽。修法是把
+ * `STAFF_METRICS.minNoteSlotWidth` 按实测重新标定（16 → 40，见该常量的 JSDoc）。
+ *
+ * 本组用例因此钉两件事：
+ * 1. 端点解析没有退化成「两端指向同一个 StaveNote」（那会让 `getFirstX()` 反而大于
+ *    `getLastX()` 附近，是最容易悄悄引入的 bug）；
+ * 2. 同一小节内相邻两个音符的跨度至少有 `tieContinuationMinSpan`——这正是本表为
+ *    「续行段最小可见跨度」定义的那个数，同一条「弧要看得出是弧」的判据。
+ */
+describe('同一小节内的 tie（T7.4 P1 回归）', () => {
+  function staveFor(layout: StaffLayout, built: ReturnType<typeof buildMeasureTickables>): Stave {
+    const spec = layout.staves[0];
+    if (spec === undefined) throw new Error('至少要有一条 stave');
+    // 与 `renderStaff.ts` 的 stave/voice 装配同构（那边还要 ctx，这里只需要排版）。
+    const stave = new Stave(spec.x, spec.y, Math.max(spec.width, 1));
+    if (spec.clef !== undefined) stave.addClef(spec.clef);
+    if (spec.timeSignature !== undefined) {
+      stave.addTimeSignature(`${String(spec.timeSignature.numerator)}/${String(spec.timeSignature.denominator)}`);
+    }
+    const voice = new Voice({ numBeats: 3, beatValue: 4 });
+    voice.setMode(VoiceMode.SOFT);
+    voice.addTickables([...built.tickables]);
+    voice.setStave(stave);
+    new Formatter().joinVoices([voice]).formatToStave([voice], stave);
+    return stave;
+  }
+
+  function prepareTie(body: string) {
+    const loaded = loadJcx(`%MUSE2\nX:1\nM:3/4\nL:1/8\nK:Eb\nV:1 style=staff clef=treble\n${body}\n`);
+    const rendered = buildRenderScore({ score: loaded.score, index: loaded.index });
+    const voice = rendered.voices[0];
+    if (voice === undefined) throw new Error('fixture 必须至少有一个声部');
+    const layout = layoutStaff(voice, {
+      score: loaded.score, index: loaded.index, measurer, availableWidth: 100000,
+    });
+    const built = buildMeasureTickables(measureNodes(layout, 0), layout.clef);
+    staveFor(layout, built);
+    const nodes = new Map(
+      layout.nodes.flatMap((node) => (node.anchor.kind === 'event' ? [[node.anchor.eventId, node] as const] : [])),
+    );
+    return { layout, built, index: { staveNotes: built.staveNotes, nodes } };
+  }
+
+  it('notation 层给出的两个端点是不同的事件（不是 from === to）', () => {
+    const { layout } = prepareTie('"Bb"B2- B2 c2 |');
+    const tie = layout.ties[0];
+    expect(tie?.segment).toBe('whole');
+    expect(tie?.from?.eventId).toBeDefined();
+    expect(tie?.to?.eventId).toBeDefined();
+    expect(tie?.from?.eventId).not.toBe(tie?.to?.eventId);
+  });
+
+  it('resolveTieNotes 解析出两个**不同的** StaveNote，且 firstX < lastX', () => {
+    const { layout, index } = prepareTie('"Bb"B2- B2 c2 |');
+    const tie = layout.ties[0];
+    if (tie === undefined) throw new Error('应当有一条 tie');
+    const notes = resolveTieNotes(tie, index);
+    if (notes === undefined) throw new Error('两端都该解析得出来');
+    expect(notes.firstNote).toBeDefined();
+    expect(notes.lastNote).toBeDefined();
+    expect(notes.firstNote).not.toBe(notes.lastNote);
+    const staveTie = new StaveTie(notes);
+    expect(staveTie.isPartial()).toBe(false);
+    expect(staveTie.getFirstX()).toBeLessThan(staveTie.getLastX());
+  });
+
+  it('两个符头的横向间距至少有 tieContinuationMinSpan（弧要看得出是弧）', () => {
+    const { layout, index } = prepareTie('"Bb"B2- B2 c2 |');
+    const tie = layout.ties[0];
+    if (tie === undefined || tie.from === undefined || tie.to === undefined) {
+      throw new Error('应当有一条两端齐全的 tie');
+    }
+    const first = index.staveNotes.get(tie.from.eventId);
+    const last = index.staveNotes.get(tie.to.eventId);
+    if (first === undefined || last === undefined) throw new Error('两端都该有 StaveNote');
+    expect(last.getAbsoluteX() - first.getAbsoluteX())
+      .toBeGreaterThanOrEqual(STAFF_METRICS.tieContinuationMinSpan);
+  });
+
+  it('和弦符号挂在第一个音符上，不影响端点解析（宿主与 tie 起点是同一个 StaveNote）', () => {
+    const { layout, built, index } = prepareTie('"Bb"B2- B2 c2 |');
+    const tie = layout.ties[0];
+    if (tie?.from === undefined) throw new Error('应当有 from 端');
+    expect(built.annotations).toHaveLength(1);
+    expect(index.staveNotes.get(tie.from.eventId)).toBe(built.tickables[0]);
   });
 });
