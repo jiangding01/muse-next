@@ -530,7 +530,7 @@ describe('M2.5 架构守卫 —— system/ 依赖方向（§B.2 / §Q7.4）', ()
     expect(systemImportViolations(probeFile, "import { justify } from '../system/justify';")).toEqual([
       '../system/justify',
     ]);
-    expect(systemImportViolations(probeFile, "import type { SystemLayout } from '../system/contracts';")).toEqual([]);
+    expect(systemImportViolations(probeFile, "import type { ScoreSystemLayout } from '../system/contracts';")).toEqual([]);
     expect(systemImportViolations(probeFile, "import { SYSTEM_METRICS } from '../layout/metrics/system';")).toEqual([]);
     expect(systemImportViolations(probeFile, "/* import { c } from '../system/composeSystem'; */")).toEqual([]);
     expect(systemImportViolations(probeFile, "// import { c } from '../system/composeSystem';")).toEqual([]);

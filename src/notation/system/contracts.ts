@@ -128,10 +128,11 @@ export interface ChordDiagramOverlay {
 export type JustifyState = 'full' | 'partial' | 'none';
 
 /**
- * 一个复合 system：overlay 层 + 有序 voice 层 + measure 公共几何。与 `layout/systems.ts`
- * 的 `SystemLayout`（单声部换行结果 `{ systems, placements }`）**同名不同义**。
+ * 一个跨声部的成品谱 system：overlay 层 + 有序 voice 层 + measure 公共几何。方案 §B.3 原名
+ * `SystemLayout`，因与 `layout/systems.ts` 的 `SystemLayout`（单声部换行结果）同名不同义，
+ * 2026-10-04 用户裁决改名为 `ScoreSystemLayout`（后者不动）。
  */
-export interface SystemLayout {
+export interface ScoreSystemLayout {
   readonly index: number;
   readonly box: Box;
   readonly groupIndex: number;
@@ -147,12 +148,12 @@ export type PackingPolicy =
   | { readonly kind: 'page'; readonly contentWidth: number; readonly barsPerStaff?: number };
 
 /**
- * compose 的产物包装（§Q6.4）。`SystemLayout` 自身**不带** target——版式目标是这一次
+ * compose 的产物包装（§Q6.4）。`ScoreSystemLayout` 自身**不带** target——版式目标是这一次
  * compose 的属性，不是每个 system 的属性。
  */
 export interface ComposedSystemLayout {
   readonly target: LayoutTarget;
-  readonly systems: readonly SystemLayout[];
+  readonly systems: readonly ScoreSystemLayout[];
 }
 
 /** `pageModel()` 唯一接受的入参类型：screen 产物在编译期就传不进去（§Q6.4）。 */

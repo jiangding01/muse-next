@@ -17,7 +17,10 @@ import type {
   MeasureParticipation,
   PageComposedSystemLayout,
   PageSpec,
+  ScoreSystemLayout,
 } from '../../../src/notation/system/contracts';
+// @ts-expect-error 2026-10-04 改名裁决：contracts 不再导出 `SystemLayout`（与 layout/systems.ts 同名不同义）
+import type { SystemLayout } from '../../../src/notation/system/contracts';
 
 const v1 = voiceId(1);
 
@@ -74,6 +77,23 @@ describe('M2.5 T0 —— MeasureParticipation 是真正的判别联合', () => {
     // @ts-expect-error absent 不得携带 localMeasureIndex
     const absentWithIndex: MeasureParticipation = { voiceId: v1, kind: 'absent', localMeasureIndex: 1 };
     expect([present, incompatible, absent, presentWithoutIndex, absentWithIndex]).toHaveLength(5);
+  });
+});
+
+describe('M2.5 T0 —— ScoreSystemLayout 命名裁决（2026-10-04）', () => {
+  it('ComposedSystemLayout.systems 的元素类型就是 ScoreSystemLayout', () => {
+    const system: ScoreSystemLayout = {
+      index: 0,
+      box: { origin: { x: 0, y: 0 }, width: 0, height: 0 },
+      groupIndex: 0,
+      measures: [],
+      layers: [],
+      chordOverlays: [],
+      justified: 'none',
+    };
+    const composed: ComposedSystemLayout = { target: 'screen', systems: [system] };
+    const roundTrip: ScoreSystemLayout | undefined = composed.systems[0];
+    expect(roundTrip).toBe(system);
   });
 });
 
