@@ -20,7 +20,7 @@ M1.8「Round-trip Guardrails」已封板。**M2 — Notation Rendering T0–T9 �
 T5.2 real-world hardening、TAB 六线谱、Staff + VexFlow adapter、T8 render
 matrix（C1/C2/C3 三条契约对四种记谱的用例矩阵）、T9 文档封板均已完成，**M2 已于 2026-09-22 封板**（seal 前 push 的 CI run
 35700198783 三平台全绿）。M3 之前插入 **M2.5 Score System Layout**（方案冻结 v1.0），
-T0 已于 2026-10-04 完成，T1 待启动。四种记谱（Chord / Jianpu
+T0、T1（声部视觉分组）已于 2026-10-04 完成，T2 待启动。四种记谱（Chord / Jianpu
 / TAB / Staff）均可渲染，支持缩放与诊断面板。现状、遗留债务与恢复位置见
 `HANDOFF.md` §30.1「M2 进行中状态」。
 
@@ -81,6 +81,8 @@ T0 已于 2026-10-04 完成，T1 待启动。四种记谱（Chord / Jianpu
     `npm test` 之后新增 fixture 矩阵报告步骤。
 
 ### Changed
+
+- M2.5 Score System Layout T1（2026-10-04，`2b9882c`）：新增 `src/notation/system/groupVoices.ts`，把声部按 `bracket=N` 分成 system group（越界截断、`brace` / `staves` 暂不绘制、无分组证据的声部各自成组），并新增 info 码 `muse.render.system.group-declaration-ignored`（码表共 49 条）。尚未接入渲染管线，渲染结果无变化。
 
 - M2.5 Score System Layout T0（2026-10-04，`6e5a532`，命名修订 `3f5b48c`）：新增 `src/notation/system/contracts.ts`（System / Page 纯类型契约，叶子层；跨声部成品谱 system 类型命名为 `ScoreSystemLayout`，与单声部换行结果 `SystemLayout` 区分）、`SYSTEM_METRICS`（system 间距、两端对齐上限、默认页面规格，均为产品初值）、9 条 system / chord 渲染诊断码（只定义、尚未发放）与 M2.5 依赖方向守卫。渲染结果无任何变化；T1 起才开始产出 system 级布局。
 
