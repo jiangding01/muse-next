@@ -24,7 +24,7 @@ import type { SystemLayout } from '../../../src/notation/system/contracts';
 
 const v1 = voiceId(1);
 
-describe('M2.5 T0 —— 9 条新诊断码（只追加、不发放）', () => {
+describe('M2.5 T0 —— T0 追加的 9 条诊断码（码值钉死；发放见各 T 任务）', () => {
   const EXPECTED = {
     systemGroupSpanOverflow: 'muse.render.system.group-span-overflow',
     systemConnectorNotModeled: 'muse.render.system.connector-not-modeled',

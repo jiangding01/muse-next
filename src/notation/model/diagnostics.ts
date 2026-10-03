@@ -157,13 +157,17 @@ export const RENDER_DIAGNOSTIC_CODES = {
   staffChordMemberRestNotModeled: 'muse.render.staff.chord-member-rest-not-modeled',
   /**
    * M2.5 T0 追加（`docs/M2.5_SYSTEM_LAYOUT_PLAN.md` v1.0 §C：Q1.5×2、Q2.5×3、Q5.4×3、
-   * Q6.6×1，共 9 条）。**T0 只定义事实名称，不发放、不建 builder**：按冻结方案在
-   * T1/T2/T6/T9a 落地时发放，下面注释记的是冻结方案已定的 level / anchor（均为
+   * Q6.6×1，共 9 条）。T0 只定义事实名称、不建 builder，按冻结方案在 T1/T2/T6/T9a
+   * 落地时发放（T1 起 `systemGroupSpanOverflow` / `systemConnectorNotModeled` 由
+   * `system/groupVoices.ts` 发放）；下面注释记的是冻结方案已定的 level / anchor（均为
    * info / warning，只用现有四种 Anchor 分支，纠偏④）。
    */
   /** `bracket=N` 的 N 超过剩余声部数，已截断到实际声部数（§Q1.5，预期 warning，voice anchor）。 */
   systemGroupSpanOverflow: 'muse.render.system.group-span-overflow',
-  /** 声部声明了 `brace` / `staves`，本版不渲染该连接形态，按单声部系统呈现（§Q1.5，预期 info，voice anchor）。 */
+  /**
+   * 声部声明了 `brace` / `staves`，本版不渲染该连接形态，该声明不参与分组（§Q1.5，info，voice anchor）。
+   * 声明声部自身按单声部系统呈现；被前一 `bracket` group 覆盖的声部同样发本条（它仍留在该 group 内）。
+   */
   systemConnectorNotModeled: 'muse.render.system.connector-not-modeled',
   /** group 内各声部 measure 数不等，已前缀对齐并对缺失层留空保宽（§Q2.5，预期 warning，每个相关声部各一条 voice anchor）。 */
   systemMeasureCountMismatch: 'muse.render.system.measure-count-mismatch',
@@ -179,6 +183,14 @@ export const RENDER_DIAGNOSTIC_CODES = {
   chordDiagramCollision: 'muse.render.chord.diagram-collision',
   /** 单个 system 高于页面内容框：独占一页、不拆、不缩放（§Q6.6，预期 warning，该 system 首层的 voice anchor）。 */
   systemPageOverflow: 'muse.render.system.page-overflow',
+  /**
+   * M2.5 T1 追加（用户 2026-10-04 批准的 post-freeze amendment，`system/groupVoices.ts`
+   * 发放，info，该声部的 voice anchor）：某条 `bracket` 声明**在本版 grouping 中没有
+   * 产生作用**——N 不是安全整数（防御：手工构造的 Voice，如 1.5 / NaN / Infinity）或
+   * N ≤ 0 时无法形成有效 group，或声明所在声部已被前一条 `bracket` 覆盖（为避免重叠分组）。只描述本版的处理，**不断言该写法在 JCX 格式上非法**（spec 只说
+   * 「整数 N」，未给合法范围）。`brace` / `staves` 一律走 `systemConnectorNotModeled`。
+   */
+  systemGroupDeclarationIgnored: 'muse.render.system.group-declaration-ignored',
 } as const satisfies Record<string, RenderDiagnosticCode>;
 
 /** 纯构造：给定 draft 与序号，得到最终诊断。`ordinal` 只参与 id，不参与语义。 */
