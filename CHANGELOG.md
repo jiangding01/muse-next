@@ -19,7 +19,8 @@ M1.8「Round-trip Guardrails」已封板。**M2 — Notation Rendering T0–T9 �
 完成**：渲染模型、SVG 基础设施、Chord 图、Jianpu 排布/换行/SVG、React 视图、
 T5.2 real-world hardening、TAB 六线谱、Staff + VexFlow adapter、T8 render
 matrix（C1/C2/C3 三条契约对四种记谱的用例矩阵）、T9 文档封板均已完成，**M2 已于 2026-09-22 封板**（seal 前 push 的 CI run
-35700198783 三平台全绿）；下一步是 M3 前的 UI 设计（功能清单 + 设计要求）。四种记谱（Chord / Jianpu
+35700198783 三平台全绿）。M3 之前插入 **M2.5 Score System Layout**（方案冻结 v1.0），
+T0 已于 2026-10-04 完成，T1 待启动。四种记谱（Chord / Jianpu
 / TAB / Staff）均可渲染，支持缩放与诊断面板。现状、遗留债务与恢复位置见
 `HANDOFF.md` §30.1「M2 进行中状态」。
 
@@ -80,6 +81,8 @@ matrix（C1/C2/C3 三条契约对四种记谱的用例矩阵）、T9 文档封�
     `npm test` 之后新增 fixture 矩阵报告步骤。
 
 ### Changed
+
+- M2.5 Score System Layout T0（2026-10-04，`6e5a532`，命名修订 `3f5b48c`）：新增 `src/notation/system/contracts.ts`（System / Page 纯类型契约，叶子层；跨声部成品谱 system 类型命名为 `ScoreSystemLayout`，与单声部换行结果 `SystemLayout` 区分）、`SYSTEM_METRICS`（system 间距、两端对齐上限、默认页面规格，均为产品初值）、9 条 system / chord 渲染诊断码（只定义、尚未发放）与 M2.5 依赖方向守卫。渲染结果无任何变化；T1 起才开始产出 system 级布局。
 
 - Jianpu Engraving Polish Phase A（2026-09-22，`80edda1`）：附点紧贴数字并居中；延音线升至数字中线、与数字等距；高/低八度点贴近数字，低八度点固定位于减时线之下（层序 数字→减时线→低八度点→歌词，由 `JIANPU_METRICS` 保证）；小节线与反复记号高度≈1.1×数字高、反复点围绕中线对称、粗线减重；`systemHeight`/`systemGap` 收紧。附点/延音线按简谱惯例换算（整拍用延音线，附点只表示半拍余数：附点二分 → `6 – –`）。含简谱声部的文档页眉改为 `1=<调>` + 上下叠排拍号（`K:` 含 mode/未解析时回退 `K: <raw>`，staff-only 文档不变；Source/Inspector 保留原始 `K:`/`M:`）；简谱声部行首不再重复画调号/拍号（原 P1-2 改为「声部行首不显示调号拍号，由页眉承担」）。未改共享列宽、减时线分组与系统排版（留 Phase B / M2.5 T3.5）。
 

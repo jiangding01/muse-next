@@ -2,7 +2,7 @@
 
 > 面向后续实现 Agent 的项目交接文档  
 > 项目代号：`muse-next`  
-> 当前阶段：**M0–M1.8 已封板；M2 Notation Rendering T0–T9 已全部完成（Chord / Jianpu / TAB / Staff 四种记谱可渲染 + T8 render matrix 契约测试 + T9 文档封板），✅ 2026-09-22 封板（原始 seal CI run 35700198783；T8.1 post-seal 契约收紧 run 35702615344；当前 HEAD run 35702885112 三平台全绿）；下一步是 M3 前的 UI 设计（功能清单 + 设计要求）**（详见 §30 里程碑表、§30.1「M2 进行中状态」、§69「当前明确的下一任务」）  
+> 当前阶段：**M0–M1.8 已封板；M2 Notation Rendering T0–T9 已全部完成（Chord / Jianpu / TAB / Staff 四种记谱可渲染 + T8 render matrix 契约测试 + T9 文档封板），✅ 2026-09-22 封板（原始 seal CI run 35700198783；T8.1 post-seal 契约收紧 run 35702615344；当前 HEAD run 35702885112 三平台全绿）；UI 设计 Brief 已完成（`docs/UI_DESIGN_BRIEF.md` v1.3.2）；M2.5 Score System Layout 方案冻结为 v1.0，**T0 已完成（2026-10-04，`6e5a532` + 命名修订 `3f5b48c`，三平台 CI 全绿），T1 待用户明确指令**；M3 排在 M2.5 之后**（详见 §30 里程碑表、§30.1「M2 进行中状态」与「M2.5 T0 实际状态」、§69「当前明确的下一任务」）  
 > 核心目标：以现代 TypeScript 技术栈重建已停止维护的 **Muse Pro 2.70** 的核心能力，并优先恢复其 `.jcx` 乐谱格式、谱面渲染、编辑与播放能力。
 
 ---
@@ -1785,7 +1785,8 @@ GitHub Actions run 35700198783 macOS/Ubuntu/Windows 三平台 typecheck / test /
 Score System Layout（乐谱系统版式：跨声部按小节对齐的统一 spacing、`bracket=N` 视觉分组成系统、
 和弦图作为 system overlay（开启 D11 和弦名→`%%gchord`，同名 >1 不猜只画名 + 诊断）、TAB beam grouping、
 两端对齐、歌词随简谱行、按系统分页；目标版式与架构边界见 `docs/UI_DESIGN_BRIEF.md` §2.7 / §10.16–10.18；
-2026-09-22 用户裁决插在 M3 之前，方案未起草）
+2026-09-22 用户裁决插在 M3 之前；方案已冻结为 `docs/M2.5_SYSTEM_LAYOUT_PLAN.md` v1.0；
+T0 ✅ 2026-10-04（`6e5a532`，CI run 37137587990 三平台全绿；命名修订 `3f5b48c`），T1 待用户指令）
 
 → M3
 Editor Core
@@ -2659,14 +2660,24 @@ visual debt、T7 第 6 条），按 视觉 / 架构 / 测试 分类，每行注�
 | 测试 | `spacing.ts` 里 `chordSymbol` 的两处判定点（`itemSlotWidth` 的 overlay 判定先行截断，`timedDurationOf` 穷尽性 `switch` 里再列一遍 `timed: false`）靠代码注释纪律保持一致，缺自动化的防分叉单测（两处改动不同步时不会有测试报警） | T6 |
 | 测试 | VexFlow adapter（`renderer/integrations/vexflow/**`）无自动化 DOM 测试，人工 smoke 覆盖；不引入 jsdom 的理由是 5642 个用例（T8.1 后）全基于 Node 纯函数，不是「VexFlow 明示不兼容 jsdom」 | T7 |
 
-**Jianpu Engraving Polish Phase A（2026-09-22，`80edda1`，独立于 M2.5 的字形/间距任务，用户 Electron 100% 实机复验通过）**：`jianpuGlyphs.ts` 机械拆出 `jianpuGlyphBuilders.ts`；附点/延音线/八度点/小节线/反复记号几何与 `JIANPU_METRICS` 重标定；`jianpuDashDotPlan` 按简谱惯例换算附点与延音线（`jianpuSlotWidths` 同源消费，只加宽契约保持）；文档页眉 `1=<调>` + 叠排拍号（`layoutScoreHeader.jianpuTonicLabel/jianpuMeterFraction`，仅含简谱声部时）；`buildHeaderLabels` 恒空（声部行首不再画 `K:/M:`，P1-2 改写为「声部行首不显示调号拍号，由页眉承担」）。**Phase B（减时线粗细/垂直间距/组内列宽字形层）未做**，与 beam 分组一并归 M2.5 T3.5。P2 debt：`labelFontSize`/`headerLabelGap` 成死常量、`labels` 渲染路径保留；`jianpuSections.ts` 336 行接近上限。**当前状态：Phase A 提交后主动暂停；不进 Phase B，不启动 M2.5 T0，需用户明确指令。**
+**Jianpu Engraving Polish Phase A（2026-09-22，`80edda1`，独立于 M2.5 的字形/间距任务，用户 Electron 100% 实机复验通过）**：`jianpuGlyphs.ts` 机械拆出 `jianpuGlyphBuilders.ts`；附点/延音线/八度点/小节线/反复记号几何与 `JIANPU_METRICS` 重标定；`jianpuDashDotPlan` 按简谱惯例换算附点与延音线（`jianpuSlotWidths` 同源消费，只加宽契约保持）；文档页眉 `1=<调>` + 叠排拍号（`layoutScoreHeader.jianpuTonicLabel/jianpuMeterFraction`，仅含简谱声部时）；`buildHeaderLabels` 恒空（声部行首不再画 `K:/M:`，P1-2 改写为「声部行首不显示调号拍号，由页眉承担」）。**Phase B（减时线粗细/垂直间距/组内列宽字形层）未做**，与 beam 分组一并归 M2.5 T3.5。P2 debt：`labelFontSize`/`headerLabelGap` 成死常量、`labels` 渲染路径保留；`jianpuSections.ts` 336 行接近上限。**当前状态：Phase A 提交后主动暂停；不进 Phase B，不启动 M2.5 T0，需用户明确指令。**（2026-10-04 更新：用户指令启动 M2.5 T0；**Phase B 不单独实施**，横向 spacing / group width 留给 T3.5 / T4 一并解决。）
 
 **M2.5 派发要点（方案已冻结：`docs/M2.5_SYSTEM_LAYOUT_PLAN.md` v1.0，2026-09-22；冻结后改动需用户裁决，T0 启动需用户明确指令）**：
+- **T0 ✅（2026-10-04，`6e5a532`，CI run 37137587990 macOS/Ubuntu/Windows 全绿；命名修订 `3f5b48c`；见下方「M2.5 T0 实际状态」）**。
 - 前置条件（M2.5 之前、独立 formats 小任务）：~~`strokePrefix → TabGroupEvent.stroke` 回填~~ **已完成（2026-09-22，M2.5 formats preflight）**：`scan.ts` 顶层循环把紧邻 `tabGroup` 的 `strokePrefix` 绑进 `TabGroupEvent.stroke`，不改 Domain 类型/serializer 代码，dangling-stroke 诊断未对绑定成功的 group stroke 误报（真悬空的仍照常发 info）。U06（body `L:` 按声部作用域）已于 `8a74e8e` 结案。
 - 架构：`src/notation/system/**`（contracts 叶子层 → groupVoices / measureIdentity / timeline / composeSystem / justify / chordOverlay / pageModel）；System = overlay layers（chord diagrams，`layoutChord` 保持 document 级）+ ordered voice layers（jianpu/tab/staff 接受外部 system/measure 几何）+ attached layers（lyrics）；voice layout 不得反向 import composer。
 - 关键裁决：`MeasureTimeline` 只含 timed onset（绝对 Rational 累计 offset）+ `chordSymbol` zero-time overlay，barline 固定 `endX`，decoration/grace/unknown 走 voice-local slot；跨 voice measure identity = ordinal candidate + 结构兼容性校验（时值总量逐 measure 绝对相等，不预设相等，不等进 tier 3；缺 measure 留空保留公共宽度；冲突 fallback + 诊断，不重写事件）；公共 measure width = 各 voice demand 取 max → packing → water-filling justify（`justified: full|partial|none`，末行不拉）；D11 精确名匹配（0 只画名 / 1 名+图 / >1 只画名 + ambiguity 诊断）；`ComposedSystemLayout {target:'screen'|'page'}`，PageModel 只收 page 产物，单 system 不跨页；Staff 验收 = tier 1（共享 measure 边界/宽度），T5.S 为非阻塞 spike。
 - 刻印（T3.5，先于 T4 demand solver）：TAB/简谱 beam 按拍分组（x/4 四分一拍、6/8 等附点四分一拍、5/8·7/8 与 `M:` raw 不分组；用 voice 自身 offset，不依赖 shared timeline）；**P1-3 窄化为新裁决**：Meter 不得直接决定 spacing，可用于 engraving grouping，glyph demand 反向约束最小宽度；扫弦 `V/U` → ↓/↑；纵向次序 和弦名 → 和弦图 → 箭头 → 第 1 弦。
 - 任务链：T0 contracts + negative guards → T1 group → T2 measure identity → T3 timeline → T3.5 beam/demand → T4 packing/justify（+ positive guard）→ T5 voice external geometry → T5.S staff spike → T6 chord overlay → T8 system matrix → T9a PageModel → T9b renderer system 化 → T9c smoke/docs/seal。每步 ≤350 行、无 class/as/any、诊断码只追加、只用现有四种 Anchor。
+
+**M2.5 T0 实际状态（2026-10-04，`6e5a532` CI run 37137587990 + 命名修订 `3f5b48c` CI run 37137776164，均三平台全绿；T1 未启动，需用户明确指令）**：
+- 范围：只做 contracts / system metrics / 诊断码 / negative guards；renderer、三个 voice layout、Domain / parse / serializer 零改动。
+- **命名裁决（用户 2026-10-04，冻结方案的 post-freeze amendment）**：方案 §B.3 的 `SystemLayout`（跨声部成品谱 system）改名 **`ScoreSystemLayout`**，避免与 `layout/systems.ts` 的 `SystemLayout`（单声部换行结果，不动）同名不同义；`ComposedSystemLayout` / `PageComposedSystemLayout` 名称不变，`systems: readonly ScoreSystemLayout[]`。`docs/M2.5_SYSTEM_LAYOUT_PLAN.md` 顶部已加修订记录并全文替换；测试用 `@ts-expect-error` 钉住 contracts 不再导出 `SystemLayout`。
+- `src/notation/system/contracts.ts`（199 行，预算 200，再加类型须拆文件）：纯类型叶子层。**T0 裁决 A**：白名单为精确的 type-only `../../domain`、`../layout/primitives`、`../model/types`（不放开 `model/**`）；`ChordDiagramOverlay.anchor: EventAnchor = Extract<Anchor,{kind:'event'}>`。`MeasureParticipation` 为真正的判别联合（`absent` 无 `localMeasureIndex`）；单页命名 `PageLayout`；补 `LayoutTarget` / `PackingPolicy` / `PageSpec` / `PageComposedSystemLayout = ComposedSystemLayout & {target:'page'}`。`JustifyState.partial` 以 §Q4.5 water-filling 为准（全部 measure 触顶后仍有剩余宽），§B.3 / §Q7.2「有 measure 触顶」的措辞与之矛盾，**T4 断言按 §Q4.5 写**。
+- `src/notation/layout/metrics/system.ts`（`SYSTEM_METRICS`，用户整表裁决）：`systemGap` 24 / `layerGap` 8 / `chordBandGap` 6 / `maxJustifyRatio` 1.5 / `minJustifySlack` 2；`page` 794×1123、四边距 56、首页页眉 160、续页页眉 24、页脚 24。A4@96dpi 只是数值标定来源，**不建立 abstract unit 与 CSS px 的契约**；T9b 真实页面出来后再视觉标定。
+- `model/diagnostics.ts` 追加 9 条（`system.group-span-overflow` / `system.connector-not-modeled` / `system.measure-count-mismatch` / `system.measure-structure-conflict` / `system.measure-timing-degraded` / `chord.name-ambiguous` / `chord.symbol-conflict` / `chord.diagram-collision` / `system.page-overflow`），**只定义不发放**，码表共 48 条；按冻结方案在 T1/T2/T6/T9a 发放。
+- `architecture.test.ts` 追加 §Q7.4 negative guards 1/2/3/5（均先去注释再扫描，按规范化绝对路径判定，均带反例探针）：contracts 叶子 + type-only（值 import、`import { type X }`、re-export、bare/动态 import 均拦）；`jianpu|tab|staff|chord/**` import `system/` 只许 `system/contracts`；`SIBLINGS` 恒为四个记谱目录；`system/pageModel.ts` 零 screen 概念且不 import voice layout / composeSystem。positive guard 4 留 T4。`tests/unit/notation/system.contracts.test.ts`：码表、`@ts-expect-error` 类型断言（event anchor / participation / page-only 入参）、metrics 整表与页面可用高度 > 0。全仓 75 文件 / 5846 用例。
+- 待办 / 债务：① **T9a 落地 `pageModel.ts` 时把守卫 5 的 `existsSync` 分支改成断言文件存在**（防改名后空跑）；② ~~`SystemLayout` 同名不同义~~ **已裁决改名 `ScoreSystemLayout`（`3f5b48c`）**；③ 守卫 2 只覆盖四个记谱目录，`layout/**` / `model/**` 反向 import `system/**` 无守卫（方案未要求，T4 再议）；④ ~~`docs/UI_DESIGN_BRIEF.md` 附录 A「39 条」计数过期~~ **已同步为 48 条并补齐 9 条用户话术**（Brief v1.3.2；第 29 条 `tab.group-stroke-not-modeled` 改注为遗留码）。
 
 **M2 seal 与 M3 前置（T9 之后，恢复时从这里继续）**：**2026-09-22 追加裁决：M2 与 UI 目标版式确认之后、M3 之前先做 M2.5 Score System Layout（见 §30 路线表与 `docs/UI_DESIGN_BRIEF.md` §2.7.6、§10.17/10.18）；M2.5 的 System 模型 = overlay layers（chord diagrams）+ ordered voice layers（TAB/Jianpu/Staff 接受外部 system/measure 几何）+ attached layers（lyrics），chord 不是第四种声部 layout，system 高度由内容决定、分页只在 system 边界，`bracket` 只证明视觉分组、需定义 cross-voice measure mismatch policy。**原文：T0–T9 已全部完成并推送，
 下一步不是继续写渲染代码，而是：
@@ -4197,7 +4208,9 @@ Chord / Jianpu / TAB / Staff 四种记谱可渲染（T0–T7，T7 Staff + VexFlo
 3. 代码侧下一步是 **M2.5 Score System Layout**（用户 2026-09-22 裁决插在 M3 前）：
    方案已冻结为 `docs/M2.5_SYSTEM_LAYOUT_PLAN.md` v1.0（派发要点见 §30.1）；
    前置 formats preflight（`TabGroupEvent.stroke` 回填）已完成（`a358760`）；
-   Jianpu Polish Phase A 已完成（`80edda1`），**当前主动暂停**；Phase B 与 **T0 启动均需用户明确指令**；
+   Jianpu Polish Phase A 已完成（`80edda1`）；Phase B 不单独实施（横向 spacing / group width 归 T3.5 / T4）；
+   **M2.5 T0 已完成**（`6e5a532` + 命名修订 `3f5b48c`，均三平台 CI 全绿，见 §30.1「M2.5 T0 实际状态」），
+   **当前主动暂停，T1 启动需用户明确指令**；
 4. M2.5 封板后再规划 M3A（source/save/history）→ M3B（selection + 三向同步）→ M3C（可视化编辑）。
 ```
 

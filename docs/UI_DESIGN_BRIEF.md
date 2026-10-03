@@ -1,8 +1,9 @@
 # Muse Next — UI 设计需求说明（M3 前置）
 
-> 版本：v1.3.1 — 2026-09-22：单个系统不跨页；M2.5 只做 page layout model / system-page 分配，Print Preview/打印/PDF 仍属 M5
-> 上一版：v1.3 — 2026-09-22：M2.5 架构边界修正（chord overlay、system 高度、
-> bracket 语义、同名和弦图）；10.17 / 10.18 正式裁决
+> 版本：v1.3.2 — 2026-10-04：附录 A 诊断码 39 → 48（M2.5 T0 追加 9 条 system / chord 码，尚未发放）；第 29 条改注为遗留码
+> 上一版：v1.3.1 — 2026-09-22：单个系统不跨页；M2.5 只做 page layout model / system-page 分配，Print Preview/打印/PDF 仍属 M5
+> （v1.3 — 2026-09-22：M2.5 架构边界修正（chord overlay、system 高度、
+> bracket 语义、同名和弦图）；10.17 / 10.18 正式裁决）
 > （v1.2 — 2026-09-22：新增目标谱面版式（成品谱参考）与 M2.5 路线项）
 > （v1.1 — 2026-09-22：吸收用户对 §10 的 15 条裁决；诊断码计数修正为 39）
 > （v1.0 — 2026-09-22，M2 Notation Rendering 封板之后、M3 Editor Core 之前）
@@ -456,7 +457,7 @@ grouping**——先把版式从"按声部堆叠"改成"系统交错"，才不会
 | # | 功能 | 优先级 | 来源 | UI 涉及面 | 状态与边界 |
 |---|---|---|---|---|---|
 | D1 | 解析诊断列表（`jcx.*`） | P0 | `src/formats/jcx/**`，66 个码 | 右栏下部 | 已实现，只读。三级 info/warning/error |
-| D2 | 渲染诊断列表（`muse.render.*`） | P0 | `src/notation/model/diagnostics.ts`，39 个码 | 当前错误地放在纸面内 | 已实现，可点击定位。**只有 info/warning 两级，永无 error**（H6） |
+| D2 | 渲染诊断列表（`muse.render.*`） | P0 | `src/notation/model/diagnostics.ts`，48 个码（其中 9 个 M2.5 码尚未发放） | 当前错误地放在纸面内 | 已实现，可点击定位。**只有 info/warning 两级，永无 error**（H6） |
 | D3 | 两条通道的区分呈现 | P0 | 同上（H9） | 诊断面板 | 已实现（物理上两个列表）。重新设计时必须保持可区分 |
 | D4 | 按锚点定位 | P0 | `anchorKey()` 四分支 document/voice/event/relation | 谱面 ↔ 诊断 | 已实现。锚点粒度决定高亮范围：文档级高亮整个头部，声部级高亮整条声部 |
 | D5 | 过滤 / 折叠 / 分组 | P1 | 无（现状明确未做） | 诊断面板 | 未实现。建议维度：级别、通道、声部、诊断码、是否已查看 |
@@ -919,7 +920,7 @@ loading / error（如适用）八态，浅色与深色各一套。
 
 ## 11. 附录
 
-### 附录 A — 渲染诊断码全表（`muse.render.*`，39 条）
+### 附录 A — 渲染诊断码全表（`muse.render.*`，48 条）
 
 > 来源：`src/notation/model/diagnostics.ts`（唯一来源）+ 各 producer 的调用点。
 > 级别只有 `info` / `warning`，**永无 `error`**（H6）。
@@ -955,7 +956,7 @@ loading / error（如适用）八态，浅色与深色各一套。
 | 26 | `tab.group-duplicate-string` | warning | 同一根弦上出现了多个音，实际演奏不可能，已全部照画 |
 | 27 | `tab.stroke-hold-inferred` | info | `H` 按"延长"理解，这是推测 |
 | 28 | `tab.stroke-unrecognized` | warning | 这个拨弦记号我们不认识，已原样显示 |
-| 29 | `tab.group-stroke-not-modeled` | info | 整组音符的扫弦方向标记暂不显示（单个音符的仍然显示） |
+| 29 | `tab.group-stroke-not-modeled` | info | （遗留码，2026-09-22 起不再发放：整组音符的扫弦方向标记已能显示） |
 | 30 | `text-block.unclosed` | info | 文本块没有结束标记，已显示已捕获的内容 |
 | 31 | `staff.clef-absent` | info | 这个声部没写谱号，已按高音谱号显示 |
 | 32 | `staff.clef-unrecognized` | warning | 谱号写法我们不认识，已按高音谱号显示 |
@@ -966,9 +967,20 @@ loading / error（如适用）八态，浅色与深色各一套。
 | 37 | `staff.slur-not-modeled` | info | 五线谱暂不绘制圆滑线 |
 | 38 | `staff.lyrics-not-modeled` | info | 五线谱暂不绘制歌词 |
 | 39 | `staff.chord-member-rest-not-modeled` | info | 和弦里的休止符没有单独显示 |
+| 40 | `system.group-span-overflow` | warning | 方括号要连接的声部比实际声部多，已只连接现有的声部 |
+| 41 | `system.connector-not-modeled` | info | 花括号 / 竖线连接暂不绘制，这些声部按各自独立的谱行显示 |
+| 42 | `system.measure-count-mismatch` | warning | 同一行谱里各声部的小节数不一样，已从头对齐，缺少的小节留空 |
+| 43 | `system.measure-structure-conflict` | warning | 这一小节在各声部的结构不一致，只对齐小节边界，小节内各自排列 |
+| 44 | `system.measure-timing-degraded` | info | 这一小节无法按时值跨声部对齐，各声部在小节内各自排列 |
+| 45 | `chord.name-ambiguous` | warning | 有多个同名和弦图，无法确定用哪一个，只显示和弦名 |
+| 46 | `chord.symbol-conflict` | warning | 同一位置的不同声部标了不同的和弦，已分别显示 |
+| 47 | `chord.diagram-collision` | info | 和弦图挤在一起放不下，这个和弦只显示名称 |
+| 48 | `system.page-overflow` | warning | 这一行谱比一页还高，已单独占一页，没有拆分或缩小 |
 
-> 上表即 `RENDER_DIAGNOSTIC_CODES` 的全部 39 项（第 6 行 `relation.endpoint-missing`
-> 被多处复用，但只是一个常量）。
+> 上表即 `RENDER_DIAGNOSTIC_CODES` 的全部 48 项（第 6 行 `relation.endpoint-missing`
+> 被多处复用，但只是一个常量）。第 40–48 行是 M2.5 T0（2026-10-04）按冻结方案
+> 预先定义的 system / chord 码，级别取自方案，**当前尚无发放点**，分别在 M2.5
+> T1 / T2 / T6 / T9a 落地；第 29 行是遗留码，保留仅为兼容。
 
 ### 附录 B — 解析诊断码分域摘要（`jcx.*`，66 条）
 
