@@ -155,6 +155,30 @@ export const RENDER_DIAGNOSTIC_CODES = {
   staffLyricsNotModeled: 'muse.render.staff.lyrics-not-modeled',
   /** 和弦块成员里的休止（`Note | Rest` 联合里的 `Rest` 分支）未单独建模：随和弦整体降级占位。 */
   staffChordMemberRestNotModeled: 'muse.render.staff.chord-member-rest-not-modeled',
+  /**
+   * M2.5 T0 追加（`docs/M2.5_SYSTEM_LAYOUT_PLAN.md` v1.0 §C：Q1.5×2、Q2.5×3、Q5.4×3、
+   * Q6.6×1，共 9 条）。**T0 只定义事实名称，不发放、不建 builder**：按冻结方案在
+   * T1/T2/T6/T9a 落地时发放，下面注释记的是冻结方案已定的 level / anchor（均为
+   * info / warning，只用现有四种 Anchor 分支，纠偏④）。
+   */
+  /** `bracket=N` 的 N 超过剩余声部数，已截断到实际声部数（§Q1.5，预期 warning，voice anchor）。 */
+  systemGroupSpanOverflow: 'muse.render.system.group-span-overflow',
+  /** 声部声明了 `brace` / `staves`，本版不渲染该连接形态，按单声部系统呈现（§Q1.5，预期 info，voice anchor）。 */
+  systemConnectorNotModeled: 'muse.render.system.connector-not-modeled',
+  /** group 内各声部 measure 数不等，已前缀对齐并对缺失层留空保宽（§Q2.5，预期 warning，每个相关声部各一条 voice anchor）。 */
+  systemMeasureCountMismatch: 'muse.render.system.measure-count-mismatch',
+  /** measure 结构特征冲突，保留公共边界但放弃该小节内部时间对齐（§Q2.5，预期 warning，该 measure 在该声部首事件的 event anchor，空则 voice）。 */
+  systemMeasureStructureConflict: 'muse.render.system.measure-structure-conflict',
+  /** measure 退出 shared intra-measure timing，各层在公共框内自排（§Q2.5，预期 info，anchor 同上）。 */
+  systemMeasureTimingDegraded: 'muse.render.system.measure-timing-degraded',
+  /** 同名 `%%gchord` 多于一条：只画名，绝不取首个（§Q5.4，预期 warning，该 `ChordSymbolEvent` 的 event anchor）。 */
+  chordNameAmbiguous: 'muse.render.chord.name-ambiguous',
+  /** 同 offset 的和弦符号文本冲突（§Q5.2 carrier 规则，预期 warning，非 carrier 那条事件的 event anchor）。 */
+  chordSymbolConflict: 'muse.render.chord.symbol-conflict',
+  /** 和弦图 overlay 横向重叠，后者降级为只画名（F-4，预期 info，被降级事件的 event anchor）。 */
+  chordDiagramCollision: 'muse.render.chord.diagram-collision',
+  /** 单个 system 高于页面内容框：独占一页、不拆、不缩放（§Q6.6，预期 warning，该 system 首层的 voice anchor）。 */
+  systemPageOverflow: 'muse.render.system.page-overflow',
 } as const satisfies Record<string, RenderDiagnosticCode>;
 
 /** 纯构造：给定 draft 与序号，得到最终诊断。`ordinal` 只参与 id，不参与语义。 */

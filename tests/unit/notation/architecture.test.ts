@@ -4,8 +4,8 @@
  * 它必须在 T0 就绿，并且**先于** T7 引入 `vexflow` 之前存在——守卫的价值在于「依赖
  * 进来的那一刻就红」，事后补的守卫只能证明现状，证明不了约束。
  */
-import { readFileSync, readdirSync } from 'node:fs';
-import { join, relative, sep } from 'node:path';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { dirname, join, relative, sep } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
@@ -112,6 +112,9 @@ describe('notation 架构守卫 —— 依赖方向（§2.1）', () => {
   });
 });
 
+/** 四个记谱目录（M2.5 T0 起提到模块级，供 §Q7.4 守卫 3 断言它没有被改动）。 */
+const SIBLINGS: readonly string[] = ['staff', 'jianpu', 'tab', 'chord'];
+
 /**
  * 记谱目录之间互不依赖（M2 §2.7）。四种记谱各有各的几何模型，互不继承、互不转换：
  * 结构上的相似（切段、cursor → node → sink）一律**照抄**，不共享代码——共享一旦开始，
@@ -121,8 +124,6 @@ describe('notation 架构守卫 —— 依赖方向（§2.1）', () => {
  * 沿用本文件的 `collectSpecifiers`，五种 import 语法全覆盖。
  */
 describe('notation 架构守卫 —— 记谱目录互不 import（§2.7）', () => {
-  const SIBLINGS: readonly string[] = ['staff', 'jianpu', 'tab', 'chord'];
-
   /** `../jianpu`、`../jianpu/jianpuArcs`、`./../tab/tabGlyphs` 都算命中；`./x` 不算。 */
   function crossNotationHits(source: string, self: string): string[] {
     const others = SIBLINGS.filter((name) => name !== self);
@@ -401,5 +402,165 @@ describe('全仓 vexflow 守卫 —— vexflow 依赖边只能出现在 renderer
     const adapterFiles = collectFiles(VEXFLOW_ALLOWED_DIR);
     expect(adapterFiles.length).toBeGreaterThan(0);
     expect(adapterFiles.some(importsVexflowPackage)).toBe(true);
+  });
+});
+
+/**
+ * M2.5 System Layout 依赖方向守卫（`docs/M2.5_SYSTEM_LAYOUT_PLAN.md` v1.0 §B.2 / §Q7.4，
+ * T0 只立 negative guards 1/2/3/5；守卫 6 = 上面全部既有守卫，扫描范围已自动覆盖
+ * `system/**`）。守卫 4（`composeSystem.ts` 确实 import 三个 voice layout 与
+ * `chord/layoutChord`）是 positive guard，T4 文件存在后再加，否则 T0 必红。
+ *
+ * 判定按**解析后的绝对路径**做，不按 specifier 文本做：`../layout/metrics/system`
+ * 是 metrics 文件，不是 `notation/system/` 目录，文本正则会误伤。
+ */
+describe('M2.5 架构守卫 —— system/ 依赖方向（§B.2 / §Q7.4）', () => {
+  const SYSTEM_DIR = join(NOTATION_DIR, 'system');
+  const CONTRACTS_FILE = join(SYSTEM_DIR, 'contracts.ts');
+  const PAGE_MODEL_FILE = join(SYSTEM_DIR, 'pageModel.ts');
+
+  /** contracts 的精确白名单（T0 裁决 A：只增加 `../model/types`，不放开整个 `model/**`）。 */
+  const CONTRACTS_ALLOWED: readonly string[] = ['../../domain', '../layout/primitives', '../model/types'];
+
+  /** 去掉 `.ts`/`.tsx`/`.js` 后缀，得到可与目标比较的绝对路径。 */
+  function resolveSpec(fromFile: string, spec: string): string | undefined {
+    if (!spec.startsWith('.')) return undefined;
+    return join(dirname(fromFile), spec).replace(/\.(?:ts|tsx|js)$/, '');
+  }
+
+  function isInside(target: string, dir: string): boolean {
+    return target === dir || target.startsWith(dir + sep);
+  }
+
+  /**
+   * 顶层 `import … from` / `export … from` 语句（去注释后按行首锚定，`[^;]` 限定在单条
+   * 语句内，避免 `export interface …` 一路吞到后面的 `from`）。`kind` 区分三种形态：
+   * `import type`（唯一允许）、值 import（含 `import { type X }`——`verbatimModuleSyntax`
+   * 下它会留下一条运行期 `import {}`）、re-export（叶子层不转出任何东西，`export type`
+   * 也不放行）。
+   */
+  function moduleStatements(
+    source: string,
+  ): { readonly kind: 'type-import' | 'value-import' | 're-export'; readonly spec: string }[] {
+    const re = /^\s*(import|export)\b([^;]*?)\bfrom\s*['"]([^'"]+)['"]/gm;
+    return [...stripComments(source).matchAll(re)].map((m) => ({
+      kind: m[1] === 'export' ? 're-export' : /^\s+type\b/.test(m[2] ?? '') ? 'type-import' : 'value-import',
+      spec: m[3] ?? '',
+    }));
+  }
+
+  /** 守卫 1：contracts 是叶子——只 type-only import 白名单里的三条精确路径。 */
+  function contractsLeafViolations(source: string): string[] {
+    const statements = moduleStatements(source);
+    const specs = collectSpecifiers(stripComments(source));
+    const notAllowed = specs.filter((spec) => !CONTRACTS_ALLOWED.includes(spec));
+    const badStatements = statements.filter((s) => s.kind !== 'type-import').map((s) => `${s.kind}:${s.spec}`);
+    // bare / 动态 import / require 不是 `… from` 语句，会让两者计数不等。
+    const extra = specs.length === statements.length ? [] : ['non-static-import'];
+    return [...notAllowed, ...badStatements, ...extra];
+  }
+
+  /** 守卫 2：记谱目录若 import `notation/system/`，只能是 `system/contracts`。 */
+  function systemImportViolations(file: string, source: string): string[] {
+    const contracts = CONTRACTS_FILE.replace(/\.ts$/, '');
+    return collectSpecifiers(stripComments(source)).filter((spec) => {
+      const target = resolveSpec(file, spec);
+      return target !== undefined && isInside(target, SYSTEM_DIR) && target !== contracts;
+    });
+  }
+
+  /** 守卫 5：pageModel 零 screen 概念，且不认识 voice layout / composer。 */
+  function pageModelViolations(file: string, source: string): string[] {
+    const words = [...stripComments(source).matchAll(/availableWidth|zoom|ResizeObserver|scoreView|SCORE_VIEW/gi)]
+      .map((m) => m[0]);
+    const forbiddenDirs = SIBLINGS.map((name) => join(NOTATION_DIR, name));
+    const composer = join(SYSTEM_DIR, 'composeSystem');
+    const imports = collectSpecifiers(stripComments(source)).filter((spec) => {
+      const target = resolveSpec(file, spec);
+      return target !== undefined && (target === composer || forbiddenDirs.some((dir) => isInside(target, dir)));
+    });
+    return [...words, ...imports];
+  }
+
+  it('守卫 1：system/contracts.ts 存在，且只 type-only import domain / layout/primitives / model/types', () => {
+    expect(existsSync(CONTRACTS_FILE)).toBe(true);
+    expect(contractsLeafViolations(readFileSync(CONTRACTS_FILE, 'utf8'))).toEqual([]);
+  });
+
+  it('守卫 1 反例：值 import、inline type、re-export、model/** 其它文件、voice layout、动态/bare import 都会被命中', () => {
+    expect(contractsLeafViolations("import { Anchor } from '../model/types';")).toEqual([
+      'value-import:../model/types',
+    ]);
+    expect(contractsLeafViolations("import { type Anchor } from '../model/types';")).toEqual([
+      'value-import:../model/types',
+    ]);
+    expect(contractsLeafViolations("export { Anchor } from '../model/types';")).toEqual(['re-export:../model/types']);
+    expect(contractsLeafViolations("export type { Anchor } from '../model/types';")).toEqual([
+      're-export:../model/types',
+    ]);
+    expect(contractsLeafViolations("import '../model/types';")).toEqual(['non-static-import']);
+    expect(contractsLeafViolations("import type { RenderDiagnosticDraft } from '../model/diagnostics';")).toEqual([
+      '../model/diagnostics',
+    ]);
+    expect(contractsLeafViolations("import type { JianpuLayout } from '../jianpu/layoutJianpu';")).toEqual([
+      '../jianpu/layoutJianpu',
+    ]);
+    expect(contractsLeafViolations("const m = await import('../model/types');")).toEqual(['non-static-import']);
+    expect(contractsLeafViolations("import type { Box } from '../layout/primitives';")).toEqual([]);
+    expect(contractsLeafViolations("import type {\n  Rational,\n  VoiceId,\n} from '../../domain';")).toEqual([]);
+    expect(
+      contractsLeafViolations("/* import { X } from '../jianpu/x'; */\n// import { Y } from '../tab/y';\n"),
+    ).toEqual([]);
+  });
+
+  const voiceDirFiles = files.filter((file) => SIBLINGS.some((name) => rel(file).startsWith(`${name}/`)));
+
+  it.each(voiceDirFiles.map((file) => [rel(file), file] as const))(
+    '守卫 2：%s 对 system/ 的 import 只允许 system/contracts',
+    (_label, file) => {
+      expect(systemImportViolations(file, readFileSync(file, 'utf8'))).toEqual([]);
+    },
+  );
+
+  it('守卫 2 反例：composeSystem / justify 被命中；contracts、metrics/system、注释不被误判', () => {
+    const probeFile = join(NOTATION_DIR, 'tab', 'probe.ts');
+    expect(systemImportViolations(probeFile, "import { composeSystem } from '../system/composeSystem';")).toEqual([
+      '../system/composeSystem',
+    ]);
+    expect(systemImportViolations(probeFile, "import { justify } from '../system/justify';")).toEqual([
+      '../system/justify',
+    ]);
+    expect(systemImportViolations(probeFile, "import type { SystemLayout } from '../system/contracts';")).toEqual([]);
+    expect(systemImportViolations(probeFile, "import { SYSTEM_METRICS } from '../layout/metrics/system';")).toEqual([]);
+    expect(systemImportViolations(probeFile, "/* import { c } from '../system/composeSystem'; */")).toEqual([]);
+    expect(systemImportViolations(probeFile, "// import { c } from '../system/composeSystem';")).toEqual([]);
+  });
+
+  it('守卫 3：SIBLINGS 仍是四个记谱目录，system/ 不在其中', () => {
+    expect(SIBLINGS).toEqual(['staff', 'jianpu', 'tab', 'chord']);
+    expect(SIBLINGS).not.toContain('system');
+  });
+
+  it('守卫 5：system/pageModel.ts（存在时）零 screen 概念，且不 import voice layout / composeSystem', () => {
+    // T0 时该文件尚不存在：用例照样绿，matcher 的有效性由下面的反例证明。
+    // **到期提醒**：T9a 落地 `system/pageModel.ts` 时，把这里改成
+    // `expect(existsSync(PAGE_MODEL_FILE)).toBe(true)`，防止改名 / 挪目录后守卫空跑。
+    const sources = existsSync(PAGE_MODEL_FILE) ? [readFileSync(PAGE_MODEL_FILE, 'utf8')] : [];
+    for (const source of sources) {
+      expect(pageModelViolations(PAGE_MODEL_FILE, source)).toEqual([]);
+    }
+  });
+
+  it('守卫 5 反例：screen 字样、voice layout、composeSystem 都会被命中；注释与干净源码不被误判', () => {
+    const hit = (source: string): string[] => pageModelViolations(PAGE_MODEL_FILE, source);
+    expect(hit('const w = policy.availableWidth;')).toEqual(['availableWidth']);
+    expect(hit('const z = SCORE_VIEW_METRICS.zoomMax;')).toEqual(['SCORE_VIEW', 'zoom']);
+    expect(hit('new ResizeObserver(cb);')).toEqual(['ResizeObserver']);
+    expect(hit("import { layoutTab } from '../tab/layoutTab';")).toEqual(['../tab/layoutTab']);
+    expect(hit("import { composeSystem } from './composeSystem';")).toEqual(['./composeSystem']);
+    expect(hit('// 本文件不认识 zoom / availableWidth\nexport const ok = 1;')).toEqual([]);
+    expect(hit("/* import { X } from '../jianpu/x'; */")).toEqual([]);
+    expect(hit("// import { X } from '../jianpu/x';")).toEqual([]);
+    expect(hit("import type { PageComposedSystemLayout } from './contracts';")).toEqual([]);
   });
 });
