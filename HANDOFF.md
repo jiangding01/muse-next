@@ -2,7 +2,7 @@
 
 > 面向后续实现 Agent 的项目交接文档  
 > 项目代号：`muse-next`  
-> 当前阶段：**M0–M1.8 已封板；M2 Notation Rendering T0–T9 已全部完成（Chord / Jianpu / TAB / Staff 四种记谱可渲染 + T8 render matrix 契约测试 + T9 文档封板），✅ 2026-09-22 封板（原始 seal CI run 35700198783；T8.1 post-seal 契约收紧 run 35702615344；当前 HEAD run 35702885112 三平台全绿）；UI 设计 Brief 已完成（`docs/UI_DESIGN_BRIEF.md` v1.3.2）；M2.5 Score System Layout 方案冻结为 v1.0，**T0 已完成（2026-10-04，`6e5a532` + 命名修订 `3f5b48c`），T1 声部视觉分组已完成（2026-10-04，`2b9882c`），均三平台 CI 全绿；T2 待用户明确指令**；M3 排在 M2.5 之后**（详见 §30 里程碑表、§30.1「M2 进行中状态」与「M2.5 T0 实际状态」、§69「当前明确的下一任务」）  
+> 当前阶段：**M0–M1.8 已封板；M2 Notation Rendering T0–T9 已全部完成（Chord / Jianpu / TAB / Staff 四种记谱可渲染 + T8 render matrix 契约测试 + T9 文档封板），✅ 2026-09-22 封板（原始 seal CI run 35700198783；T8.1 post-seal 契约收紧 run 35702615344；当前 HEAD run 35702885112 三平台全绿）；UI 设计 Brief 已完成（`docs/UI_DESIGN_BRIEF.md` v1.3.4）；M2.5 Score System Layout 方案冻结为 v1.0，**T0 已完成（2026-10-04，`6e5a532` + 命名修订 `3f5b48c`），T1 声部视觉分组已完成（`2b9882c`），T2 跨声部 measure identity 已完成（`218d143`），均三平台 CI 全绿；T3 待用户明确指令**；M3 排在 M2.5 之后**（详见 §30 里程碑表、§30.1「M2 进行中状态」与「M2.5 T0 实际状态」、§69「当前明确的下一任务」）  
 > 核心目标：以现代 TypeScript 技术栈重建已停止维护的 **Muse Pro 2.70** 的核心能力，并优先恢复其 `.jcx` 乐谱格式、谱面渲染、编辑与播放能力。
 
 ---
@@ -1787,7 +1787,8 @@ Score System Layout（乐谱系统版式：跨声部按小节对齐的统一 spa
 两端对齐、歌词随简谱行、按系统分页；目标版式与架构边界见 `docs/UI_DESIGN_BRIEF.md` §2.7 / §10.16–10.18；
 2026-09-22 用户裁决插在 M3 之前；方案已冻结为 `docs/M2.5_SYSTEM_LAYOUT_PLAN.md` v1.0；
 T0 ✅ 2026-10-04（`6e5a532`，CI run 37137587990 三平台全绿；命名修订 `3f5b48c`）；
-T1 ✅ 2026-10-04（`2b9882c`，CI run 37140019863 三平台全绿），T2 待用户指令）
+T1 ✅ 2026-10-04（`2b9882c`，CI run 37140019863 三平台全绿）；
+T2 ✅ 2026-10-04（`218d143`，CI run 37177350122 三平台全绿），T3 待用户指令）
 
 → M3
 Editor Core
@@ -2666,6 +2667,7 @@ visual debt、T7 第 6 条），按 视觉 / 架构 / 测试 分类，每行注�
 **M2.5 派发要点（方案已冻结：`docs/M2.5_SYSTEM_LAYOUT_PLAN.md` v1.0，2026-09-22；冻结后改动需用户裁决，T0 启动需用户明确指令）**：
 - **T0 ✅（2026-10-04，`6e5a532`，CI run 37137587990 macOS/Ubuntu/Windows 全绿；命名修订 `3f5b48c`；见下方「M2.5 T0 实际状态」）**。
 - **T1 ✅（2026-10-04，`2b9882c`，CI run 37140019863 三平台全绿；见下方「M2.5 T1 实际状态」）**。
+- **T2 ✅（2026-10-04，`218d143`，CI run 37177350122 三平台全绿；见下方「M2.5 T2 实际状态」）**。
 - 前置条件（M2.5 之前、独立 formats 小任务）：~~`strokePrefix → TabGroupEvent.stroke` 回填~~ **已完成（2026-09-22，M2.5 formats preflight）**：`scan.ts` 顶层循环把紧邻 `tabGroup` 的 `strokePrefix` 绑进 `TabGroupEvent.stroke`，不改 Domain 类型/serializer 代码，dangling-stroke 诊断未对绑定成功的 group stroke 误报（真悬空的仍照常发 info）。U06（body `L:` 按声部作用域）已于 `8a74e8e` 结案。
 - 架构：`src/notation/system/**`（contracts 叶子层 → groupVoices / measureIdentity / timeline / composeSystem / justify / chordOverlay / pageModel）；System = overlay layers（chord diagrams，`layoutChord` 保持 document 级）+ ordered voice layers（jianpu/tab/staff 接受外部 system/measure 几何）+ attached layers（lyrics）；voice layout 不得反向 import composer。
 - 关键裁决：`MeasureTimeline` 只含 timed onset（绝对 Rational 累计 offset）+ `chordSymbol` zero-time overlay，barline 固定 `endX`，decoration/grace/unknown 走 voice-local slot；跨 voice measure identity = ordinal candidate + 结构兼容性校验（时值总量逐 measure 绝对相等，不预设相等，不等进 tier 3；缺 measure 留空保留公共宽度；冲突 fallback + 诊断，不重写事件）；公共 measure width = 各 voice demand 取 max → packing → water-filling justify（`justified: full|partial|none`，末行不拉）；D11 精确名匹配（0 只画名 / 1 名+图 / >1 只画名 + ambiguity 诊断）；`ComposedSystemLayout {target:'screen'|'page'}`，PageModel 只收 page 产物，单 system 不跨页；Staff 验收 = tier 1（共享 measure 边界/宽度），T5.S 为非阻塞 spike。
@@ -2681,11 +2683,23 @@ visual debt、T7 第 6 条），按 视觉 / 架构 / 测试 分类，每行注�
 - `architecture.test.ts` 追加 §Q7.4 negative guards 1/2/3/5（均先去注释再扫描，按规范化绝对路径判定，均带反例探针）：contracts 叶子 + type-only（值 import、`import { type X }`、re-export、bare/动态 import 均拦）；`jianpu|tab|staff|chord/**` import `system/` 只许 `system/contracts`；`SIBLINGS` 恒为四个记谱目录；`system/pageModel.ts` 零 screen 概念且不 import voice layout / composeSystem。positive guard 4 留 T4。`tests/unit/notation/system.contracts.test.ts`：码表、`@ts-expect-error` 类型断言（event anchor / participation / page-only 入参）、metrics 整表与页面可用高度 > 0。全仓 75 文件 / 5846 用例。
 - 待办 / 债务：① **T9a 落地 `pageModel.ts` 时把守卫 5 的 `existsSync` 分支改成断言文件存在**（防改名后空跑）；② ~~`SystemLayout` 同名不同义~~ **已裁决改名 `ScoreSystemLayout`（`3f5b48c`）**；③ 守卫 2 只覆盖四个记谱目录，`layout/**` / `model/**` 反向 import `system/**` 无守卫（方案未要求，T4 再议）；④ ~~`docs/UI_DESIGN_BRIEF.md` 附录 A「39 条」计数过期~~ **已同步为 48 条并补齐 9 条用户话术**（Brief v1.3.2；第 29 条 `tab.group-stroke-not-modeled` 改注为遗留码）。
 
-**M2.5 T1 实际状态（2026-10-04，`2b9882c`，CI run 37140019863 三平台全绿；T2 未启动，需用户明确指令）**：
+**M2.5 T1 实际状态（2026-10-04，`2b9882c`，CI run 37140019863 三平台全绿）**：
 - 范围：只做 `Score.voices → SystemGroup[]` 的视觉分组；measure identity、timing、renderer、三个 voice layout、Domain / parse / serializer 零改动。`groupVoices` 尚无消费方（T4 composer 接入），渲染结果无变化。
 - `src/notation/system/groupVoices.ts`（125 行）：`groupVoices(voices: readonly Voice[]): VoiceGrouping { groups, diagnostics }`，纯函数、确定性、不改入参。**分组规则（用户 2026-10-04 裁决 ①–④ + 补充裁决）**：安全整数 `bracket=N`（N ≥ 2）从当前声部起成 N 层 `bracket`/`declared` group，越界截断 + `group-span-overflow`（warning），截断到 1 层退为 singleton；`bracket=1` → singleton 无诊断；`bracket` 非安全整数（防御：parse 保证安全整数，手工 Voice 才有 1.5 / NaN / Infinity / `MAX_SAFE_INTEGER + 1`）或 N ≤ 0 → singleton + `group-declaration-ignored`（info）；`brace` / `staves` → 声明声部 singleton、**不吞并后续声部**、每个声明一条 `connector-not-modeled`（info）；属性优先级固定 bracket > brace > staves，**不做 fallback**；被前一 group 覆盖的声部只发诊断（`bracket` → ignored、`brace` / `staves` → not-modeled），**绝不改变 group**、每个属性只一条原因诊断；group 顺序与层序 = 文档顺序；诊断挂 voice anchor、`sourceRef = origins[0]`（空则省略），drafts 只收集一次。重复 `VoiceId` 视为人工破坏 Domain 的防御性输入：不新增诊断、不去重，按数组位置处理。
 - 新增 info 码 `muse.render.system.group-declaration-ignored`（**post-freeze amendment**，方案顶部修订记录与 §Q1.5 / §C 已同步）；渲染码表共 49 条，其中 M2.5 码 10 条；message 只描述本版处理，不断言 JCX 格式非法。
 - 测试 `tests/unit/notation/system.groupVoices.test.ts`：19 行分组矩阵 + 诊断契约（C3、level、措辞不含「非法」、`sourceRef`、id 稳定）+ 非安全整数五值 + 重复 VoiceId + fixture 全集划分不变量。**语料口径 = synthetic shape coverage**（1 / 2 / 3 / 9 声部四种已知形态由合成源码复刻），**真实语料本轮未重跑**（本机 `legacy-corpus/jcx/` 缺席）；真实 corpus probe 留到 T8 system matrix / T9 smoke 前。独立 review 的变异测试（覆盖区 bracket 扩张 / 重复报 / 越界报 overflow、措辞含「非法」、`isInteger` 退化、`JSON.stringify` 展示数值、单层仍产 bracket）全部被测试杀死。全仓 76 文件 / 6004 用例。
+
+**M2.5 T2 实际状态（2026-10-04，`218d143`，CI run 37177350122 三平台全绿；T3 未启动，需用户明确指令）**：
+- 范围：只做跨声部 measure identity（ordinal candidate + structural compatibility validation + 前缀对齐 / absent + T2 诊断）；T3 timeline、T4 width / packing、renderer、三个 voice layout、Domain / parse / serializer、contracts 零改动，不新增 `MeasureId`。`alignMeasures` 尚无消费方（T4 composer 接入），渲染结果无变化。
+- `src/notation/system/measureIdentity.ts`（219 行）：`alignMeasures(groups, voices: readonly RenderVoice[]): MeasureAlignment { groups, diagnostics }`。阶段类型 `SliceTotal` / `AlignedMember` / `MeasureVerdict` / `AlignedMeasure` / `GroupMeasureAlignment` / `MeasureAlignment` 导出于此、供 T3 / T4 使用（裁决 A：不改 contracts，不伪造 `SystemMeasureGeometry` 的 x / width / demandWidth / timeline）。measure 一律由 `splitMeasures` 切出，按 ordinal 前缀对齐，超出范围 `absent`，**无 LCS / DTW / 搜索 / 插入 / 移动**。
+- **判定（裁决 C / D / E）**：每个 ordinal 只在在场声部之间判定（< 2 即 compatible，singleton 恒走这里）。S1 trailing barline raw 去重后 > 1 或 S2 孤立线对非孤立线 → `structure-conflict`（无等价表；tail 不单独冲突，S4 只是描述事实）；否则已知绝对 `Rational` 总量（domain `add` / `equals`，零浮点、零比例、不读 Meter）不全等 → `total-mismatch`。任一冲突 → 整个 measure 所有在场者 `incompatible`，**不做多数投票**，`localMeasureIndex` 全保留。弱起 / 零时值小节 / `durationUnrepresentable`（1/3）均按字面绝对总量比较，不补偿。
+- **诊断分工（裁决 B）**：T2 发 count 不等 → `measure-count-mismatch`（warning，group 内每个声部一条 voice anchor，sourceRef = `origins[0]`）；D3 → `measure-structure-conflict`（warning）；**D4 → `measure-timing-degraded`（info）**；后两者每个在场声部一条、挂该 measure 首事件 event anchor，sourceRef = 该事件 origin。**T3 只对 D1 / D2 / 溢出发 `timing-degraded`，并跳过 `verdict !== 'compatible'` 的 ordinal**，同一 ordinal 不重复报。
+- **unresolved（裁决 G）**：`SliceTotal` 不可知时带 `reason: 'duration-undefined' | 'arithmetic-overflow'`（只捕获 `add` 的 `RangeError`，其它异常照抛）；T2 不因此发诊断、不标 incompatible，unresolved 不参与比较（其余已知总量不等仍 total-mismatch）。
+- **防御（裁决 H）**：按 VoiceId 查找，重复 id 取首次；`SystemGroup.voiceIds` 有找不到的 VoiceId 时该声部按 absent 参与 alignment、不抛异常、结果确定，**整个 group 的全部 T2 诊断经 `diagnosticsSuppressed` 单一闸门抑制**（不把调用方错误伪装成源文件问题）；已解析但 0 个 measure 的真实 Voice 照常参与 count mismatch。
+- `src/notation/system/timedDuration.ts`（44 行，裁决 F）：`eventTiming(event)` 穷尽 switch，T2 / T3 共用；不 export / 修改 `spacing.ts` 私有 helper；测试对 fixture 全集（10 种事件）与 `itemSlotWidth()` 的 kind / 宽度做 cross-check 防分叉。
+- 测试 `tests/unit/notation/system.measureIdentity.test.ts`（50 条）：**synthetic shape coverage**（68/69、59/61、22/23 计数形态 + E-5 中段零时值小节），**真实语料本轮未重跑**。独立 review + 23 个变异（D4 错报 structure、两类浮点、多数投票、后缀对齐、absent 收诊断、重复 id 取末次、吞所有异常、去掉 RangeError catch、诊断闸门部分失效等）全部被杀。全仓 77 文件 / 6068 用例。
+- **已知后果（F-1 的保守语义，不是 bug）**：某声部中段多出零时值小节时，其后所有 ordinal 错开一格，大面积落 tier 3（仍共享边界与宽度）并产生大量诊断；真实 corpus#10 / #11 恢复后应作为进入 T3 前最优先的只读 probe。
+- **流程教训**：T2 review 时只读 agent 交回报告后仍在后台用旧备份恢复主工作区、覆盖了实现修改（已发现、停掉 agent、重新落地并复核）。此后 **mutation review 一律在独立 worktree / 临时副本里运行**，提示词明确禁止修改主工作区。
 
 **M2 seal 与 M3 前置（T9 之后，恢复时从这里继续）**：**2026-09-22 追加裁决：M2 与 UI 目标版式确认之后、M3 之前先做 M2.5 Score System Layout（见 §30 路线表与 `docs/UI_DESIGN_BRIEF.md` §2.7.6、§10.17/10.18）；M2.5 的 System 模型 = overlay layers（chord diagrams）+ ordered voice layers（TAB/Jianpu/Staff 接受外部 system/measure 几何）+ attached layers（lyrics），chord 不是第四种声部 layout，system 高度由内容决定、分页只在 system 边界，`bracket` 只证明视觉分组、需定义 cross-voice measure mismatch policy。**原文：T0–T9 已全部完成并推送，
 下一步不是继续写渲染代码，而是：
@@ -4218,8 +4232,10 @@ Chord / Jianpu / TAB / Staff 四种记谱可渲染（T0–T7，T7 Staff + VexFlo
    前置 formats preflight（`TabGroupEvent.stroke` 回填）已完成（`a358760`）；
    Jianpu Polish Phase A 已完成（`80edda1`）；Phase B 不单独实施（横向 spacing / group width 归 T3.5 / T4）；
    **M2.5 T0 已完成**（`6e5a532` + 命名修订 `3f5b48c`，均三平台 CI 全绿，见 §30.1「M2.5 T0 实际状态」）；
-   **M2.5 T1 已完成**（`2b9882c`，三平台 CI 全绿，见 §30.1「M2.5 T1 实际状态」），
-   **当前主动暂停，T2（measure identity）启动需用户明确指令**；
+   **M2.5 T1 已完成**（`2b9882c`，三平台 CI 全绿，见 §30.1「M2.5 T1 实际状态」）；
+   **M2.5 T2 已完成**（`218d143`，三平台 CI 全绿，见 §30.1「M2.5 T2 实际状态」），
+   **当前主动暂停，T3（timeline）启动需用户明确指令**；若真实语料已恢复，进入 T3 前先对
+   corpus#10 / #11 做一次只读 probe（量化中段零时值小节导致的连续 tier-3 范围）；
 4. M2.5 封板后再规划 M3A（source/save/history）→ M3B（selection + 三向同步）→ M3C（可视化编辑）。
 ```
 

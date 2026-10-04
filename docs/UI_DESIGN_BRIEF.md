@@ -1,7 +1,8 @@
 # Muse Next — UI 设计需求说明（M3 前置）
 
-> 版本：v1.3.3 — 2026-10-04：附录 A 诊断码 48 → 49（M2.5 T1 追加 `system.group-declaration-ignored`）；第 41 条话术随 T1 分组边界修正
-> 上一版：v1.3.2 — 2026-10-04：附录 A 诊断码 39 → 48（M2.5 T0 追加 9 条 system / chord 码）；第 29 条改注为遗留码
+> 版本：v1.3.4 — 2026-10-04：附录 A 第 43 / 44 条话术随 M2.5 T2 诊断分工修正（总时值不等归 timing，不再称结构冲突）
+> 上一版：v1.3.3 — 2026-10-04：附录 A 诊断码 48 → 49（M2.5 T1 追加 `system.group-declaration-ignored`）；第 41 条话术随 T1 分组边界修正
+> （v1.3.2 — 2026-10-04：附录 A 诊断码 39 → 48（M2.5 T0 追加 9 条 system / chord 码）；第 29 条改注为遗留码）
 > （v1.3.1 — 2026-09-22：单个系统不跨页；M2.5 只做 page layout model / system-page 分配，Print Preview/打印/PDF 仍属 M5）
 > （v1.3 — 2026-09-22：M2.5 架构边界修正（chord overlay、system 高度、
 > bracket 语义、同名和弦图）；10.17 / 10.18 正式裁决）
@@ -971,8 +972,8 @@ loading / error（如适用）八态，浅色与深色各一套。
 | 40 | `system.group-span-overflow` | warning | 方括号要连接的声部比实际声部多，已只连接现有的声部 |
 | 41 | `system.connector-not-modeled` | info | 花括号 / 竖线连接暂不绘制，这条连接声明不参与分组 |
 | 42 | `system.measure-count-mismatch` | warning | 同一行谱里各声部的小节数不一样，已从头对齐，缺少的小节留空 |
-| 43 | `system.measure-structure-conflict` | warning | 这一小节在各声部的结构不一致，只对齐小节边界，小节内各自排列 |
-| 44 | `system.measure-timing-degraded` | info | 这一小节无法按时值跨声部对齐，各声部在小节内各自排列 |
+| 43 | `system.measure-structure-conflict` | warning | 这一小节在各声部的收尾小节线或小节形态不一致，只对齐小节边界，小节内各自排列 |
+| 44 | `system.measure-timing-degraded` | info | 这一小节各声部的总时值不同（或时值无法确定），不做跨声部时间对齐，各声部在小节内各自排列 |
 | 45 | `chord.name-ambiguous` | warning | 有多个同名和弦图，无法确定用哪一个，只显示和弦名 |
 | 46 | `chord.symbol-conflict` | warning | 同一位置的不同声部标了不同的和弦，已分别显示 |
 | 47 | `chord.diagram-collision` | info | 和弦图挤在一起放不下，这个和弦只显示名称 |
@@ -982,8 +983,9 @@ loading / error（如适用）八态，浅色与深色各一套。
 > 上表即 `RENDER_DIAGNOSTIC_CODES` 的全部 49 项（第 6 行 `relation.endpoint-missing`
 > 被多处复用，但只是一个常量）。第 40–49 行是 M2.5 的 system / chord 码（40–48 由
 > T0 按冻结方案预先定义，49 是 T1 经用户批准追加），级别取自方案。其中 40 / 41 / 49
-> 已由 T1 的 `groupVoices` 产出，但**尚未接入渲染管线与 UI**（T4 composer 接入）；
-> 42–48 分别在 T2 / T6 / T9a 落地；第 29 行是遗留码，保留仅为兼容。
+> 由 T1 的 `groupVoices` 产出，42 / 43 / 44 由 T2 的 `alignMeasures` 产出（44 在 T3 还会因
+> 时值不可知 / tuplet 发放），但**均尚未接入渲染管线与 UI**（T4 composer 接入）；45–48 在
+> T6 / T9a 落地；第 29 行是遗留码，保留仅为兼容。
 
 ### 附录 B — 解析诊断码分域摘要（`jcx.*`，66 条）
 
