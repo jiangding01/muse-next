@@ -20,7 +20,7 @@ M1.8「Round-trip Guardrails」已封板。**M2 — Notation Rendering T0–T9 �
 T5.2 real-world hardening、TAB 六线谱、Staff + VexFlow adapter、T8 render
 matrix（C1/C2/C3 三条契约对四种记谱的用例矩阵）、T9 文档封板均已完成，**M2 已于 2026-09-22 封板**（seal 前 push 的 CI run
 35700198783 三平台全绿）。M3 之前插入 **M2.5 Score System Layout**（方案冻结 v1.0），
-T0、T1（声部视觉分组）、T2（跨声部小节对齐）已于 2026-10-04 完成，T3 待启动。四种记谱（Chord / Jianpu
+T0、T1（声部视觉分组）、T2 / T2.1（跨声部小节对齐与错位锁存）已于 2026-10-04 完成，T3 待启动。四种记谱（Chord / Jianpu
 / TAB / Staff）均可渲染，支持缩放与诊断面板。现状、遗留债务与恢复位置见
 `HANDOFF.md` §30.1「M2 进行中状态」。
 
@@ -81,6 +81,8 @@ T0、T1（声部视觉分组）、T2（跨声部小节对齐）已于 2026-10-04
     `npm test` 之后新增 fixture 矩阵报告步骤。
 
 ### Changed
+
+- M2.5 Score System Layout T2.1（2026-10-04，`9037351`）：跨声部小节对齐新增「错位锁存」——某个小节出现孤立小节线对有时值内容的小节时，此后本组小节不再做跨声部时间对齐（只保留公共边界与宽度），避免把错开一小节的内容误当成对齐；新增 `system/measureFeatures.ts`。尚未接入渲染管线，渲染结果无变化。
 
 - M2.5 Score System Layout T2（2026-10-04，`218d143`）：新增 `src/notation/system/measureIdentity.ts`，把同一 system group 内各声部的小节按序号前缀对齐（不做错位搜索），逐小节比较收尾小节线、孤立小节线与绝对时值总量，标出不兼容的小节并发放 `measure-count-mismatch` / `measure-structure-conflict` / `measure-timing-degraded`；新增 `system/timedDuration.ts` 计时分类。尚未接入渲染管线，渲染结果无变化。
 
