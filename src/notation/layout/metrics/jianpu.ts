@@ -49,8 +49,17 @@ export const JIANPU_METRICS = {
   beamFirstOffset: 5,
   /** 相邻两条减时线的间距。Phase B 才调整，本次不动。 */
   beamGap: 3,
-  /** 单条减时线的水平长度。Phase B 才调整，本次不动。 */
+  /**
+   * 单条减时线的水平长度。M2.5 T3.5 起只用于**未入组单音**（逐音画法 `[x, x + beamLength]`，raw / 缺席
+   * `M:` 回归门要求不变）；入组后横线覆盖 `[x首 − h, x末 + h]`（`jianpuBeams.ts`，用户裁决 Q10-a）。
+   */
   beamLength: 12,
+  /**
+   * beam 组横线的线粗（M2.5 T3.5，用户裁决 Q9-d）：数值继承既有 `.jianpu-beam` 的 `stroke-width: 1.4`，
+   * 本期不做视觉加粗。**只有 beam 组**消费它（`toSvg.ts` 的呈现属性）；未入组单音的减时线仍由
+   * `.jianpu-beam` 的 CSS 决定，不读本值（raw / 缺席 `M:` 回归门要求其 SVG 不变）。
+   */
+  beamThickness: 1.4,
   /**
    * 第一条延音线相对数字左边界（`digitGlyphWidthRatio` 折算的数字半宽 + 小间隙）的水平
    * 偏移（U-Polish Phase A：14 → 6，item 2「与数字等距」：取与 `dashGap` 相同的值，让

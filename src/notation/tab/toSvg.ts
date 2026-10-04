@@ -53,6 +53,7 @@ import type {
   TabTextGlyph,
   TabTextNode,
 } from './tabGlyphs';
+import type { TabBeamGroup } from './tabBeams';
 import type { TabDurationGlyphs } from './tabDurationGlyphs';
 import type { TabRelationLine } from './tabRelations';
 import type { TabStrokeMark } from './tabStrokes';
@@ -248,6 +249,21 @@ function relationLineToSvg(relation: TabRelationLine): SvgNode {
   );
 }
 
+/**
+ * beam 组（M2.5 T3.5）：一组一个 `<g>`。横梁用独立的 `tab-beam-line`（CSS 只给颜色、**不设
+ * stroke-width**），粗细由 `beamThickness` metric 的呈现属性决定——若沿用 `tab-beam`，类规则的
+ * `stroke-width` 会覆盖呈现属性，metric 就只是名义消费（用户裁决 Q9-d：SVG 必须实际消费）。
+ */
+function beamGroupToSvg(group: TabBeamGroup, voiceId: TabLayout['voiceId']): SvgNode {
+  const lines = group.lines.map(({ segment }) =>
+    element('line', {
+      x1: segment.x1, y1: segment.y1, x2: segment.x2, y2: segment.y2,
+      class: 'tab-beam-line', 'stroke-width': TAB_METRICS.beamThickness,
+    }),
+  );
+  return element('g', { class: 'tab-beam-group', ...anchorAttrs({ kind: 'voice', voiceId }) }, lines);
+}
+
 function strokeMarkToSvg(mark: TabStrokeMark): SvgNode {
   return element(
     'g',
@@ -259,13 +275,14 @@ function strokeMarkToSvg(mark: TabStrokeMark): SvgNode {
 /**
  * TAB 布局入口。纯函数：只读 `layout`，构造新的 `SvgNode` 树，不修改输入。
  *
- * 子节点顺序固定（staffLines → nodes → relations → strokes），与 `TabLayout` 的
- * 字段声明顺序一致——保证 `serializeSvg` 的输出对同一输入逐字符确定。
+ * 子节点顺序固定（staffLines → nodes → beams → relations → strokes）：beam 组紧跟节点画在符干之上
+ * （M2.5 T3.5；没有组时不产出任何元素）——保证 `serializeSvg` 的输出对同一输入逐字符确定。
  */
 export function tabToSvg(layout: TabLayout): SvgNode {
   const children: SvgNode[] = [
     ...layout.staffLines.map(staffLinesToSvg),
     ...layout.nodes.map(nodeToSvg),
+    ...layout.beams.map((group) => beamGroupToSvg(group, layout.voiceId)),
     ...layout.relations.map(relationLineToSvg),
     ...layout.strokes.map(strokeMarkToSvg),
   ];

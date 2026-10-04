@@ -90,7 +90,13 @@ export function buildVoiceRender(voice: RenderVoice, ctx: VoiceRenderContext): V
       };
     }
     if (style === 'tab') {
-      const tabCtx: TabContext = { index: ctx.index, measurer: ctx.measurer, availableWidth: ctx.availableWidth };
+      // `meter` 只做数据透传（M2.5 T3.5，用户裁决 Q2-a）：beam 分组与刻印全在 `notation/tab/**`。
+      const tabCtx: TabContext = {
+        index: ctx.index,
+        measurer: ctx.measurer,
+        availableWidth: ctx.availableWidth,
+        ...(ctx.score.meter === undefined ? {} : { meter: ctx.score.meter }),
+      };
       const layout = layoutTab(voice, tabCtx);
       return {
         kind: 'tab',

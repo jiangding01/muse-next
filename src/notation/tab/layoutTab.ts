@@ -29,13 +29,15 @@
  * 两者都只消费「节点的位置」这一个已算好的结果，不参与事件排布，因此放在节点循环
  * 之后一次性调用即可，不影响两趟布局本身。
  *
+ * **beam 刻印**（M2.5 T3.5）：`ctx.meter` 给出拍单位时，`tabBeams.ts` 先出分组计划与组级列宽需求，
+ * 节点建好后再落横梁（只替换组成员的符干 / 逐音减时线，组本身住在 `TabLayout.beams`，不进 `nodes`）。
+ *
  * 本步**不做**：`toSvg`、renderer 接入（T6.4）。
  */
 
-import type { DomainIndex, VoiceId } from '../../domain';
+import type { DomainIndex, Meter, VoiceId } from '../../domain';
 import { TAB_METRICS } from '../layout/metrics';
 import type { System } from '../layout/primitives';
-import { spaceItems } from '../layout/spacing';
 import type { SpacedSlot } from '../layout/spacing';
 import { layoutSystems, restackSystems, splitMeasures } from '../layout/systems';
 import type { MeasureSlice } from '../layout/systems';
@@ -44,13 +46,15 @@ import { collectRenderDiagnostics } from '../model/diagnostics';
 import type { RenderDiagnosticDraft } from '../model/diagnostics';
 import type { RenderDiagnostic, RenderItem, RenderVoice } from '../model/types';
 import { requiredSystemDepth } from './tabDurationGlyphs';
+import { engraveTabBeams, planTabBeams, tabMeasureSpacing } from './tabBeams';
+import type { TabBeamGroup } from './tabBeams';
 import { buildStaffLines } from './tabGlyphs';
 import type { DraftSink, TabNode, TabStaffLines } from './tabGlyphs';
 import { buildTabNode } from './tabEventNodes';
 import type { Cursor } from './tabEventNodes';
 import { buildTabRelations } from './tabRelations';
 import type { TabRelationLine } from './tabRelations';
-import { durationOf, widenForTabGlyphs } from './tabSlotWidths';
+import { durationOf } from './tabSlotWidths';
 import { buildTabStrokes } from './tabStrokes';
 import type { TabStrokeMark } from './tabStrokes';
 
@@ -66,6 +70,11 @@ export interface TabContext {
   readonly measurer: TextMeasurer;
   /** 容器可用宽度（abstract unit）：贪心换行的唯一阈值（D7）。 */
   readonly availableWidth: number;
+  /**
+   * 文档拍号（M2.5 T3.5，用户裁决 Q2-a）：只用于 beam 分组（`layout/beamGroups.ts`），不参与列宽。
+   * 缺席 / raw / 表外拍号 → 不分组，输出与改造前逐字段相同（`beams` 恒为 `[]`）。
+   */
+  readonly meter?: Meter;
 }
 
 export interface TabLayout {
@@ -79,6 +88,8 @@ export interface TabLayout {
   readonly relations: readonly TabRelationLine[];
   /** 单音 stroke 记号（T6.3，spec §26.4）。 */
   readonly strokes: readonly TabStrokeMark[];
+  /** beam 组（M2.5 T3.5）：组级 engraving 数据，**不进 `nodes`**（C1）；不分组时为 `[]`。 */
+  readonly beams: readonly TabBeamGroup[];
   readonly width: number;
   readonly height: number;
   readonly diagnostics: readonly RenderDiagnostic[];
@@ -102,9 +113,8 @@ function extraSystemHeight(measureItems: readonly (readonly RenderItem[])[]): nu
 /** TAB 布局入口。 */
 export function layoutTab(voice: RenderVoice, ctx: TabContext): TabLayout {
   const measures = splitMeasures(voice.items);
-  const spacings = measures.map((measure) =>
-    widenForTabGlyphs(spaceItems(measure.items, measure.startIndex), measure.items, ctx.measurer),
-  );
+  const plans = planTabBeams(measures, voice, ctx.meter);
+  const spacings = measures.map((measure, i) => tabMeasureSpacing(measure, plans[i], ctx.measurer));
   const geometry = {
     availableWidth: ctx.availableWidth,
     systemHeight: TAB_METRICS.systemHeight,
@@ -166,6 +176,8 @@ export function layoutTab(voice: RenderVoice, ctx: TabContext): TabLayout {
   // 与刚建好的 `nodeByEvent`——与节点构造本身顺序无关，放在节点循环之后即可。
   const { lines: relations } = buildTabRelations(voice, ctx.index, nodeByEvent, systems, sink);
   const { strokes } = buildTabStrokes(voice, nodeByEvent, sink);
+  // beam 只替换组成员节点的符干 / 逐音减时线（x、y、宽度与 anchor 不变），关系与 stroke 不受影响。
+  const engraved = engraveTabBeams(nodes, plans);
 
   const lastSystem = systems[systems.length - 1];
   return {
@@ -173,10 +185,11 @@ export function layoutTab(voice: RenderVoice, ctx: TabContext): TabLayout {
     systems,
     measures,
     slots,
-    nodes,
+    nodes: engraved.nodes,
     staffLines: systems.map((system) => buildStaffLines(system)),
     relations,
     strokes,
+    beams: engraved.beams,
     width: systems.reduce((max, system) => Math.max(max, system.box.width), 0),
     height: lastSystem === undefined
       ? TAB_METRICS.headerHeight

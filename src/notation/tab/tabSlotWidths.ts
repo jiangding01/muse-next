@@ -103,10 +103,17 @@ export function durationOf(item: RenderItem): Rational | undefined {
   return undefined;
 }
 
-/** 一个渲染项的时值装饰所需水平延展；`duration === undefined` 视为 0（无装饰可画）。 */
-function requiredDurationSlotWidth(item: RenderItem): number {
+/**
+ * 一个渲染项的时值装饰所需水平延展；`duration === undefined` 视为 0（无装饰可画）。
+ * `beamed`（M2.5 T3.5，用户裁决 Q11）：该音已连进 beam 组，横梁是组级产物，它不再各自承担
+ * 「一条减时线 + 尾部留白」这一项（按 `beams: 0` 求延展，附点等其余项照旧）；组级间距由
+ * `layout/beamGroups.ts` 的 `equalizeGroupSpacing` 表达。
+ */
+function requiredDurationSlotWidth(item: RenderItem, beamed: boolean): number {
   const duration = durationOf(item);
-  return duration === undefined ? 0 : requiredDurationExtent(decomposeDuration(duration));
+  if (duration === undefined) return 0;
+  const decomposition = decomposeDuration(duration);
+  return requiredDurationExtent(beamed && decomposition.kind === 'glyph' ? { ...decomposition, beams: 0 } : decomposition);
 }
 
 /**
@@ -114,13 +121,13 @@ function requiredDurationSlotWidth(item: RenderItem): number {
  * 装饰的水平延展」两者的较大值——两个下界来自不同的字形（品位数字 vs 符干/减时线/
  * 延音短横线），互不包含对方，故不能只核实其中一个。
  */
-function requiredSlotWidth(item: RenderItem, measurer: TextMeasurer): number {
+function requiredSlotWidth(item: RenderItem, measurer: TextMeasurer, beamed: boolean): number {
   const textWidth = widestFretTextWidth(item, measurer);
   const fretRequirement = textWidth === 0 ? 0 : textWidth + 2 * TAB_METRICS.fretPaddingX;
   return Math.max(
     fretRequirement,
     requiredStrokeSlotWidth(item, measurer),
-    requiredDurationSlotWidth(item),
+    requiredDurationSlotWidth(item, beamed),
   );
 }
 
@@ -135,19 +142,21 @@ function requiredSlotWidth(item: RenderItem, measurer: TextMeasurer): number {
  * 事实，加宽不改变后者的解释。
  *
  * 无变化时返回**同一个对象引用**（`spacing`），方便调用方 / 测试用引用相等判断
- * 「这个 measure 完全没被动过」。
+ * 「这个 measure 完全没被动过」。`beamed` 是本 measure 内已连进 beam 组的 item 下标（缺省为空 =
+ * 改造前行为）。
  */
 export function widenForTabGlyphs(
   spacing: MeasureSpacing,
   items: readonly RenderItem[],
   measurer: TextMeasurer,
+  beamed: ReadonlySet<number> = new Set(),
 ): MeasureSpacing {
   const effectiveWidths = spacing.slots.map((spacedSlot, offset) => {
     // overlay 列恒零宽（`layout/spacing.ts` 的 `SpacedSlot` 语义）：加宽它就等于把
     // 和弦符号重新变回一个占位列，正是 T6.5 要消掉的空档。
     if (spacedSlot.widthKind === 'overlay') return SLOT_SPACING_METRICS.overlaySlotWidth;
     const item = items[offset];
-    const required = item === undefined ? 0 : requiredSlotWidth(item, measurer);
+    const required = item === undefined ? 0 : requiredSlotWidth(item, measurer, beamed.has(offset));
     return Math.max(spacedSlot.slot.width, required);
   });
 

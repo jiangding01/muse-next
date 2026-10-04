@@ -7,6 +7,9 @@
  * anchor key 一致性、stroke 记号文本。语料相关的断言只用合成 fixture，不引用任何
  * 真实曲目。
  */
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
@@ -203,13 +206,13 @@ describe('tabToSvg —— 关系连线（跨行谱切段，anchor key 一致）'
 });
 
 describe('tabToSvg —— stroke 记号文本', () => {
-  it('V[...] 单音级 stroke 画出原字符文本，携带 event 级 anchor', () => {
+  it('单音级 V stroke 画成 ↓（M2.5 T3.5 §Q8.4），携带 event 级 anchor', () => {
     const result = layout(tabHeader('Va0 a1 |'));
     const svg = tabToSvg(result);
     const strokeGroup = svg.children?.find((child) => classOf(child) === 'tab-stroke-group');
     expect(strokeGroup).toBeDefined();
     const text = strokeGroup?.children?.find((child) => child.tag === 'text');
-    expect(text?.text).toBe('V');
+    expect(text?.text).toBe('↓');
     expect(strokeGroup?.attrs['data-anchor-key']).toBeDefined();
     expect(strokeGroup?.attrs['data-event-id']).toBeDefined();
   });
@@ -276,5 +279,63 @@ describe('全 fixture glob 冒烟 —— 只对 tab 声部跑 tab 流水线（�
 
     expect(tabVoiceCount).toBeGreaterThan(0);
     expect(nonTabVoiceCount).toBeGreaterThan(0);
+  });
+});
+
+describe('tabToSvg —— beam 组（M2.5 T3.5）', () => {
+  function beamLayout(body: string, meterLine: string): TabLayout {
+    const loadedScore = loadJcx(`%MUSE2\nX:1\n${meterLine}\nL:1/4\nK:C\nV:1 style=tab\n${body}\n`);
+    const voice = buildRenderScore({ score: loadedScore.score, index: loadedScore.index }).voices[0];
+    if (voice === undefined) throw new Error('fixture 必须至少有一个声部');
+    const meter = loadedScore.score.meter === undefined ? {} : { meter: loadedScore.score.meter };
+    return layoutTab(voice, { index: loadedScore.index, measurer, availableWidth: WIDE, ...meter });
+  }
+
+  it('每组一个 tab-beam-group（voice 级 anchor），排在节点之后、关系之前；横线用 tab-beam-line 且 stroke-width 取 metric', () => {
+    const layoutResult = beamLayout('a0/ a1// a2// a3/ a4/ |', 'M:4/4');
+    const svg = tabToSvg(layoutResult);
+    const classes = (svg.children ?? []).map(classOf);
+    const groups = (svg.children ?? []).filter((child) => classOf(child) === 'tab-beam-group');
+    expect(groups).toHaveLength(2);
+    const lastNode = classes.reduce((last, c, i) => (c.startsWith('tab-node') ? i : last), -1);
+    const firstBeam = classes.indexOf('tab-beam-group');
+    expect(lastNode).toBeGreaterThan(0);
+    expect(firstBeam).toBe(lastNode + 1);
+    expect(groups[0]?.attrs['data-anchor-key']).toBe(anchorKey({ kind: 'voice', voiceId: layoutResult.voiceId }));
+    const lines = groups.flatMap((group) => group.children ?? []);
+    expect(lines.map((line) => [line.tag, line.attrs['class'], line.attrs['stroke-width']])).toEqual(
+      layoutResult.beams.flatMap((group) => group.lines.map(() => ['line', 'tab-beam-line', TAB_METRICS.beamThickness])),
+    );
+  });
+
+  it('M:C 时没有任何 beam 组元素，SVG 与不传 meter 逐字符相同', () => {
+    const raw = serializeSvg(tabToSvg(beamLayout('a0/ a1/ a2/ a3/ |', 'M:C')));
+    expect(raw).not.toContain('tab-beam-group');
+    expect(raw).toBe(serializeSvg(tabToSvg(layout(`%MUSE2\nX:1\nM:C\nL:1/4\nK:C\nV:1 style=tab\na0/ a1/ a2/ a3/ |\n`))));
+  });
+});
+
+describe('beam 组线粗真的由 metric 决定（独立 review MEDIUM，用户裁决 Q9-d）', () => {
+  const css = readFileSync(join(import.meta.dirname, '../../../src/renderer/styles/global.css'), 'utf8');
+  /** 所有选择器里含 `selector` 的规则体。 */
+  const rulesFor = (selector: string): string[] =>
+    [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)].filter((m) => (m[1] ?? '').split(',').some((s) => s.trim().split(/\s+/).includes(selector))).map((m) => m[2] ?? '');
+
+  it('.tab-beam-line / .jianpu-beam-line 只给颜色、没有任何规则设 stroke-width（否则会覆盖呈现属性）', () => {
+    for (const selector of ['.tab-beam-line', '.jianpu-beam-line']) {
+      const bodies = rulesFor(selector);
+      expect(bodies.length).toBeGreaterThan(0);
+      expect(bodies.some((body) => /stroke\s*:/.test(body))).toBe(true);
+      expect(bodies.some((body) => /stroke-width/.test(body))).toBe(false);
+    }
+  });
+
+  it('两个 toSvg 的 beam 组分支读 metric，不写字面量线粗', () => {
+    for (const [file, metric] of [['tab/toSvg.ts', 'TAB_METRICS.beamThickness'], ['jianpu/toSvg.ts', 'JIANPU_METRICS.beamThickness']] as const) {
+      const src = readFileSync(join(import.meta.dirname, '../../../src/notation', file), 'utf8');
+      const body = /function beamGroupToSvg[\s\S]*?\n}/.exec(src)?.[0] ?? '';
+      expect(body).toContain(`'stroke-width': ${metric}`);
+      expect(body).not.toMatch(/'stroke-width':\s*[\d.]+/);
+    }
   });
 });

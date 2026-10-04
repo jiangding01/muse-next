@@ -120,6 +120,9 @@ button { cursor: pointer; }
 .jianpu-label-text { fill: #6b6459; }
 .jianpu-lyric { fill: #33312d; text-anchor: middle; }
 .jianpu-beam, .jianpu-dash, .jianpu-barline-line, .jianpu-unit-length-line { stroke: #23211d; stroke-width: 1.4; }
+/* M2.5 T3.5：beam 组横线只给颜色，线粗来自 SVG 呈现属性（JIANPU_METRICS / TAB_METRICS.beamThickness）；
+   这里写 stroke-width 会覆盖它，metric 就成了名义消费。 */
+.jianpu-beam-line, .tab-beam-line { stroke: #23211d; }
 /* 反复记号/终止线的粗线：U-Polish Phase A 二次裁决（Electron 实机截图）从 3 降到 2.2——
    粗细层级仍明确（普通线 1.4），但不再明显重于主数字本身。 */
 .jianpu-barline-thick { stroke-width: 2.2; }

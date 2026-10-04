@@ -2,12 +2,16 @@
  * notation/tab —— 单音 stroke（拨弦 / 扫弦方向）记号的几何（M2 方案 §3.3，T6.3；
  * spec §26.4，`CONFIRMED BY DOCUMENTATION`，值域开放）。
  *
- * **渲染做法是如实呈现，不是二次解释**：`TabNote.stroke` 原样保留的是原字符
- * （`V`/`U`/`A`/`B`/`P`/`H`/`'`/`S`/`T`），画的也是原字符本身——不把 `V`/`U` 画成箭头，
- * 那是把 help 符号表的字面含义换成了我们自己的图形约定，读者对不上原文。字符统一画在
- * 该音所在列、第 1 弦上方（产品决定，`TAB_METRICS.strokeOffsetY`）。
+ * **M2.5 T3.5 起的产品决定反转（§Q8.4，用户裁决 Q12-a）**：T6.3 原先一律画原字符，论证是「把 `V`/`U`
+ * 画成箭头等于用我们自己的图形约定替换 help 符号表的字面含义」。现在只对**方向明确**的两个符号做替换：
+ * `V`（下拨）→ `↓`、`U`（上拨）→ `↑`（help 符号表等级 `CONFIRMED BY DOCUMENTATION`）；`A`/`B`/`P`/`H`/
+ * `'`/`S`/`T` 不是方向记号，**仍画原字符**（画箭头即臆造）。多字符逐字符映射；记号仍是文本字形，
+ * 仍是 overlay、不进 `layout.nodes`，`TabStrokeMark` 的类型与 anchor 归属不变；诊断（含 `H` 的
+ * `tabStrokeHoldInferred`）照旧按**原字符**判定。列宽仍按原字符量（`tabSlotWidths.ts`），确定性量宽器下
+ * `↓`/`↑` 与 `V`/`U` 等宽。字符画在该音所在列、第 1 弦上方（`TAB_METRICS.strokeOffsetY`）；与和弦名 /
+ * 和弦图的纵向次序（F-11）是 T6 的集成约定，本步只保证箭头在第 1 弦之上。
  *
- * **组级 vs 单音级**：单音级与组级方向记号均按原字符显示。`TabGroupEvent.stroke`
+ * **组级 vs 单音级**：单音级与组级方向记号按同一规则显示（`V`/`U` 箭头，其余原字符）。`TabGroupEvent.stroke`
  * 自 2026-09-22（M2.5 formats preflight）起由 `src/formats/jcx/parse/body/scanTab.ts`
  * 的 `scanTopLevelItems` 回填（`V[...]` 的 `V` 绑进事件本身），下面
  * `tabGroupStrokesOf` 的组级画法随之可达，与成员级 stroke 拼进同一个记号槽。
@@ -33,6 +37,13 @@ export interface TabStrokesResult {
 
 /** help 2.1.4 符号表（spec §26.4）：`V`/`U`/`A`/`B`/`P`/`H`/`'`/`S`/`T` 九种。 */
 const STROKE_SYMBOL_TABLE = new Set(['V', 'U', 'A', 'B', 'P', "'", 'S', 'T', 'H']);
+
+/** §Q8.4：只有方向明确的 `V` / `U` 画成箭头，其余字符原样。 */
+const STROKE_ARROWS: Readonly<Record<string, string>> = { V: '↓', U: '↑' };
+
+export function strokeDisplayText(chars: readonly string[]): string {
+  return [...chars.join('')].map((ch) => STROKE_ARROWS[ch] ?? ch).join('');
+}
 
 function strokeGlyph(text: string, x: number, staffTop: number): TabTextGlyph {
   return glyph(text, x, staffTop + TAB_METRICS.strokeOffsetY, TAB_METRICS.strokeFontSize);
@@ -117,7 +128,7 @@ export function buildTabStrokes(
       anchor,
       eventId: item.eventId,
       systemIndex: node.systemIndex,
-      text: strokeGlyph(chars.join(''), node.x, node.y),
+      text: strokeGlyph(strokeDisplayText(chars), node.x, node.y),
     });
   }
 

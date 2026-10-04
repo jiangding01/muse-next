@@ -42,6 +42,7 @@ import {
   type JianpuTupletBracket,
   type JianpuUnitLengthMark,
 } from './jianpuGlyphs';
+import type { JianpuBeamGroup } from './jianpuBeams';
 import type { JianpuLayout } from './layoutJianpu';
 
 /** `Anchor` → `data-*` 属性表；`data-anchor-key` 对每个分支都写，其余按 `kind` 追加。 */
@@ -95,14 +96,12 @@ function textGlyphToSvg(glyph: JianpuTextGlyph, className: string): SvgNode {
   });
 }
 
+function segmentAttrs(segment: JianpuSegment): SvgAttrs {
+  return { x1: segment.x1, y1: segment.y1, x2: segment.x2, y2: segment.y2 };
+}
+
 function segmentToLine(segment: JianpuSegment, className: string): SvgNode {
-  return element('line', {
-    x1: segment.x1,
-    y1: segment.y1,
-    x2: segment.x2,
-    y2: segment.y2,
-    class: className,
-  });
+  return element('line', { ...segmentAttrs(segment), class: className });
 }
 
 function pitchGlyphsToSvg(glyphs: JianpuPitchGlyphs): readonly SvgNode[] {
@@ -123,6 +122,17 @@ function durationGlyphsToSvg(glyphs: JianpuDurationGlyphs): readonly SvgNode[] {
     }),
   );
   return [...beams, ...dashes, ...dots];
+}
+
+/**
+ * beam 组（M2.5 T3.5）：一组一个 `<g>`。横线用独立的 `jianpu-beam-line`（CSS 只给颜色、不设
+ * stroke-width），粗细由 `beamThickness` metric 的呈现属性实际决定（Q9-d，理由同 TAB）。
+ */
+function beamGroupToSvg(group: JianpuBeamGroup, voiceId: JianpuLayout['voiceId']): SvgNode {
+  const lines = group.lines.map((line) =>
+    element('line', { ...segmentAttrs(line.segment), class: 'jianpu-beam-line', 'stroke-width': JIANPU_METRICS.beamThickness }),
+  );
+  return element('g', { class: 'jianpu-beam-group', ...anchorAttrs({ kind: 'voice', voiceId }) }, lines);
 }
 
 function noteNodeChildren(node: JianpuNoteNode): readonly SvgNode[] {
@@ -296,6 +306,7 @@ export function jianpuToSvg(layout: JianpuLayout): SvgNode {
   const children: SvgNode[] = [
     ...layout.labels.map(labelToSvg),
     ...layout.nodes.map(nodeToSvg),
+    ...layout.beams.map((group) => beamGroupToSvg(group, layout.voiceId)),
     ...layout.tuplets.map(tupletToSvg),
     ...layout.arcs.map(arcToSvg),
     ...layout.lyrics.map(lyricToSvg),

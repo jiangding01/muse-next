@@ -155,13 +155,22 @@ describe('歌词首行字形顶 > 低八度点底（T5.2-C：守的是这一条�
   it('断言 D（U-Polish Phase A item 3）：固定层序「数字 → 减时线 → 低八度点」——不论减时线条数，低八度点恒在最深一条减时线之下，从不相交也不翻转', () => {
     // `L:1/32`：四分音符基准下 32 分音符有 3 条减时线；`C,,` 是低两个八度（2 个低点）。
     // `L:1/4` 作为「无减时线」的对照组（0 条减时线场景）。
+    // M2.5 T3.5：同拍两音连成 beam 组后，减时线从节点移到 `layout.beams`；覆盖该数字的组横线同样计入，
+    // 并另跑一份 `M:C`（不分组、逐音画法）——两种画法下层序都必须成立，且比较不能是空的。
     const withBeams = layoutSource('C,, D,,|', 'M:4/4\nL:1/32\nK:C\n');
+    const withBeamsUngrouped = layoutSource('C,, D,,|', 'M:C\nL:1/32\nK:C\n');
     const withoutBeams = layoutSource('C,, D,,|', 'M:4/4\nL:1/4\nK:C\n');
+    expect(withBeams.beams.length).toBe(1);
+    expect(withBeamsUngrouped.beams).toEqual([]);
+    let compared = 0;
 
-    for (const layoutResult of [withBeams, withoutBeams]) {
+    for (const layoutResult of [withBeams, withBeamsUngrouped, withoutBeams]) {
       for (const node of layoutResult.nodes) {
         if (node.kind !== 'note') continue;
-        const beamYs = node.duration.beams.flatMap((beam) => [beam.y1, beam.y2]);
+        const groupLines = layoutResult.beams
+          .flatMap((group) => group.lines)
+          .filter((line) => line.segment.x1 <= node.x && node.x <= line.segment.x2 && line.segment.y1 > node.y);
+        const beamYs = [...node.duration.beams, ...groupLines.map((line) => line.segment)].flatMap((beam) => [beam.y1, beam.y2]);
         const lowDotYs = node.pitchGlyphs.octaveDots
           .filter((dot) => dot.y > node.y) // 只看低方向（below）的点
           .map((dot) => dot.y - JIANPU_METRICS.octaveDotRadius); // 点的上边缘
@@ -169,8 +178,10 @@ describe('歌词首行字形顶 > 低八度点底（T5.2-C：守的是这一条�
         const deepestBeamY = Math.max(...beamYs);
         const shallowestDotEdge = Math.min(...lowDotYs);
         expect(shallowestDotEdge).toBeGreaterThan(deepestBeamY);
+        compared += 1;
       }
     }
+    expect(compared).toBe(4);
   });
 
   it('断言 D 续：减时线越多，低八度点整体越往下让（同一起点，单调不减），层序本身不因此翻转', () => {

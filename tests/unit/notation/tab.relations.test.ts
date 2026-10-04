@@ -455,13 +455,13 @@ describe('TAB 关系连线 —— 整体不变量', () => {
 // ===========================================================================
 
 describe('TAB stroke —— 单音记号（spec §26.4）', () => {
-  it('Va5|：V 记号画在第 1 弦上方，x 落在该列内', () => {
+  it('Va5|：V 画成 ↓（M2.5 T3.5 §Q8.4 / Q12），位于第 1 弦上方，x 落在该列内', () => {
     const result = layout(tabHeader('Va5 |'));
     expect(result.strokes).toHaveLength(1);
     const mark = result.strokes[0];
     const note = nodesOfKind(result, 'tabNote')[0];
     if (mark === undefined || note === undefined) throw new Error('缺少 stroke 记号或 tabNote 节点');
-    expect(mark.text.text).toBe('V');
+    expect(mark.text.text).toBe('↓');
     expect(mark.text.x).toBeGreaterThanOrEqual(note.x);
     expect(mark.text.x).toBeLessThan(note.x + note.width);
     expect(mark.text.y).toBeLessThan(stringY(note.y, 1));
@@ -524,10 +524,10 @@ describe('TAB stroke —— tabGroupStrokeNotModeled（2026-09-22 起不再发�
 });
 
 describe('TAB stroke —— tabGroup 成员级 stroke（[Va0/Ub2] 实测可达，parse 逐成员填充）', () => {
-  it('两个成员各带 stroke → 一个事件只画一个记号，字符按成员顺序拼接为 "VU"', () => {
+  it('两个成员各带 stroke → 一个事件只画一个记号，按成员顺序拼接后逐字符映射为 "↓↑"', () => {
     const result = layout(tabHeader('[Va0/Ub2] |'));
     expect(result.strokes).toHaveLength(1);
-    expect(result.strokes[0]?.text.text).toBe('VU');
+    expect(result.strokes[0]?.text.text).toBe('↓↑');
   });
 
   it('槽宽下界并入拼接后的 stroke 文本宽度：槽宽 ≥ "VU" 的量出宽度 + 2×fretPaddingX', () => {
@@ -549,7 +549,7 @@ describe('TAB stroke —— tabGroup 成员级 stroke（[Va0/Ub2] 实测可达�
 
     const layoutResult = layout(tabHeader('V[a0/b2] |'));
     expect(layoutResult.strokes).toHaveLength(1);
-    expect(layoutResult.strokes[0]?.text.text).toBe('V');
+    expect(layoutResult.strokes[0]?.text.text).toBe('↓');
     // `tabStrokes.ts` 已删掉那条无条件 sink：组级 stroke 现在直接画出，不再需要
     // 「组不支持」这条降级说明；code 本身仍保留在 diagnostics.ts（兼容/历史）。
     const hits = layoutResult.diagnostics.filter((d) => d.code === CODES.tabGroupStrokeNotModeled);
@@ -621,5 +621,47 @@ describe('TAB 关系连线 —— 跨行谱续行段的最小可见跨度（T6.5
     if (from === undefined || to === undefined) throw new Error('fixture 必须有两个 tabNote');
     expect(line.x1).toBe(from.fret.backdrop.origin.x + from.fret.backdrop.width + TAB_METRICS.relationEndGap);
     expect(line.x2).toBe(to.fret.backdrop.origin.x - TAB_METRICS.relationEndGap);
+  });
+});
+
+describe('TAB stroke —— V/U → ↓/↑（M2.5 T3.5 §Q8.4，用户裁决 Q12-a）', () => {
+  it('U → ↑；A / B / P / H / \' / S / T 原样不变', () => {
+    expect(layout(tabHeader('Ua0 |')).strokes.map((mark) => mark.text.text)).toEqual(['↑']);
+    for (const ch of ['A', 'B', 'P', 'H', "'", 'S', 'T']) {
+      expect(layout(tabHeader(`${ch}a0 |`)).strokes.map((mark) => mark.text.text)).toEqual([ch]);
+    }
+  });
+
+  it('多字符逐字符映射：成员 V + 成员 B → "↓B"；组级 U 拼在最后', () => {
+    expect(layout(tabHeader('[Va0/Bb2] |')).strokes[0]?.text.text).toBe('↓B');
+    expect(layout(tabHeader('U[Va0/b2] |')).strokes[0]?.text.text).toBe('↓↑');
+  });
+
+  it('诊断按原字符：V / U 不发任何 stroke 诊断；H 的 tabStrokeHoldInferred 逐字段与单发 H 时相同', () => {
+    const codes = (text: string): string[] => layout(tabHeader(text)).diagnostics.map((d) => d.code);
+    expect(codes('Va0 Ua1 |').filter((code) => code.includes('stroke'))).toEqual([]);
+    const hold = layout(tabHeader('Ha0 |')).diagnostics.filter((d) => d.code === CODES.tabStrokeHoldInferred);
+    const holdNextToArrows = layout(tabHeader('Ha0 Va1 Ua2 |')).diagnostics.filter((d) => d.code === CODES.tabStrokeHoldInferred);
+    expect(hold).toHaveLength(1);
+    expect(holdNextToArrows).toEqual(hold);
+  });
+
+  it('箭头仍是 overlay：不进 nodes、anchor 指向该事件；列宽按原字符量，确定性量宽器下 ↓/↑ 与 V/U 等宽', () => {
+    const result = layout(tabHeader('Va0 a1 |'));
+    expect(result.nodes).toHaveLength(3);
+    const note = nodesOfKind(result, 'tabNote')[0];
+    expect(result.strokes[0]?.anchor).toEqual(note?.anchor);
+    const size = { fontSize: TAB_METRICS.strokeFontSize };
+    expect(measurer.measure('↓', size).width).toBe(measurer.measure('V', size).width);
+    expect(measurer.measure('↑', size).width).toBe(measurer.measure('U', size).width);
+  });
+
+  it('箭头在第 1 弦之上（F-11 的 T3.5 部分；和弦名 / 和弦图之上的次序是 T6 集成约定）', () => {
+    const result = layout(tabHeader('Va0 Ua1 |'));
+    const note = nodesOfKind(result, 'tabNote')[0];
+    for (const mark of result.strokes) {
+      expect(mark.text.y).toBeLessThan(stringY(note?.y ?? 0, 1));
+      expect(mark.text.y - mark.text.fontSize).toBeGreaterThanOrEqual((note?.y ?? 0) - TAB_METRICS.staffTopOffset);
+    }
   });
 });

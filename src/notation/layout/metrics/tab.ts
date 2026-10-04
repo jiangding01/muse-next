@@ -101,8 +101,18 @@ export const TAB_METRICS = {
   beamFirstOffset: 4,
   /** 相邻两条减时线的垂直间距（产品决定）。 */
   beamGap: 4,
-  /** 单条减时线的水平长度（产品决定）。 */
+  /**
+   * 单条减时线的水平长度（产品决定）。M2.5 T3.5 起语义改写（§Q8.3 + 用户裁决 Q7-a）：连成 beam 组后，
+   * 组内横梁长度由相邻成员的 x 差决定；本值只剩两种用途——**未入组单音**（退回符干 + 短线）的
+   * 那条短线，以及组内**孤立的多出层级**（beamlet，组首向右、其余向左）的长度。不另设 `beamHangLength`。
+   */
   beamLength: 8,
+  /**
+   * beam 组横梁（含 beamlet）的线粗（M2.5 T3.5，用户裁决 Q9-d）：数值继承既有 `.tab-beam` 的
+   * `stroke-width: 1.4`，本期不做视觉加粗。**只有 beam 组**消费它（`toSvg.ts` 的呈现属性）；未入组
+   * 单音的短线仍由 `.tab-beam` 的 CSS 决定，不读本值（raw / 缺席 `M:` 回归门要求其 SVG 不变）。
+   */
+  beamThickness: 1.4,
   /** 附点半径（产品决定）。 */
   augmentationDotRadius: 1.5,
   /**

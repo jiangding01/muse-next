@@ -563,4 +563,75 @@ describe('M2.5 架构守卫 —— system/ 依赖方向（§B.2 / §Q7.4）', ()
     expect(hit("// import { X } from '../jianpu/x';")).toEqual([]);
     expect(hit("import type { PageComposedSystemLayout } from './contracts';")).toEqual([]);
   });
+
+  // ---------------------------------------------------------------------------
+  // T3.5（用户裁决 Q1-a）：literal timing 原语下沉到 `layout/`，`system/` 只做 re-export 转接。
+  // ---------------------------------------------------------------------------
+
+  const LAYOUT_DIR = join(NOTATION_DIR, 'layout');
+  const ONSETS_FILE = join(LAYOUT_DIR, 'measureOnsets.ts');
+
+  /** 守卫 6：`layout/**` 对所有记谱开放，因此它绝不反向 import `system/**`（否则记谱目录经它绕回 system）。 */
+  function layoutToSystemViolations(file: string, source: string): string[] {
+    return collectSpecifiers(stripComments(source)).filter((spec) => {
+      const target = resolveSpec(file, spec);
+      return target !== undefined && isInside(target, SYSTEM_DIR);
+    });
+  }
+
+  /** 守卫 7：从 Domain 值导入 `add`（Rational 加法）的文件——literal onset 累计只允许一处。 */
+  function importsRationalAdd(source: string): boolean {
+    const re = /^\s*import\s*\{([^}]*)\}\s*from\s*['"](?:\.\.\/)+domain(?:\/rational)?['"]/gm;
+    return [...stripComments(source).matchAll(re)].some((m) => /(^|[\s,])add(\s|,|$)/.test(m[1] ?? ''));
+  }
+
+  const layoutFiles = files.filter((file) => isInside(file, LAYOUT_DIR));
+
+  it('守卫 6：layout/** 不 import system/**', () => {
+    expect(layoutFiles.length).toBeGreaterThan(0);
+    const bad = layoutFiles.flatMap((file) =>
+      layoutToSystemViolations(file, readFileSync(file, 'utf8')).map((spec) => `${rel(file)} → ${spec}`),
+    );
+    expect(bad).toEqual([]);
+  });
+
+  it('守卫 6 反例：system 下任何文件都被命中；注释与 layout 内部引用不被误判', () => {
+    const probeFile = join(LAYOUT_DIR, 'probe.ts');
+    expect(layoutToSystemViolations(probeFile, "import { x } from '../system/measureFeatures';")).toEqual([
+      '../system/measureFeatures',
+    ]);
+    expect(layoutToSystemViolations(probeFile, "import type { S } from '../system/contracts';")).toEqual([
+      '../system/contracts',
+    ]);
+    expect(layoutToSystemViolations(probeFile, "import { eventTiming } from './eventTiming';")).toEqual([]);
+    expect(layoutToSystemViolations(probeFile, "// import { x } from '../system/timeline';")).toEqual([]);
+  });
+
+  it('守卫 7：src/notation/** 里只有 layout/measureOnsets.ts 从 Domain 值导入 Rational `add`（唯一 literal onset 累计）', () => {
+    expect(existsSync(ONSETS_FILE)).toBe(true);
+    const importers = files.filter((file) => importsRationalAdd(readFileSync(file, 'utf8'))).map(rel);
+    expect(importers).toEqual(['layout/measureOnsets.ts']);
+  });
+
+  /** 守卫 7 补强（独立 review LOW-4）：命名空间导入 Domain（`import * as D` → `D.add`）会绕过具名检查。 */
+  function importsDomainNamespace(source: string): boolean {
+    return /^\s*import\s+(?:type\s+)?\*\s+as\s+\w+\s+from\s*['"](?:\.\.\/)+domain(?:\/\w+)?['"]/m.test(stripComments(source));
+  }
+
+  it('守卫 7 补强：src/notation/** 不以命名空间形式导入 Domain（否则 `D.add` 可绕过唯一累计检查）', () => {
+    expect(files.filter((file) => importsDomainNamespace(readFileSync(file, 'utf8'))).map(rel)).toEqual([]);
+    expect(importsDomainNamespace("import * as D from '../../domain';")).toBe(true);
+    expect(importsDomainNamespace("import * as R from '../../domain/rational';")).toBe(true);
+    expect(importsDomainNamespace("// import * as D from '../../domain';")).toBe(false);
+    expect(importsDomainNamespace("import * as svg from '../svg/node';")).toBe(false);
+  });
+
+  it('守卫 7 反例：单行 / 多行 / 别名位置的 add 都被识别；adder、注释、type 导入不被误判', () => {
+    expect(importsRationalAdd("import { ZERO, add } from '../../domain';")).toBe(true);
+    expect(importsRationalAdd("import {\n  add,\n  cmp,\n} from '../../../domain';")).toBe(true);
+    expect(importsRationalAdd("import { add } from '../../domain/rational';")).toBe(true);
+    expect(importsRationalAdd("import { adder } from '../../domain';")).toBe(false);
+    expect(importsRationalAdd("// import { add } from '../../domain';")).toBe(false);
+    expect(importsRationalAdd("import { cmp } from '../../domain';")).toBe(false);
+  });
 });

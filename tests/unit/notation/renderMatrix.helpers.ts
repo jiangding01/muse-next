@@ -174,7 +174,10 @@ export function layoutVoiceAs(
       return { notation, layout: layoutJianpu(voice, { score: head, index, measurer, availableWidth }) };
     }
     case 'tab':
-      return { notation, layout: layoutTab(voice, { index, measurer, availableWidth }) };
+      return {
+        notation,
+        layout: layoutTab(voice, { index, measurer, availableWidth, ...(score.meter === undefined ? {} : { meter: score.meter }) }),
+      };
     case 'staff':
       return { notation, layout: layoutStaff(voice, { score, index, measurer, availableWidth }) };
     default: {

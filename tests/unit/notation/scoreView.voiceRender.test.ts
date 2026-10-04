@@ -24,6 +24,7 @@ import { loadJcx } from '../../../src/formats/jcx';
 import { SCORE_VIEW_METRICS } from '../../../src/notation/layout/metrics';
 import { createDeterministicTextMeasurer } from '../../../src/notation/layout/textMeasurer';
 import { buildRenderScore } from '../../../src/notation/model/buildRenderScore';
+import { serializeSvg } from '../../../src/notation/svg/serializeSvg';
 import {
   buildVoiceRender, computeAvailableWidthUnits,
 } from '../../../src/renderer/components/notation/voiceRender';
@@ -74,6 +75,18 @@ describe('buildVoiceRender —— 按 voice.style 分派（tab 分支 T6.4；sta
     expect(render.voiceId).toBe(voice.voiceId);
     expect(render.width).toBeGreaterThan(0);
     expect(Array.isArray(render.diagnostics)).toBe(true);
+  });
+
+  it('M2.5 T3.5（Q2-a）：tab 分支把 score.meter 透传给 layoutTab——4/4 下八分连成 beam 组，M:C 不连', () => {
+    const svgOf = (meterLine: string): string => {
+      const loaded = loadJcx(`%MUSE2\nX:1\n${meterLine}\nL:1/4\nK:C\nV:1 style=tab\na0/ a1/ a2/ a3/ |\n`);
+      const voice = buildRenderScore({ score: loaded.score, index: loaded.index }).voices[0];
+      if (voice === undefined) throw new Error('fixture 必须至少有一个声部');
+      const render = buildVoiceRender(voice, { score: loaded.score, index: loaded.index, measurer, availableWidth: WIDE });
+      return render.kind === 'tab' ? serializeSvg(render.node) : '';
+    };
+    expect(svgOf('M:4/4').match(/class="tab-beam-group"/g)?.length).toBe(2);
+    expect(svgOf('M:C')).not.toContain('tab-beam-group');
   });
 
   it('style=staff → kind: "staff"，携带 StaffLayout 本身（不产 SvgNode）', () => {

@@ -25,7 +25,6 @@
 import type { DomainIndex, EventId, KeySignature, Meter, VoiceId } from '../../domain';
 import { JIANPU_METRICS } from '../layout/metrics';
 import type { System } from '../layout/primitives';
-import { spaceItems } from '../layout/spacing';
 import type { SpacedSlot } from '../layout/spacing';
 import { layoutSystems, restackSystems, splitMeasures } from '../layout/systems';
 import type { MeasureSlice } from '../layout/systems';
@@ -33,6 +32,8 @@ import type { TextMeasurer } from '../layout/textMeasurer';
 import { RENDER_DIAGNOSTIC_CODES as CODES, collectRenderDiagnostics } from '../model/diagnostics';
 import type { RenderDiagnosticDraft } from '../model/diagnostics';
 import type { RenderDiagnostic, RenderVoice } from '../model/types';
+import { engraveJianpuBeams, jianpuMeasureSpacing, planJianpuBeams } from './jianpuBeams';
+import type { JianpuBeamGroup } from './jianpuBeams';
 import { buildUnitLengthMark } from './jianpuGlyphBuilders';
 import { draftOf } from './jianpuGlyphs';
 import type {
@@ -46,7 +47,6 @@ import type {
 } from './jianpuGlyphs';
 import { buildNode, eventAnchor } from './jianpuEventNodes';
 import type { Cursor, Placed } from './jianpuEventNodes';
-import { widenForJianpuGlyphs } from './jianpuSlotWidths';
 import {
   assignLyricSyllables,
   buildHeaderLabels,
@@ -79,6 +79,8 @@ export interface JianpuLayout {
   readonly lyrics: readonly JianpuLyricNode[];
   readonly labels: readonly JianpuLabel[];
   readonly unitLengthMarks: readonly JianpuUnitLengthMark[];
+  /** 减时线 beam 组（M2.5 T3.5）：组级 engraving 数据，**不进 `nodes`**（C1）；不分组时为 `[]`。 */
+  readonly beams: readonly JianpuBeamGroup[];
   readonly width: number;
   readonly height: number;
   readonly diagnostics: readonly RenderDiagnostic[];
@@ -98,9 +100,9 @@ function lyricBandHeight(rows: number): number {
  */
 export function layoutJianpu(voice: RenderVoice, ctx: JianpuContext): JianpuLayout {
   const measures = splitMeasures(voice.items);
-  const spacings = measures.map((measure) =>
-    widenForJianpuGlyphs(spaceItems(measure.items, measure.startIndex), measure.items),
-  );
+  // beam 分组（M2.5 T3.5）只用 `M:` 决定哪些音连成一组，列宽仍只来自 duration 与字形（P1-3 窄化）。
+  const plans = planJianpuBeams(measures, voice, ctx.score.meter);
+  const spacings = measures.map((measure, i) => jianpuMeasureSpacing(measure, plans[i]));
   const geometry = {
     availableWidth: ctx.availableWidth,
     systemHeight: JIANPU_METRICS.systemHeight,
@@ -153,6 +155,8 @@ export function layoutJianpu(voice: RenderVoice, ctx: JianpuContext): JianpuLayo
   }
 
   const lastSystem = systems[systems.length - 1];
+  // 组成员只清空自己的逐音减时线（x / y / 宽度 / anchor 不变），关系与歌词照旧消费原节点几何。
+  const engraved = engraveJianpuBeams(nodes, plans);
   const relations = relationLayout(voice, ctx.index, nodeByEvent, systems, sink);
   const lyrics = buildLyricNodes(
     lyricLines,
@@ -179,8 +183,8 @@ export function layoutJianpu(voice: RenderVoice, ctx: JianpuContext): JianpuLayo
   }
 
   return {
-    voiceId: voice.voiceId, systems, measures, slots, nodes,
-    tuplets: relations.tuplets, arcs: relations.arcs, lyrics, labels, unitLengthMarks,
+    voiceId: voice.voiceId, systems, measures, slots, nodes: engraved.nodes,
+    tuplets: relations.tuplets, arcs: relations.arcs, lyrics, labels, unitLengthMarks, beams: engraved.beams,
     width: systems.reduce((max, system) => Math.max(max, system.box.width), 0),
     height: lastSystem === undefined
       ? JIANPU_METRICS.headerHeight
