@@ -133,9 +133,15 @@ describe('M2.5 T2 —— ordinal 对齐与兼容性矩阵', () => {
     expect(shape(run(['CDEF|', 'CDEF||']).alignment)).toEqual(['structure-conflict:i0,i0']);
   });
 
-  it('#7 开头孤立小节线 vs 直接内容 → k=0 S2 冲突，后续 ordinal 不平移', () => {
+  it('#7 开头孤立小节线 vs 直接内容 → k=0 S2 冲突触发 desync latch，后续全部 desynced（不平移、不重配）', () => {
     const { alignment } = run(['|CDEF|GABc|', 'CDEF|GABc|']);
-    expect(shape(alignment)).toEqual(['structure-conflict:i0,i0', 'compatible:p1,p1', 'compatible:p2,-']);
+    expect(shape(alignment)).toEqual(['structure-conflict:i0,i0', 'desynced:i1,i1', 'desynced:i2,-']);
+    expect(diagnosticShape(alignment.diagnostics)).toEqual([
+      'voice:v1 systemMeasureCountMismatch',
+      'voice:v2 systemMeasureCountMismatch',
+      'event:v1/v1:e0 systemMeasureStructureConflict',
+      'event:v2/v2:e0 systemMeasureStructureConflict',
+    ]);
   });
 
   it('#8 tail vs 正常收尾、total 相等 → compatible（S4 不单独触发冲突）', () => {
@@ -217,7 +223,7 @@ describe('M2.5 T2 —— ordinal 对齐与兼容性矩阵', () => {
   it('#19 防御：零 voice、空 group、0 个 measure 的已解析声部', () => {
     expect(alignMeasures([], [])).toEqual({ groups: [], diagnostics: [] });
     expect(alignMeasures([{ index: 0, voiceIds: [], connector: 'none', evidence: 'singleton' }], [])).toEqual({
-      groups: [{ groupIndex: 0, measures: [] }],
+      groups: [{ groupIndex: 0, diagnosticsSuppressed: false, measures: [] }],
       diagnostics: [],
     });
     const { alignment } = run(['CDEF|', '']);
@@ -290,6 +296,127 @@ describe('M2.5 T2 —— ordinal 对齐与兼容性矩阵', () => {
       'compatible:p3,p3',
       'compatible:p4,-',
     ]);
+  });
+});
+
+describe('M2.5 T2.1 —— desync latch（用户裁决 R0-b）与 diagnosticsSuppressed（R5-b）', () => {
+  const LATCH_NOTE = '此后本组各小节序号可能错开';
+
+  it('中段孤立 `|:`（corpus#11 形态，S1 与 S2 同时成立）→ 触发点 structure-conflict，其后全部 desynced', () => {
+    const { alignment } = run(['CDEF|GABc|CDEF|cBAG|', 'CDEF| |:GABc|CDEF|cBAG|']);
+    expect(shape(alignment)).toEqual([
+      'compatible:p0,p0',
+      'structure-conflict:i1,i1',
+      'desynced:i2,i2',
+      'desynced:i3,i3',
+      'desynced:-,i4',
+    ]);
+    expect(diagnosticShape(alignment.diagnostics)).toEqual([
+      'voice:v1 systemMeasureCountMismatch',
+      'voice:v2 systemMeasureCountMismatch',
+      'event:v1/v1:e5 systemMeasureStructureConflict',
+      'event:v2/v2:e5 systemMeasureStructureConflict',
+    ]);
+    const structure = alignment.diagnostics.filter((d) => d.code === CODES.systemMeasureStructureConflict);
+    expect(structure.every((d) => d.message.includes(LATCH_NOTE))).toBe(true);
+  });
+
+  it('普通 S1 raw 冲突不触发 latch，其后照常判定', () => {
+    const { alignment } = run(['CDEF||GABc|', 'CDEF|GABc|']);
+    expect(shape(alignment)).toEqual(['structure-conflict:i0,i0', 'compatible:p1,p1']);
+    expect(alignment.diagnostics.every((d) => !d.message.includes(LATCH_NOTE))).toBe(true);
+  });
+
+  it('D4 total-mismatch 不触发 latch', () => {
+    expect(shape(run(['CD|GABc|', 'CDEF|GABc|']).alignment)).toEqual(['total-mismatch:i0,i0', 'compatible:p1,p1']);
+  });
+
+  it('latch 之后不再判定、不发任何逐 measure 诊断（即使后续本会冲突），也不自动恢复', () => {
+    const { alignment } = run(['|CDEF|GABc|:', 'CDEF|GABc|]']);
+    expect(shape(alignment)).toEqual(['structure-conflict:i0,i0', 'desynced:i1,i1', 'desynced:i2,-']);
+    expect(diagnosticShape(alignment.diagnostics)).toEqual([
+      'voice:v1 systemMeasureCountMismatch',
+      'voice:v2 systemMeasureCountMismatch',
+      'event:v1/v1:e0 systemMeasureStructureConflict',
+      'event:v2/v2:e0 systemMeasureStructureConflict',
+    ]);
+  });
+
+  it('三声部：一层孤立线、两层内容 → latch，后续三层全部 incompatible', () => {
+    const { alignment } = run(['CDEF|GABc|', 'CDEF|GABc|', '|CDEF|GABc|']);
+    expect(shape(alignment)).toEqual(['structure-conflict:i0,i0,i0', 'desynced:i1,i1,i1', 'desynced:-,-,i2']);
+  });
+
+  it('各声部在同一 ordinal 都是孤立线 → 不冲突、不 latch', () => {
+    expect(shape(run(['|CDEF|GABc|', '|CDEF|GABc|']).alignment)).toEqual([
+      'compatible:p0,p0',
+      'compatible:p1,p1',
+      'compatible:p2,p2',
+    ]);
+  });
+
+  it('diagnosticsSuppressed：完整 group 为 false；含 missing VoiceId 时为 true，latch 照常但诊断全无', () => {
+    const { matrix, alignment: intact } = run(['CDEF| |:GABc|', 'CDEF|GABc|CDEF|']);
+    expect(intact.groups[0]?.diagnosticsSuppressed).toBe(false);
+    const group: SystemGroup = { index: 0, voiceIds: [voiceId(1), voiceId(2), voiceId(99)], connector: 'bracket', evidence: 'declared' };
+    const alignment = alignMeasures([group], matrix.renderScore.voices);
+    expect(alignment.groups[0]?.diagnosticsSuppressed).toBe(true);
+    expect(shape(alignment)).toEqual(['compatible:p0,p0,-', 'structure-conflict:i1,i1,-', 'desynced:i2,i2,-']);
+    expect(alignment.diagnostics).toEqual([]);
+  });
+
+  it('latch 只在本 group 内生效：第一个 group 锁存，第二个 group 照常判定', () => {
+    const source = [
+      'X:1', 'M:4/4', 'L:1/4', 'V:1 bracket=2', 'V:2', 'V:3 bracket=2', 'V:4', 'K:C',
+      '[V:1]|CDEF|GABc|', '[V:2]CDEF|GABc|', '[V:3]CDEF|GABc|', '[V:4]CDEF|GABc|', '',
+    ].join('\n');
+    const matrix = matrixScoreFrom(source);
+    const alignment = alignMeasures(groupVoices(matrix.score.voices).groups, matrix.renderScore.voices);
+    expect(shape(alignment, 0)).toEqual(['structure-conflict:i0,i0', 'desynced:i1,i1', 'desynced:i2,-']);
+    expect(shape(alignment, 1)).toEqual(['compatible:p0,p0', 'compatible:p1,p1']);
+    expect(alignment.groups.map((group) => group.diagnosticsSuppressed)).toEqual([false, false]);
+  });
+
+  it('S2 只认「只含一根小节线」：单个音符的 tail 小节不是孤立线，不触发 latch', () => {
+    expect(shape(run(['CDEF|C4', 'CDEF|C4|D4|']).alignment)).toEqual([
+      'compatible:p0,p0',
+      'compatible:p1,p1',
+      'compatible:-,p2',
+    ]);
+  });
+
+  it('tail 的 S1 缺席：tail 对 `|]` 收尾、总量相等 → compatible', () => {
+    expect(shape(run(['CDEF|GABc', 'CDEF|GABc|]']).alignment)).toEqual(['compatible:p0,p0', 'compatible:p1,p1']);
+  });
+
+  it('P2-4-b ① 孤立线 vs 只有 chordSymbol 的零时值小节 → structure-conflict 但不锁存，后续正常判定', () => {
+    const { alignment } = run(['|CDEF|GABc|', '"C"|CDEF|GABc|']);
+    expect(shape(alignment)).toEqual(['structure-conflict:i0,i0', 'compatible:p1,p1', 'compatible:p2,p2']);
+    expect(alignment.diagnostics.every((d) => !d.message.includes(LATCH_NOTE))).toBe(true);
+  });
+
+  it('P2-4-b ① 孤立线 vs 只有 decoration / grace / unknown 的零时值小节 → 同样不锁存', () => {
+    const { alignment } = run(['|CDEF|', '!trill! {g} x|CDEF|']);
+    expect(totals(alignment, 0)).toEqual(['0/1', '0/1']);
+    expect(shape(alignment)).toEqual(['structure-conflict:i0,i0', 'compatible:p1,p1']);
+  });
+
+  it('P2-4-b ② 孤立线 vs 含 timed 事件但 duration===undefined 的小节 → 仍锁存（判据不看总量）', () => {
+    const { matrix, groups } = run(['|CDEF|GABc|', 'CDEF|GABc|']);
+    const [v1, v2] = matrix.renderScore.voices;
+    const alignment = alignMeasures(groups, [...(v1 === undefined ? [] : [v1]), ...withNoteDuration(v2, undefined)]);
+    expect(totals(alignment, 0)).toEqual(['0/1', 'duration-undefined']);
+    expect(shape(alignment)).toEqual(['structure-conflict:i0,i0', 'desynced:i1,i1', 'desynced:i2,-']);
+  });
+
+  it('P2-4-b ③ 孤立线 vs 普通 timed 内容小节 → 锁存，触发点诊断带锁存说明', () => {
+    const { alignment } = run(['|CDEF|GABc|', 'CDEF|GABc|']);
+    expect(shape(alignment)).toEqual(['structure-conflict:i0,i0', 'desynced:i1,i1', 'desynced:i2,-']);
+    expect(alignment.diagnostics.filter((d) => d.code === CODES.systemMeasureStructureConflict).every((d) => d.message.includes(LATCH_NOTE))).toBe(true);
+  });
+
+  it('singleton group 不会 desynced', () => {
+    expect(shape(run(['|CDEF| |:GABc|']).alignment).every((entry) => entry.startsWith('compatible:'))).toBe(true);
   });
 });
 

@@ -11,22 +11,26 @@
  * D3 → `measure-structure-conflict`（warning）；D4 → `measure-timing-degraded`（info），后两者挂
  * 首事件 event anchor。group 含找不到的 VoiceId 时该 group 的全部 T2 诊断抑制（裁决 H）。
  * D1 / D2 / 溢出归 T3，T3 跳过 `verdict !== 'compatible'` 的 ordinal，不重复报。
+ *
+ * **Desync latch（T2.1，用户裁决 R0-b / P2-4-b）**：某 ordinal 出现孤立小节线 vs 含 timed 事件的
+ * 小节（序号从此可能错开）时，该处仍是 `structure-conflict` 且只在此报一次；其后全部 ordinal 判
+ * `desynced`（在场者全 `incompatible`、不再判定、不发诊断，T3 不建 shared timeline）。普通 S1 raw
+ * 冲突、D4、孤立线 vs 只有 untimed 内容的零时值小节（仍判 structure-conflict）均不触发；本期不自动
+ * 恢复同步；latch 只在本 group 内生效，count-mismatch 不受其影响。
  */
 
-import type { Rational, VoiceId } from '../../domain';
-import { ZERO, add, equals } from '../../domain';
+import type { VoiceId } from '../../domain';
+import { equals } from '../../domain';
 import type { MeasureSlice } from '../layout/systems';
 import { splitMeasures } from '../layout/systems';
 import type { RenderDiagnosticDraft } from '../model/diagnostics';
 import { RENDER_DIAGNOSTIC_CODES as CODES, collectRenderDiagnostics } from '../model/diagnostics';
 import type { RenderDiagnostic, RenderVoice } from '../model/types';
 import type { MeasureParticipation, SystemGroup } from './contracts';
-import { eventTiming } from './timedDuration';
+import type { SliceTotal } from './measureFeatures';
+import { hasTimedEvent, isIsolatedLine, sliceTotal, trailingBarline } from './measureFeatures';
 
-/** S3：measure 内 timed 事件的绝对时值总量；不可知时保留原因（裁决 G）。 */
-export type SliceTotal =
-  | { readonly resolved: true; readonly value: Rational }
-  | { readonly resolved: false; readonly reason: 'duration-undefined' | 'arithmetic-overflow' };
+export type { SliceTotal } from './measureFeatures';
 
 /** 一个声部在某 ordinal 上的参与：在场则携带原切片（引用）与 S3，T3 直接复用。 */
 export type AlignedMember =
@@ -37,8 +41,8 @@ export type AlignedMember =
     }
   | { readonly participation: Extract<MeasureParticipation, { readonly kind: 'absent' }> };
 
-/** measure 级判定：`compatible` 之外的 ordinal 由 T2 报告并退出 shared timing，T3 跳过。 */
-export type MeasureVerdict = 'compatible' | 'structure-conflict' | 'total-mismatch';
+/** measure 级判定：`compatible` 之外的 ordinal 退出 shared timing，T3 跳过；`desynced` 见文件头。 */
+export type MeasureVerdict = 'compatible' | 'structure-conflict' | 'total-mismatch' | 'desynced';
 
 export interface AlignedMeasure {
   readonly measureOrdinal: number;
@@ -49,6 +53,8 @@ export interface AlignedMeasure {
 
 export interface GroupMeasureAlignment {
   readonly groupIndex: number;
+  /** group 含找不到的 VoiceId（调用方破坏输入）时为 true：全部 T2 诊断已抑制，T3 直接继承（R5-b）。 */
+  readonly diagnosticsSuppressed: boolean;
   /** 长度 = group 内各声部 measure 数的最大值。 */
   readonly measures: readonly AlignedMeasure[];
 }
@@ -60,41 +66,6 @@ export interface MeasureAlignment {
 
 type Sink = (draft: RenderDiagnosticDraft) => void;
 
-/** S3。只捕获 `RangeError`、其它照抛；`arithmetic-overflow` 统称 `add` 拒绝（越过安全整数或不变式被破坏）。 */
-function sliceTotal(slice: MeasureSlice): SliceTotal {
-  let value: Rational = ZERO;
-  for (const item of slice.items) {
-    const timing = eventTiming(item.event);
-    if (!timing.timed) {
-      continue;
-    }
-    if (timing.duration === undefined) {
-      return { resolved: false, reason: 'duration-undefined' };
-    }
-    try {
-      value = add(value, timing.duration);
-    } catch (error) {
-      if (error instanceof RangeError) {
-        return { resolved: false, reason: 'arithmetic-overflow' };
-      }
-      throw error;
-    }
-  }
-  return { resolved: true, value };
-}
-
-/** S1：最后一项是小节线时取其 raw；否则缺席（tail）。 */
-function trailingBarline(slice: MeasureSlice): string | undefined {
-  const last = slice.items[slice.items.length - 1];
-  return last !== undefined && last.event.kind === 'barline' ? last.event.raw : undefined;
-}
-
-/** S2：只含一根小节线的 measure（开头孤立 barline 的形态）。 */
-function isIsolatedLine(slice: MeasureSlice): boolean {
-  const [only] = slice.items;
-  return slice.items.length === 1 && only !== undefined && only.event.kind === 'barline';
-}
-
 /** 某 ordinal 上一个在场声部的切片与 S3。 */
 interface Cell {
   readonly voiceId: VoiceId;
@@ -102,32 +73,42 @@ interface Cell {
   readonly total: SliceTotal;
 }
 
+/** `desync` = 孤立线 vs 含 timed 事件的小节（触发 latch）；S1 同时成立时同样触发。 */
+interface Judgement {
+  readonly verdict: MeasureVerdict;
+  readonly desync: boolean;
+}
+
 /** 只在在场声部之间判定；D3 优先于 D4（结构冲突时不再比较总量）。 */
-function judge(present: readonly Cell[]): MeasureVerdict {
+function judge(present: readonly Cell[]): Judgement {
   if (present.length < 2) {
-    return 'compatible';
+    return { verdict: 'compatible', desync: false };
   }
   const raws = new Set(present.map((cell) => trailingBarline(cell.slice)).filter((raw) => raw !== undefined));
   const isolated = present.map((cell) => isIsolatedLine(cell.slice));
+  // 孤立线不含 timed 事件，所以「有孤立线且有含 timed 的小节」必然也是 S2 混合。
+  const desync = isolated.includes(true) && present.some((cell) => hasTimedEvent(cell.slice));
   if (raws.size > 1 || (isolated.includes(true) && isolated.includes(false))) {
-    return 'structure-conflict';
+    return { verdict: 'structure-conflict', desync };
   }
   const known = present.flatMap(({ total }) => (total.resolved ? [total.value] : []));
   const [first] = known;
-  return first !== undefined && known.some((value) => !equals(value, first)) ? 'total-mismatch' : 'compatible';
+  const mismatch = first !== undefined && known.some((value) => !equals(value, first));
+  return { verdict: mismatch ? 'total-mismatch' : 'compatible', desync: false };
 }
 
 /** 不兼容 measure 的逐声部诊断，挂首事件；`splitMeasures` 不产空切片，voice 分支仅作类型兜底。 */
-function reportMeasure(voiceId: VoiceId, slice: MeasureSlice, verdict: MeasureVerdict, sink: Sink): void {
+function reportMeasure(voiceId: VoiceId, slice: MeasureSlice, judgement: Judgement, sink: Sink): void {
   const ordinal = String(slice.index + 1);
   const draft =
-    verdict === 'structure-conflict'
+    judgement.verdict === 'structure-conflict'
       ? {
           code: CODES.systemMeasureStructureConflict,
           level: 'warning' as const,
           message:
             `本声部第 ${ordinal} 小节与同组其它声部的收尾小节线或小节形态（孤立小节线 / 内容小节）不一致，` +
-            '保留公共小节边界与宽度，放弃该小节的内部时间对齐',
+            '保留公共小节边界与宽度，放弃该小节的内部时间对齐' +
+            (judgement.desync ? '；此后本组各小节序号可能错开，均不再做跨声部时间对齐' : ''),
         }
       : {
           code: CODES.systemMeasureTimingDegraded,
@@ -172,13 +153,16 @@ function alignGroup(group: SystemGroup, lookup: ReadonlyMap<VoiceId, RenderVoice
   }
 
   const measures: AlignedMeasure[] = [];
+  let latched = false;
   for (let k = 0; k < count; k += 1) {
     const cells = voices.map(({ voiceId, slices }): Cell | { readonly voiceId: VoiceId } => {
       const slice = slices[k];
       return slice === undefined ? { voiceId } : { voiceId, slice, total: sliceTotal(slice) };
     });
     const present = cells.flatMap((cell) => ('slice' in cell ? [cell] : []));
-    const verdict = judge(present);
+    // latch 之后不再判定、不发诊断（触发点的诊断已说明后续全部 desynced）。
+    const judgement: Judgement = latched ? { verdict: 'desynced', desync: false } : judge(present);
+    const { verdict } = judgement;
     const kind = verdict === 'compatible' ? 'present' : 'incompatible';
     const members = cells.map((cell): AlignedMember =>
       'slice' in cell
@@ -189,14 +173,15 @@ function alignGroup(group: SystemGroup, lookup: ReadonlyMap<VoiceId, RenderVoice
           }
         : { participation: { voiceId: cell.voiceId, kind: 'absent' } },
     );
-    if (verdict !== 'compatible') {
+    if (verdict !== 'compatible' && verdict !== 'desynced') {
       for (const cell of present) {
-        reportMeasure(cell.voiceId, cell.slice, verdict, report);
+        reportMeasure(cell.voiceId, cell.slice, judgement, report);
       }
     }
+    latched = latched || judgement.desync;
     measures.push({ measureOrdinal: k, verdict, members });
   }
-  return { groupIndex: group.index, measures };
+  return { groupIndex: group.index, diagnosticsSuppressed, measures };
 }
 
 /**
