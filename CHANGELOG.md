@@ -20,7 +20,7 @@ M1.8「Round-trip Guardrails」已封板。**M2 — Notation Rendering T0–T9 �
 T5.2 real-world hardening、TAB 六线谱、Staff + VexFlow adapter、T8 render
 matrix（C1/C2/C3 三条契约对四种记谱的用例矩阵）、T9 文档封板均已完成，**M2 已于 2026-09-22 封板**（seal 前 push 的 CI run
 35700198783 三平台全绿）。M3 之前插入 **M2.5 Score System Layout**（方案冻结 v1.0），
-T0、T1（声部视觉分组）、T2 / T2.1（跨声部小节对齐与错位锁存）、T3（共享小节时间轴）已于 2026-10-04 完成，T3.5 待启动。四种记谱（Chord / Jianpu
+T0、T1（声部视觉分组）、T2 / T2.1（跨声部小节对齐与错位锁存）、T3（共享小节时间轴）、T3.5（TAB / 简谱节奏刻印）已于 2026-10-04 完成，T4 待启动。四种记谱（Chord / Jianpu
 / TAB / Staff）均可渲染，支持缩放与诊断面板。现状、遗留债务与恢复位置见
 `HANDOFF.md` §30.1「M2 进行中状态」。
 
@@ -81,6 +81,8 @@ T0、T1（声部视觉分组）、T2 / T2.1（跨声部小节对齐与错位锁�
     `npm test` 之后新增 fixture 矩阵报告步骤。
 
 ### Changed
+
+- M2.5 Score System Layout T3.5（2026-10-04，`d2486aa`）：TAB 与简谱的八分 / 十六分音符按拍连成 beam 组（`x/4` 四分一拍、`6/8` 等附点四分一拍、`x/2` 二分一拍；`M:` 为 raw / 缺席或其它分母时不分组，输出与此前完全一致）。混合时值组画公共横梁 + 次级横梁 / 短横梁；TAB 组内符干等长、底端共线，简谱减时线整组一条连续横线；同时值组组内等距。TAB 扫弦记号 `V` / `U` 改画 ↓ / ↑，其余记号原样。beam 组是独立的 layout 数据，不进节点列表；TAB / 简谱各导出一个 measure 列宽需求函数，供 T4 的公共 demand solver 消费。raw / 缺席拍号下的 layout / SVG / 诊断由入库 golden 钉住不漂移。
 
 - M2.5 Score System Layout T3（2026-10-04，`7ee1e27`）：新增 `src/notation/system/timeline.ts`，为跨声部可对齐的小节建立共享时间轴（各声部音符起点的精确并集、逐声部映射、和弦符号贴附位置），时值不可知 / 连音未建模的小节退出共享对齐并给出原因；`voiceMeasureOnsets` 成为唯一的小节内时值累计实现。尚未接入渲染管线，渲染结果无变化。
 
