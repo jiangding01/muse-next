@@ -55,7 +55,7 @@ export type MeasureParticipation =
     };
 
 /**
- * 小节内的**共享音乐 onset** 位置（§Q3）。`offsets` 单调递增，首项恒为 0。
+ * 小节内的**共享音乐 onset** 位置（§Q3）。`offsets` 单调递增，非空时首项恒为 ZERO；无 timed 事件时为空（R3）。
  *
  * **只表示音乐时间**：timed event 的 onset（绝对 `Rational` 累计，零归一化），外加
  * `chordSymbol` 这种明确的 zero-time overlay（贴在后续 onset 上，不新增位置）。

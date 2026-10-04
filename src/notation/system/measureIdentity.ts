@@ -36,6 +36,8 @@ export type { SliceTotal } from './measureFeatures';
 export type AlignedMember =
   | {
       readonly participation: Extract<MeasureParticipation, { readonly kind: 'present' | 'incompatible' }>;
+      /** T2 已解析好的声部引用（N2）：T3 取 `Voice.tuplets` 不再做 VoiceId 查找。 */
+      readonly renderVoice: RenderVoice;
       readonly slice: MeasureSlice;
       readonly total: SliceTotal;
     }
@@ -69,6 +71,7 @@ type Sink = (draft: RenderDiagnosticDraft) => void;
 /** 某 ordinal 上一个在场声部的切片与 S3。 */
 interface Cell {
   readonly voiceId: VoiceId;
+  readonly renderVoice: RenderVoice;
   readonly slice: MeasureSlice;
   readonly total: SliceTotal;
 }
@@ -155,9 +158,11 @@ function alignGroup(group: SystemGroup, lookup: ReadonlyMap<VoiceId, RenderVoice
   const measures: AlignedMeasure[] = [];
   let latched = false;
   for (let k = 0; k < count; k += 1) {
-    const cells = voices.map(({ voiceId, slices }): Cell | { readonly voiceId: VoiceId } => {
+    const cells = voices.map(({ voiceId, voice, slices }): Cell | { readonly voiceId: VoiceId } => {
       const slice = slices[k];
-      return slice === undefined ? { voiceId } : { voiceId, slice, total: sliceTotal(slice) };
+      return slice === undefined || voice === undefined
+        ? { voiceId }
+        : { voiceId, renderVoice: voice, slice, total: sliceTotal(slice) };
     });
     const present = cells.flatMap((cell) => ('slice' in cell ? [cell] : []));
     // latch 之后不再判定、不发诊断（触发点的诊断已说明后续全部 desynced）。
@@ -168,6 +173,7 @@ function alignGroup(group: SystemGroup, lookup: ReadonlyMap<VoiceId, RenderVoice
       'slice' in cell
         ? {
             participation: { voiceId: cell.voiceId, kind, localMeasureIndex: cell.slice.index },
+            renderVoice: cell.renderVoice,
             slice: cell.slice,
             total: cell.total,
           }
