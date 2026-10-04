@@ -2,7 +2,7 @@
 
 > 面向后续实现 Agent 的项目交接文档  
 > 项目代号：`muse-next`  
-> 当前阶段：**M0–M1.8 已封板；M2 Notation Rendering T0–T9 已全部完成（Chord / Jianpu / TAB / Staff 四种记谱可渲染 + T8 render matrix 契约测试 + T9 文档封板），✅ 2026-09-22 封板（原始 seal CI run 35700198783；T8.1 post-seal 契约收紧 run 35702615344；当前 HEAD run 35702885112 三平台全绿）；UI 设计 Brief 已完成（`docs/UI_DESIGN_BRIEF.md` v1.3.4）；M2.5 Score System Layout 方案冻结为 v1.0，**T0 已完成（2026-10-04，`6e5a532` + 命名修订 `3f5b48c`），T1 声部视觉分组已完成（`2b9882c`），T2 跨声部 measure identity 已完成（`218d143`），T2.1 小节错位锁存已完成（`9037351`），均三平台 CI 全绿；T3 待用户明确指令（R1–R6 已裁决）**；M3 排在 M2.5 之后**（详见 §30 里程碑表、§30.1「M2 进行中状态」与「M2.5 T0 实际状态」、§69「当前明确的下一任务」）  
+> 当前阶段：**M0–M1.8 已封板；M2 Notation Rendering T0–T9 已全部完成（Chord / Jianpu / TAB / Staff 四种记谱可渲染 + T8 render matrix 契约测试 + T9 文档封板），✅ 2026-09-22 封板（原始 seal CI run 35700198783；T8.1 post-seal 契约收紧 run 35702615344；当前 HEAD run 35702885112 三平台全绿）；UI 设计 Brief 已完成（`docs/UI_DESIGN_BRIEF.md` v1.3.4）；M2.5 Score System Layout 方案冻结为 v1.0，**T0 已完成（2026-10-04，`6e5a532` + 命名修订 `3f5b48c`），T1 声部视觉分组已完成（`2b9882c`），T2 跨声部 measure identity 已完成（`218d143`），T2.1 小节错位锁存已完成（`9037351`），T3 共享小节时间轴已完成（`7ee1e27`），均三平台 CI 全绿；T3.5 / T4 待用户明确指令**；M3 排在 M2.5 之后**（详见 §30 里程碑表、§30.1「M2 进行中状态」与「M2.5 T0 实际状态」、§69「当前明确的下一任务」）  
 > 核心目标：以现代 TypeScript 技术栈重建已停止维护的 **Muse Pro 2.70** 的核心能力，并优先恢复其 `.jcx` 乐谱格式、谱面渲染、编辑与播放能力。
 
 ---
@@ -1789,7 +1789,8 @@ Score System Layout（乐谱系统版式：跨声部按小节对齐的统一 spa
 T0 ✅ 2026-10-04（`6e5a532`，CI run 37137587990 三平台全绿；命名修订 `3f5b48c`）；
 T1 ✅ 2026-10-04（`2b9882c`，CI run 37140019863 三平台全绿）；
 T2 ✅ 2026-10-04（`218d143`，CI run 37177350122 三平台全绿）；
-T2.1 ✅ 2026-10-04（`9037351`，CI run 37181088740 三平台全绿，小节错位锁存），T3 待用户指令）
+T2.1 ✅ 2026-10-04（`9037351`，CI run 37181088740 三平台全绿，小节错位锁存）；
+T3 ✅ 2026-10-04（`7ee1e27`，CI run 37189546271 三平台全绿，共享小节时间轴），T3.5 待用户指令）
 
 → M3
 Editor Core
@@ -2670,6 +2671,7 @@ visual debt、T7 第 6 条），按 视觉 / 架构 / 测试 分类，每行注�
 - **T1 ✅（2026-10-04，`2b9882c`，CI run 37140019863 三平台全绿；见下方「M2.5 T1 实际状态」）**。
 - **T2 ✅（2026-10-04，`218d143`，CI run 37177350122 三平台全绿；见下方「M2.5 T2 实际状态」）**。
 - **T2.1 ✅（2026-10-04，`9037351`，CI run 37181088740 三平台全绿；见下方「M2.5 T2.1 实际状态」）**。
+- **T3 ✅（2026-10-04，`7ee1e27`，CI run 37189546271 三平台全绿；见下方「M2.5 T3 实际状态」）**。
 - 前置条件（M2.5 之前、独立 formats 小任务）：~~`strokePrefix → TabGroupEvent.stroke` 回填~~ **已完成（2026-09-22，M2.5 formats preflight）**：`scan.ts` 顶层循环把紧邻 `tabGroup` 的 `strokePrefix` 绑进 `TabGroupEvent.stroke`，不改 Domain 类型/serializer 代码，dangling-stroke 诊断未对绑定成功的 group stroke 误报（真悬空的仍照常发 info）。U06（body `L:` 按声部作用域）已于 `8a74e8e` 结案。
 - 架构：`src/notation/system/**`（contracts 叶子层 → groupVoices / measureIdentity / timeline / composeSystem / justify / chordOverlay / pageModel）；System = overlay layers（chord diagrams，`layoutChord` 保持 document 级）+ ordered voice layers（jianpu/tab/staff 接受外部 system/measure 几何）+ attached layers（lyrics）；voice layout 不得反向 import composer。
 - 关键裁决：`MeasureTimeline` 只含 timed onset（绝对 Rational 累计 offset）+ `chordSymbol` zero-time overlay，barline 固定 `endX`，decoration/grace/unknown 走 voice-local slot；跨 voice measure identity = ordinal candidate + 结构兼容性校验（时值总量逐 measure 绝对相等，不预设相等，不等进 tier 3；缺 measure 留空保留公共宽度；冲突 fallback + 诊断，不重写事件）；公共 measure width = 各 voice demand 取 max → packing → water-filling justify（`justified: full|partial|none`，末行不拉）；D11 精确名匹配（0 只画名 / 1 名+图 / >1 只画名 + ambiguity 诊断）；`ComposedSystemLayout {target:'screen'|'page'}`，PageModel 只收 page 产物，单 system 不跨页；Staff 验收 = tier 1（共享 measure 边界/宽度），T5.S 为非阻塞 spike。
@@ -2703,7 +2705,7 @@ visual debt、T7 第 6 条），按 视觉 / 架构 / 测试 分类，每行注�
 - **已知后果（F-1 的保守语义，不是 bug）**：某声部中段多出零时值小节时，其后所有 ordinal 错开一格，大面积落 tier 3（仍共享边界与宽度）并产生大量诊断；真实 corpus#10 / #11 恢复后应作为进入 T3 前最优先的只读 probe。
 - **流程教训**：T2 review 时只读 agent 交回报告后仍在后台用旧备份恢复主工作区、覆盖了实现修改（已发现、停掉 agent、重新落地并复核）。此后 **mutation review 一律在独立 worktree / 临时副本里运行**，提示词明确禁止修改主工作区。
 
-**M2.5 T2.1 实际状态（2026-10-04，`9037351`，CI run 37181088740 三平台全绿；T3 未启动，需用户明确指令）**：
+**M2.5 T2.1 实际状态（2026-10-04，`9037351`，CI run 37181088740 三平台全绿）**：
 - **起因（T3 调研时的真实语料 probe）**：F-1 前缀对齐 + 规则 7（孤立线参与 ordinal 编号）在 corpus#10 / #11 上造成「判 compatible、实为错开一小节」的配对——某声部中段一根单独的小节线 measure（corpus#11 为单独的 `|:`）让其后全部 ordinal 错位，而各小节总时值相等，T2 判 compatible（corpus#10 有 8 个、corpus#11 有 15 个这样的 ordinal）。若不处理，T3 会在错位配对上建 shared timeline、T4 会共享其边界。
 - **desync latch（用户裁决 R0-b + P2-4-b）**：某 ordinal 出现「isolated-barline-only measure vs 含至少一个 timed 事件（`eventTiming(...).timed === true`，不看 duration 是否已知、总量是否为正）的 measure」时，该 ordinal **仍为 `structure-conflict`**、诊断只在此报一次（每个在场声部一条，message 说明此后序号可能错开、不再做跨声部时间对齐）；**其后**全部 ordinal 判 `desynced`（在场者全 `incompatible`、`localMeasureIndex` 保留、不再判定、不发逐小节诊断，T3 不建 shared timeline）。普通 S1 raw 冲突、D4、孤立线 vs **纯 untimed** 非孤立 measure（只有 chordSymbol / decoration / grace / unknown，零时值）都不触发——后者只造成当前 ordinal 的 `structure-conflict`，后续照常判定。latch 只在本 group 内生效、本期不自动恢复同步、count-mismatch 不受影响。`MeasureVerdict` 增至四态。
 - **`GroupMeasureAlignment.diagnosticsSuppressed`（R5-b）**：group 含找不到的 VoiceId 时为 true，**是 T3 继承 missing-voice 防御语义的唯一来源**（T3 不重复实现查找规则）。
@@ -2712,6 +2714,16 @@ visual debt、T7 第 6 条），按 视觉 / 架构 / 测试 分类，每行注�
 - 测试：`system.measureIdentity.test.ts` 共 65 条（T2.1 新增 15 条：触发点 / 锁存后 / S1-only / D4 / 三声部 / 同位孤立线 / missing voice + latch / 跨 group 隔离 / 单声部 / tail S1 缺席 / 单音 tail 非孤立线 / P2-4-b ①②③）。独立 review 在独立 worktree 跑 33 个变异，加上补跑的 10 个，已知存活项（跨 group 泄漏、isIsolatedLine 不查 barline、tail 返回 `|`）均已补测杀死；P2-4-b 的两个关键变异（timed 退化成「任意非 barline」、退化成「resolved total > 0」）分别被 ①、② 杀死。全仓 77 文件 / 6090 用例，`jcx:corpus-test` 11/11。
 - **流程教训**：mutation harness 必须 fail-fast——第一次 worktree 变异脚本因 zsh 不对 `$FILES` 分词导致拷贝全部失败、两侧 hash 都为空却判「未改动」的假绿（已发现并重跑）。此后 harness 固定 `set -euo pipefail`，显式文件列表，并在比较前确认源/目标文件存在、hash 非空、拷贝成功、变异实际生效、vitest 基线实际跑过。
 - **T3 设计裁决（R1–R6，2026-10-04，待 T3 编码落地）**：R1 T3 显式保存 `OverlayOnset`（chordSymbol 贴附位置：后续 onset 下标或 measure-end）；R2 D1 / D2 / 溢出的 system `measure-timing-degraded` 只挂原因声部、该小节至少两个在场声部时才发、每个（声部, 小节）合并一条；R3 无 timed 事件的小节 `offsets = []`，方案与 contracts 措辞改为「非空时首项为 ZERO」；R4 单声部（或只剩一个在场声部）的 D1 / D2 记录 degraded 状态但不发 system 诊断；R5 继承 `diagnosticsSuppressed`；R6 导出纯函数 `voiceMeasureOnsets(slice)` 供 T3 / T3.5 共用，helper 不负责 tuplet，tuplet 由调用层结合 `Voice.tuplets` 判断。T3 阶段类型住在 `timeline.ts`，不伪造 `MeasureTimeline` 的 x / endX。
+
+**M2.5 T3 实际状态（2026-10-04，`7ee1e27`，CI run 37189546271 三平台全绿；T3.5 / T4 未启动，需用户明确指令）**：
+- 范围：纯 timing 数据层——offsets / total / 逐声部 onset 映射 / chordSymbol overlay 位置 / 退化状态与诊断；**不求 x、不求 endX、不构造 `contracts.MeasureTimeline`**（T4 再用 §Q3.6 的段宽合成）；renderer、voice layout、Domain、parse 零改动；未开始 T3.5 / T4。
+- **N1**：`measureFeatures.voiceMeasureOnsets(slice)` 是 T2 / T3 / T3.5 **唯一的 literal timing 累计实现**（绝对 `Rational`；timed 事件 `onset = off; off = add(off, duration)`，chordSymbol 只记当前 off，barline / decoration / grace / unknown 不进入；遇 undefined → `duration-undefined`，只捕获 `RangeError` → `arithmetic-overflow`）；`sliceTotal` 是它的纯投影（测试另有源码守卫：`sliceTotal` 体内不得出现 for / add / ZERO / RangeError）。T2 / T2.1 行为等价（原 65 条测试不改全绿；独立 review 对 fixture 216 片、真实语料 1104 片、手工篡改 720 片逐切片比对新旧 `sliceTotal` 全等）。
+- **N2**：在场 `AlignedMember`（present / incompatible 分支）携带 T2 已解析的 `renderVoice`；`buildMeasureTimings(alignment)` 不接收 voices、不做 VoiceId 查找；missing-voice 的诊断闸门只读 `diagnosticsSuppressed`。
+- **`src/notation/system/timeline.ts`（200 行）**：`buildMeasureTimings(alignment): MeasureTimings`，阶段类型 `TimedOnset` / `OverlayPosition` / `OverlayOnset` / `VoiceMeasureTiming` / `TimingDegradation`（= `UnresolvedReason | 'tuplet'`）/ `DegradationCause` / `SharedMeasureTiming`（`shared` / `not-compatible` / `degraded`）/ `GroupMeasureTiming` / `MeasureTimings`。`memberIndex` 恒指原始 `AlignedMeasure.members` 下标；`itemIndex` 是切片内下标（T4/T5 经 `slice.startIndex` 换算）。tuplet 成员集合按 RenderVoice 在单次调用内缓存（纯局部派生索引，无跨调用状态）。
+- **规则**：T2 verdict 非 compatible（含 `desynced`）→ `not-compatible`，不重判 D3 / D4 / desync、不发诊断；D1 / overflow 沿用 T2 的 `SliceTotal` 原因（不再累计），D2 = 本小节切片里有事件属于该声部 `Voice.tuplets[].members` → `degraded`（causes 只列原因声部，多原因合并）；否则 onset 并集按 `cmp` 排序、`equals` 去重（与声部顺序无关），无 timed 事件时 `offsets = []`（R3）；chordSymbol 位置 = 同一声部后续第一个 timed 事件的 offset，否则 `measure-end`（R1，不以 onset === total 推断）；理论上已 resolved 却算出 unresolved 时按实际原因防御性降级、不 throw。
+- **诊断（R2 / R4 / R5）**：`measure-timing-degraded`（info）只挂原因声部，每（声部, 小节）一条、多原因合并（message 列出原因），anchor = 该声部本小节首事件、sourceRef 取该事件；仅当本 ordinal ≥ 2 个在场声部且 `diagnosticsSuppressed === false` 时发；单声部 / 只剩一个在场声部只记 degraded 不发。已有 `duration.unresolved`、`tuplet.timing-not-modeled` 照旧保留。
+- 测试：`system.timeline.test.ts` 共 **40 个测试声明**（voice-local 原语、并集、D1 / D2 / overflow、与 T2 / T2.1 衔接、单声部、零 timed 小节、overlay 位置含零时值 timed 反例、契约与防御）；全仓 Vitest **78 files / 6137 pass**（相对 T2.1 的 6090 净增 47 = 40 个新声明 + 架构 / svg 守卫对新文件 `timeline.ts` 逐文件展开的 7 条）。独立 review 在独立 worktree 跑 33 个变异 + 26 条反例探针，存活项（浮点排序、total 归一化两种写法、chordSymbol 进并集、非空 offsets 时末端映射到最后 onset、T3 层把 1/3 判退化、不沿用 T2 原因而重新累计、overlay 用声部内下标、anchor 改首个 note、sliceTotal 恢复第二套循环）全部补测后在独立 worktree 复跑确认被杀。
+- **真实语料基线（只读，供 T3.5 / T4 回归）**：19 groups，shared **725**、degraded **8**、not-compatible **46**；8 个 degraded 全部来自 corpus#08 的单声部 tuplet 小节，按 R4 system timing 诊断 = 0；多声部真实语料当前**没有** D1 / D2 / overflow 退化；overlay 共 244 个，全部贴在后续 onset 上（measure-end 0）；把 group 声部顺序反转后结果不变。
 
 **M2 seal 与 M3 前置（T9 之后，恢复时从这里继续）**：**2026-09-22 追加裁决：M2 与 UI 目标版式确认之后、M3 之前先做 M2.5 Score System Layout（见 §30 路线表与 `docs/UI_DESIGN_BRIEF.md` §2.7.6、§10.17/10.18）；M2.5 的 System 模型 = overlay layers（chord diagrams）+ ordered voice layers（TAB/Jianpu/Staff 接受外部 system/measure 几何）+ attached layers（lyrics），chord 不是第四种声部 layout，system 高度由内容决定、分页只在 system 边界，`bracket` 只证明视觉分组、需定义 cross-voice measure mismatch policy。**原文：T0–T9 已全部完成并推送，
 下一步不是继续写渲染代码，而是：
@@ -4247,8 +4259,9 @@ Chord / Jianpu / TAB / Staff 四种记谱可渲染（T0–T7，T7 Staff + VexFlo
    **M2.5 T1 已完成**（`2b9882c`，三平台 CI 全绿，见 §30.1「M2.5 T1 实际状态」）；
    **M2.5 T2 已完成**（`218d143`，三平台 CI 全绿，见 §30.1「M2.5 T2 实际状态」）；
    **M2.5 T2.1 已完成**（`9037351`，三平台 CI 全绿，小节错位锁存，见 §30.1「M2.5 T2.1 实际状态」），
-   **当前主动暂停，T3（timeline）启动需用户明确指令**；T3 的设计裁决 R1–R6 已定（见 §30.1
-   「M2.5 T2.1 实际状态」末条），启动时仍先给实现方案 + 测试矩阵再编码；
+   **M2.5 T3 已完成**（`7ee1e27`，三平台 CI 全绿，共享小节时间轴，见 §30.1「M2.5 T3 实际状态」），
+   **当前主动暂停，T3.5（TAB / 简谱 beam 分组）与 T4 启动需用户明确指令**；启动时仍先给
+   实现方案 + 测试矩阵再编码；
 4. M2.5 封板后再规划 M3A（source/save/history）→ M3B（selection + 三向同步）→ M3C（可视化编辑）。
 ```
 
