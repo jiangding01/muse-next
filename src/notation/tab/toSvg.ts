@@ -297,8 +297,8 @@ export function tabToSvg(layout: TabLayout): SvgNode {
       'aria-label': 'tab notation',
       'data-voice-id': layout.voiceId,
       // 根节点携带 voice 级 `data-anchor-key`（与 jianpu 同构）：点击空白画布区域
-      // （不落在任何事件节点上）仍能命中该声部，与 `ScoreView` 给
-      // `<section class="score-voice">` 加的是同一个 key，两处各自独立算出，
+      // （不落在任何事件节点上）仍能命中该声部，与 systemized renderer 中该声部层
+      // （`SystemView.tsx` 的 `.system-layer`）上的 voice anchor 是同一个 key，两处各自独立算出，
       // 值必然一致。
       'data-anchor-key': anchorKey({ kind: 'voice', voiceId: layout.voiceId }),
     },

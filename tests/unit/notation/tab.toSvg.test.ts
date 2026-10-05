@@ -101,8 +101,8 @@ describe('tabToSvg —— 节点数与 TabLayout.nodes 一一对应', () => {
     expect(svg.attrs['role']).toBe('img');
     expect(svg.attrs['data-voice-id']).toBe(result.voiceId);
     expect(svg.attrs['viewBox']).toBe(`0 0 ${String(result.width)} ${String(result.height)}`);
-    // 与 jianpu 同构：voice 级 key 与 `ScoreView` 给 `<section class="score-voice">`
-    // 加的是同一个 key，两处各自独立算出，值必然一致。
+    // 与 jianpu 同构：voice 级 key 与 systemized renderer 中该声部层（`SystemView.tsx` 的
+    // `.system-layer`）上的 voice anchor 是同一个 key，两处各自独立算出，值必然一致。
     expect(svg.attrs['data-anchor-key']).toBe(anchorKey({ kind: 'voice', voiceId: result.voiceId }));
   });
 

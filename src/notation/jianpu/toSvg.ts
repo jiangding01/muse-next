@@ -323,8 +323,8 @@ export function jianpuToSvg(layout: JianpuLayout): SvgNode {
       'aria-label': 'jianpu notation',
       'data-voice-id': layout.voiceId,
       // 根节点携带 voice 级 `data-anchor-key`（P1-3）：点击空白画布区域（不落在任何
-      // 事件节点上）仍能命中该声部——它与 `ScoreView` 给 `<section class="score-voice">`
-      // 加的是同一个 key（`anchorKey({kind:'voice', voiceId})`），两处各自独立算出，
+      // 事件节点上）仍能命中该声部——它与 systemized renderer 中该声部层（`SystemView.tsx` 的
+      // `.system-layer`）上的 voice anchor 是同一个 key（`anchorKey({kind:'voice', voiceId})`），两处各自独立算出，
       // 不互相依赖，值必然一致。
       'data-anchor-key': anchorKey({ kind: 'voice', voiceId: layout.voiceId }),
     },
