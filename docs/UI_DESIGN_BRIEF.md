@@ -1,7 +1,8 @@
 # Muse Next — UI 设计需求说明（M3 前置）
 
-> 版本：v1.3.5 — 2026-10-05：§2.3 声部区 / 缩放、§2.7.4、§2.7.6、§3.2 V2 随 M2.5 T9b 更新为 systemized renderer（`.score-systems` 每系统一块）
-> 上一版：v1.3.4 — 2026-10-04：附录 A 第 43 / 44 条话术随 M2.5 T2 诊断分工修正（总时值不等归 timing，不再称结构冲突）
+> 版本：v1.3.6 — 2026-10-06：§2.3 系统区补充五线谱层随本行纵向墨迹自动加高（M2.5 T9b.S）
+> 上一版：v1.3.5 — 2026-10-05：§2.3 声部区 / 缩放、§2.7.4、§2.7.6、§3.2 V2 随 M2.5 T9b 更新为 systemized renderer（`.score-systems` 每系统一块）
+> （v1.3.4 — 2026-10-04：附录 A 第 43 / 44 条话术随 M2.5 T2 诊断分工修正（总时值不等归 timing，不再称结构冲突）
 > （v1.3.3 — 2026-10-04：附录 A 诊断码 48 → 49（M2.5 T1 追加 `system.group-declaration-ignored`）；第 41 条话术随 T1 分组边界修正
 > （v1.3.2 — 2026-10-04：附录 A 诊断码 39 → 48（M2.5 T0 追加 9 条 system / chord 码）；第 29 条改注为遗留码）
 > （v1.3.1 — 2026-09-22：单个系统不跨页；M2.5 只做 page layout model / system-page 分配，Print Preview/打印/PDF 仍属 M5）
@@ -182,7 +183,9 @@ M4 Playback → M5 Import/Export/Print → M6 Compatibility / Packaging
      事件；声部内不再重复画和弦符号；
    - 其下按声部层自上而下绝对定位（层高 / 层 top 来自 T8），每层带 `data-voice-id` 与 voice 级锚点：
      `jianpu` / `tab` → 按 system 切好的自绘 SVG；`staff` → 每个 (system, 声部) 一个 VexFlow 独占 host
-     （`.staff-canvas`），**异步**（先 `await document.fonts.ready`）；
+     （`.staff-canvas`），**异步**（先 `await document.fonts.ready`）；五线谱层高**按本行实际纵向墨迹自适应**（M2.5 T9b.S）：
+     高音 / 低音加线、符干、升降号、附点、延音线越出基础谱表区时，该层在上 / 下方加高、谱表整体下移，不再侵入相邻
+     system；每个声部、每一行独立计算。占位文本的点击热区覆盖基础谱表区；
    - 所有 system 的音乐起点左对齐，行首和弦图向左伸出时整体留出左侧留白（可能带来横向滚动）。
    缺席 / 未知 style 的声部在 system 内只占 0 高的层位，可见的虚线框占位（大写小标签 + 等宽字体事件摘要）
    统一列在系统区下方，每个声部一项。

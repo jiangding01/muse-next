@@ -2,7 +2,7 @@
 
 > 面向后续实现 Agent 的项目交接文档  
 > 项目代号：`muse-next`  
-> 当前阶段：**M0–M1.8 已封板；M2 Notation Rendering T0–T9 已全部完成（Chord / Jianpu / TAB / Staff 四种记谱可渲染 + T8 render matrix 契约测试 + T9 文档封板），✅ 2026-09-22 封板（原始 seal CI run 35700198783；T8.1 post-seal 契约收紧 run 35702615344；当前 HEAD run 35702885112 三平台全绿）；UI 设计 Brief 已完成（`docs/UI_DESIGN_BRIEF.md` v1.3.5）；M2.5 Score System Layout 方案冻结为 v1.0，**T0 已完成（2026-10-04，`6e5a532` + 命名修订 `3f5b48c`），T1 声部视觉分组已完成（`2b9882c`），T2 跨声部 measure identity 已完成（`218d143`），T2.1 小节错位锁存已完成（`9037351`），T3 共享小节时间轴已完成（`7ee1e27`），T3.5 TAB / 简谱节奏刻印已完成（`d2486aa`），T4 公共几何编排已完成（2026-10-05，`9661810`），T5 三个 voice layout 的外部几何适配已完成（2026-10-05，`ed4ea88`），均三平台 CI 全绿；T5.S VexFlow shared timing spike 已完成（2026-10-05，结论 `feasible-with-cost` / no adapter merged，M2.5 只承诺 Staff tier 1）；T6 和弦图层水平规划已完成（2026-10-05，`c74094e`）；T8 最终系统纵向编排已完成（2026-10-05，`b513261`）；T9a 页面模型已完成（2026-10-05，`49b0e11`）；T9b renderer system 化已完成（2026-10-05，`9eb5722`）；下一步先裁决 Staff 纵向墨迹越界（T9c 封板前裁决项），T9c 待用户明确指令**；M3 排在 M2.5 之后**（详见 §30 里程碑表、§30.1「M2 进行中状态」与「M2.5 T0 实际状态」、§69「当前明确的下一任务」）  
+> 当前阶段：**M0–M1.8 已封板；M2 Notation Rendering T0–T9 已全部完成（Chord / Jianpu / TAB / Staff 四种记谱可渲染 + T8 render matrix 契约测试 + T9 文档封板），✅ 2026-09-22 封板（原始 seal CI run 35700198783；T8.1 post-seal 契约收紧 run 35702615344；当前 HEAD run 35702885112 三平台全绿）；UI 设计 Brief 已完成（`docs/UI_DESIGN_BRIEF.md` v1.3.6）；M2.5 Score System Layout 方案冻结为 v1.0，**T0 已完成（2026-10-04，`6e5a532` + 命名修订 `3f5b48c`），T1 声部视觉分组已完成（`2b9882c`），T2 跨声部 measure identity 已完成（`218d143`），T2.1 小节错位锁存已完成（`9037351`），T3 共享小节时间轴已完成（`7ee1e27`），T3.5 TAB / 简谱节奏刻印已完成（`d2486aa`），T4 公共几何编排已完成（2026-10-05，`9661810`），T5 三个 voice layout 的外部几何适配已完成（2026-10-05，`ed4ea88`），均三平台 CI 全绿；T5.S VexFlow shared timing spike 已完成（2026-10-05，结论 `feasible-with-cost` / no adapter merged，M2.5 只承诺 Staff tier 1）；T6 和弦图层水平规划已完成（2026-10-05，`c74094e`）；T8 最终系统纵向编排已完成（2026-10-05，`b513261`）；T9a 页面模型已完成（2026-10-05，`49b0e11`）；T9b renderer system 化已完成（2026-10-05，`9eb5722`）；T9b.S Staff 纵向需求已完成（2026-10-06，`17efec3`，T9b 与 T9c 之间插入的 pre-seal 阶段）；下一步 T9c（11 语料 smoke + 文档 + seal），待用户明确指令**；M3 排在 M2.5 之后**（详见 §30 里程碑表、§30.1「M2 进行中状态」与「M2.5 T0 实际状态」、§69「当前明确的下一任务」）  
 > 核心目标：以现代 TypeScript 技术栈重建已停止维护的 **Muse Pro 2.70** 的核心能力，并优先恢复其 `.jcx` 乐谱格式、谱面渲染、编辑与播放能力。
 
 ---
@@ -1798,7 +1798,8 @@ T5.S ✅ 2026-10-05（VexFlow shared timing spike，`feasible-with-cost` / no ad
 T6 ✅ 2026-10-05（`c74094e`，CI run 37296973259 三平台全绿，和弦图层水平规划）；
 T8 ✅ 2026-10-05（`b513261`，CI run 37305952319 三平台全绿，最终系统纵向编排）；
 T9a ✅ 2026-10-05（`49b0e11`，CI run 37312875513 三平台全绿，页面模型）；
-T9b ✅ 2026-10-05（`9eb5722`，CI run 37325626662 三平台全绿，renderer system 化），下一步先裁决 Staff 纵向墨迹越界，T9c 待用户指令）
+T9b ✅ 2026-10-05（`9eb5722`，CI run 37325626662 三平台全绿，renderer system 化）；
+T9b.S ✅ 2026-10-06（`17efec3`，CI run 37339645866 三平台全绿，Staff 纵向需求，T9c 前插入的 pre-seal 阶段），T9c 待用户指令）
 
 → M3
 Editor Core
@@ -2655,7 +2656,7 @@ visual debt、T7 第 6 条），按 视觉 / 架构 / 测试 分类，每行注�
 | 视觉 | 头部字号 CSS 与 `layout/metrics` 双来源，未统一 | T5 |
 | 视觉 | **Staff header demand calibration**：行首预留按每个升降号 8 估算（`STAFF_METRICS.headerReserve`），VexFlow 5 实测约 11 / 个，≥ 2 个升降号的调号（D、B♭ 起）行首预留不足（C♯ 大调缺 59.4），tier 1 下行首小节内容被挤窄；另 Staff demand 不含 VexFlow stave 内部缩进（非行首 ≥ 17）——这是 Staff tier 2 的前置之一 | M2.5 T5.S |
 | 视觉 | 歌词按列左对齐，居中留作视觉 polish | T5.2 |
-| 视觉 | `STAFF_METRICS.lineGap` 8u 与 VexFlow 实际谱线距 10px 不一致（仅影响自绘 tuplet bracket / 热区偏移，不影响 VexFlow 自己画的谱线） | T7 |
+| 视觉 | ~~`STAFF_METRICS.lineGap` 8u 与 VexFlow 实际谱线距 10px 不一致（仅影响自绘 tuplet bracket / 热区偏移，不影响 VexFlow 自己画的谱线）~~ **已由 M2.5 T9b.S（`17efec3`）解决**：`lineGap` 校准为 10 并成为唯一线距真源，renderer 显式传给 VexFlow | T7 |
 | 视觉 | `keySignatureAccidentalReserve` 固定按 7 个升降号预留，偏保守（多数调号用不到这么宽） | T7 |
 | 视觉 | Staff 不做 beam（暂缓单独裁决） | T7 |
 | 视觉 | Staff slur/lyrics 不画，仅 voice 级 info 占位 | T7 |
@@ -2689,11 +2690,12 @@ visual debt、T7 第 6 条），按 视觉 / 架构 / 测试 分类，每行注�
 - **T8 ✅（2026-10-05，`b513261`，CI run 37305952319 三平台全绿；见下方「M2.5 T8 实际状态」）**。
 - **T9a ✅（2026-10-05，`49b0e11`，CI run 37312875513 三平台全绿；见下方「M2.5 T9a 实际状态」）**。
 - **T9b ✅（2026-10-05，`9eb5722`，CI run 37325626662 三平台全绿；见下方「M2.5 T9b 实际状态」）**。
+- **T9b.S ✅（2026-10-06，`17efec3`，CI run 37339645866 三平台全绿；T9b 与 T9c 之间插入的 pre-seal 阶段；见下方「M2.5 T9b.S 实际状态」）**。
 - 前置条件（M2.5 之前、独立 formats 小任务）：~~`strokePrefix → TabGroupEvent.stroke` 回填~~ **已完成（2026-09-22，M2.5 formats preflight）**：`scan.ts` 顶层循环把紧邻 `tabGroup` 的 `strokePrefix` 绑进 `TabGroupEvent.stroke`，不改 Domain 类型/serializer 代码，dangling-stroke 诊断未对绑定成功的 group stroke 误报（真悬空的仍照常发 info）。U06（body `L:` 按声部作用域）已于 `8a74e8e` 结案。
 - 架构：`src/notation/system/**`（contracts 叶子层 → groupVoices / measureIdentity / timeline / composeSystem / justify / chordOverlay / pageModel）；System = overlay layers（chord diagrams，`layoutChord` 保持 document 级）+ ordered voice layers（jianpu/tab/staff 接受外部 system/measure 几何）+ attached layers（lyrics）；voice layout 不得反向 import composer。
 - 关键裁决：`MeasureTimeline` 只含 timed onset（绝对 Rational 累计 offset）+ `chordSymbol` zero-time overlay，barline 固定 `endX`，decoration/grace/unknown 走 voice-local slot；跨 voice measure identity = ordinal candidate + 结构兼容性校验（时值总量逐 measure 绝对相等，不预设相等，不等进 tier 3；缺 measure 留空保留公共宽度；冲突 fallback + 诊断，不重写事件）；公共 measure width = 各 voice demand 取 max → packing → water-filling justify（`justified: full|partial|none`，末行不拉）；D11 精确名匹配（0 只画名 / 1 名+图 / >1 只画名 + ambiguity 诊断）；`ComposedSystemLayout {target:'screen'|'page'}`，PageModel 只收 page 产物，单 system 不跨页；Staff 验收 = tier 1（共享 measure 边界/宽度），T5.S 为非阻塞 spike。
 - 刻印（T3.5，先于 T4 demand solver）：TAB/简谱 beam 按拍分组（x/4 四分一拍、6/8 等附点四分一拍、5/8·7/8 与 `M:` raw 不分组；用 voice 自身 offset，不依赖 shared timeline）；**P1-3 窄化为新裁决**：Meter 不得直接决定 spacing，可用于 engraving grouping，glyph demand 反向约束最小宽度；扫弦 `V/U` → ↓/↑；纵向次序 和弦名 → 和弦图 → 箭头 → 第 1 弦。
-- 任务链：T0 contracts + negative guards → T1 group → T2 measure identity → T3 timeline → T3.5 beam/demand → T4 packing/justify（+ positive guard）→ T5 voice external geometry（只做三个 layout 的 adapter）→ T5.S staff spike → T6 chord overlay → T8 system matrix + **纵向 system 组装**（composer 调用三个 external layout、层 top / height、歌词 / TAB 深时值补高、和弦带、`ScoreSystemLayout` / `ComposedSystemLayout`，T5 用户裁决 N-a）→ T9a PageModel → T9b renderer system 化 → T9c smoke/docs/seal。每步 ≤350 行、无 class/as/any、诊断码只追加、只用现有四种 Anchor。
+- 任务链：T0 contracts + negative guards → T1 group → T2 measure identity → T3 timeline → T3.5 beam/demand → T4 packing/justify（+ positive guard）→ T5 voice external geometry（只做三个 layout 的 adapter）→ T5.S staff spike → T6 chord overlay → T8 system matrix + **纵向 system 组装**（composer 调用三个 external layout、层 top / height、歌词 / TAB 深时值补高、和弦带、`ScoreSystemLayout` / `ComposedSystemLayout`，T5 用户裁决 N-a）→ T9a PageModel → T9b renderer system 化 → T9b.S Staff 纵向需求（pre-seal 插入）→ T9c smoke/docs/seal。每步 ≤350 行、无 class/as/any、诊断码只追加、只用现有四种 Anchor。
 
 **M2.5 T0 实际状态（2026-10-04，`6e5a532` CI run 37137587990 + 命名修订 `3f5b48c` CI run 37137776164，均三平台全绿）**：
 - 范围：只做 contracts / system metrics / 诊断码 / negative guards；renderer、三个 voice layout、Domain / parse / serializer 零改动。
@@ -2912,7 +2914,7 @@ visual debt、T7 第 6 条），按 视觉 / 架构 / 测试 分类，每行注�
 - 流程备注：本阶段起禁止 `npx` / `npm exec` / `pnpm dlx` 等隐式下载；typecheck / 测试走 `npm run` 脚本，scratch 探针用
   `node --import tsx`。
 
-**M2.5 T9b 实际状态（2026-10-05，`9eb5722`，CI run 37325626662 三平台全绿；T9c 未启动，先裁决 Staff 纵向墨迹越界）**：
+**M2.5 T9b 实际状态（2026-10-05，`9eb5722`，CI run 37325626662 三平台全绿；Staff 纵向墨迹越界已由 T9b.S 于 `17efec3` 解决）**：
 - 范围：**renderer system 化**——renderer 正式从声部级路径切到 `composeScoreLayout(screen) → system DOM`。不接 PageModel UI、
   不实现 Staff tier 2、不改 Domain / parser / serializer；冻结的 `architecture.test.ts` 零改动。一个代码提交（17 项：6 改、
   3 删、8 新）。用户裁决 A–P + 补充裁决 1–8 + 修复轮裁决（2026-10-05，冻结方案顶部修订记录与 §D 已同步）。
@@ -2951,7 +2953,8 @@ visual debt、T7 第 6 条），按 视觉 / 架构 / 测试 分类，每行注�
     墨迹（多条加线、低位延音线等）会明显越出 96u 层框。T9b 让墨迹不被裁剪后，它会**侵入相邻 system 的区域**（合成谱实测墨迹
     范围约 −118 到 233，层高 96）。M2.5 要为后续 selection / editing 提供可信的最终几何，必须在 M2.5 封板前裁决：
     **A** 接受 Staff tier 1 视觉越界，M3 继续以层 box 为交互边界；**B** 在 M2.5 封板前插入小阶段补 Staff vertical demand
-    （用户当前倾向 B）。
+    （用户当前倾向 B）。→ **已裁决 B，由 T9b.S（`17efec3`）解决**，见下方「M2.5 T9b.S 实际状态」。（后续浏览器逐元素实测表明，
+    上述 −118 到 233 含 Bravura 字形文本行盒等放大，真实墨迹例如 C8 顶到 −63、C2 底到 157，越界仍然成立。）
 - **守卫**：新建 `tests/unit/notation/architecture.t9b.test.ts`（自带本地 helper，`architecture.test.ts` 继续冻结）：renderer
   全体不得值导入 / 调用声部 layout 与 T4–T9a planner（`import type` 放行），`composeScoreLayout` 只有 ScoreView 值导入；
   旧路径文件与开关不存在；ScoreView 接线（screen policy、zoom 进入可用宽度、row-gap 只消费一次 systemGap、诊断公式、高亮
@@ -2971,6 +2974,68 @@ visual debt、T7 第 6 条），按 视觉 / 架构 / 测试 分类，每行注�
   不被裁剪、控制台无错误。
 - 流程备注：实现阶段删除文件只用 `rm`（曾误用 `git rm --cached` 并立即 `git restore --staged` 撤回）；全程禁止 `npx` /
   `npm exec` / `pnpm dlx`，scratch 探针用 `node --import tsx`。
+
+**M2.5 T9b.S 实际状态（2026-10-06，`17efec3`，CI run 37339645866 三平台全绿；T9b 与 T9c 之间插入的 pre-seal 阶段）**：
+- **为何插入**：T8 给 Staff 层固定 96u（Staff 额外高度恒为 0），T9b 让 Staff 墨迹不被裁剪后，真实可见墨迹（高 / 低音加线、
+  符干、升降号、附点、延音线）会越出层框并侵入相邻 system。M2.5 要为 selection / editing 提供可信的最终几何，用户裁决**不**
+  把它记成债务后封板，而是在 T9c 前插入本阶段，让 Staff 纵向需求真实反映可见谱面。不做 Staff tier 2（横向对齐）。
+- **线距真源（裁决 M1）**：`STAFF_METRICS.lineGap` 8 → **10**，是 Muse Next 五线谱线距的**唯一产品几何真源**；VexFlow 只消费它
+  （`renderStaff` 显式传 `spacingBetweenLinesPx = lineGap`、`spaceAboveStaffLn = staffTopOffset / lineGap`，不再读
+  `VexFlow.STAVE_LINE_DISTANCE` 定义几何）。基础层 96 = 上方余量 32 + 谱表跨度 4 × 10 = 40 + 下方余量 24。同步后的预期变化
+  （不是债务）：自绘 tuplet 括号离第一线 16 → 20、腿长 4 → 5、最小跨度 8 → 10。
+- **需求模型**：每个 `(voiceId, systemIndex)` 独立计算（一个声部的极端音不抬高别的声部或别的行），
+  `height = 96 + topExtra + bottomExtra`；上方越界时 stave 通过 `topInset`（= 该行 `topExtra`）整体下移。音高位置
+  `p = 音级 − 谱号第五线音级`（treble E4 / bass G2 / alto F3 / tenor D3），符头中心 `y = (8 − p) × lineGap / 2`（相对第一线）；
+  每个音高的上 / 下包络取符头半高、升降号、附点、tie 端点包络的最大值；符干方向按「离中线最远的音决定，平局向下」，长 35，
+  超八度延长到中线后再加 32 / 64 / 128 分的 flag 延长，breve / whole 无符干；`topExtra = max(0, padding − (32 + 墨迹顶))`、
+  `bottomExtra = max(0, 32 + 墨迹底 + padding − 96)`。本行没有本声部 measure 的 absent 行保持 96、inset 0。全部尺寸取自
+  `STAFF_METRICS.verticalInk` / `tieVerticalPadding`（按浏览器实测标定，取值 ≥ 实测）。
+- **纳入 containment 的墨迹（裁决 I）**：note / chord 音高、加线（由符头包络覆盖）、符干与短时值符干延长、升降号、附点（**上下
+  双向**保守包络 7，覆盖 VexFlow 在相邻音和弦里把附点下移的情形）、tie（端点保守包络 13，不复制 StaveTie 曲线：Domain
+  memberIndex 能唯一定位 pitch 时只扩该音，否则整事件扩张；同一事件多条 tie 取并集；unresolved 只计源端）。**不宣称**完整复制
+  VexFlow SVG bbox；谱号 / 调号 / 拍号、休止、自绘 tuplet 括号、占位文本按已验证的基础余量处理或记为债务（见下）。
+- **复用而不重新解释**：`staff/staffVerticalDemand.ts` 只经 `planStaffNode`（事件语义，占位 / 休止 / 和弦符号不计音高墨迹）、
+  `resolveStaffClef`（新 `staff/staffClef.ts`，谱号三态规则的唯一实现，纯、不发诊断；`layoutStaff` 按 status 发原有诊断，文本逐字
+  不变）、`resolveVoiceRelations`（tie 端点）取事实；不 import 渲染器 / VexFlow / `layoutStaff` / `system/**`。没有
+  renderer → notation 的反馈环，没有二次 compose，每个 voice layout 仍恰好调用一次。
+- **数据流与 contracts**：`composeLayout` 以 dependency injection 把绑定 `DomainIndex` 的 `staffLayerDemands` 作为
+  `StaffDemandSource` 传给 `planVoiceLayers`——这是为了遵守冻结的 `architecture.test.ts` 对 `verticalDemand.ts` 的 import 边界
+  （只允许简谱 / TAB 两个 helper），用户裁决原本允许给 `planVoiceLayers` 加 `DomainIndex` 参数。`VoicePlan.heights` 仍是最终层高的
+  唯一真源，Staff 另带内部 `staffTopInsets`；`StaffContext.external.topInsets` 为**必填**结构不变量：键集合必须恰为 systems、值有限
+  且 ≥ 0、层高 ≥ 96 且 `topInset + 96 ≤ 层高`，任一不满足直接 `RangeError`（不 clamp、不回退 0）；`layoutStaff` 只消费不重算，
+  external 路径 `StaffStaveSpec.y = 层 origin y + topInset`，切片原有的 y 平移自然得到 topInset。**`VoiceLayerLayout`、
+  `system/contracts.ts`、`StaffLayout`、PageModel 均零修改**（PageModel 通过 `box.height` 自然感知更高的 system）。
+- **legacy 默认路径**：`layoutStaff` 不带 external 的 M2 默认路径仍固定 96（裁决 M4），本阶段**没有**重做其动态纵向 restack；
+  动态高度只存在于 M2.5 systemized external 路径。
+- **renderer**：除线距显式接 `STAFF_METRICS` 外不重算纵向需求；占位 / 段末文本 tickable 的热区改为**基础 Staff box**
+  （`staffBaseHitBand`：第一线上方 `staffTopOffset` 起、高 `systemHeight`，动态内缩下即层内 `[topInset, topInset + 96]`），不再用
+  `lineGap × 3` 推导。
+- **守卫**：新建 `tests/unit/notation/architecture.t9bs.test.ts`（`architecture.test.ts` 继续冻结）：helper 依赖边界与真正复用、
+  尺寸只取 metrics、谱号缺省值 / 完整已知集合只在 `staffClef.ts`、compose 唯一调用 helper 并把 topInsets 交给 layoutStaff、
+  layoutStaff 全仓只由 composeLayout 调用、topInset 不得 `?? 0` / `|| 0` / 三元回退、renderer 不引用纵向需求与音高语义、
+  线距与热区写法、PageModel 无记谱依赖、无 tier 2，均带反例。已知限制：正则级源码守卫可被 `.5` 字面量、复杂解构、`includes`
+  变体、别名 import / 运行时二次调用绕过，由 mutation 与 review 兜底。
+- **已知债务 / 限制**：
+  - **L-7（Staff renderer polish / robustness 债务）**：占位文本（TextNote，line 9）仍在基础 96 内，但当前字体下底部余量 **< 1u**；
+    T9b.S **不**宣称包住任意 TextNote 字体 bbox。
+  - 自绘 tuplet 括号固定在第一线上方，与高音可能视觉碰撞（不跨 system），属 polish。
+  - 升降号 / 附点 / tie / 符尾延长的包络常量按浏览器实测标定，node 环境无字形度量，未做自动化字形对照（结构几何——符头 y、
+    符干方向与末端、线距——有 node 下的 VexFlow 对照测试）。
+  - tie 合并里「已是整事件就保持」的分支在解析器可达输入上与原实现等价（解析器总是先发成员端点、后发整事件端点），mutation
+    无法区分，属等价变异。
+- 文件：`staff/staffVerticalDemand.ts` 195、`staff/staffClef.ts` 51、`layoutStaff.ts` 340、`renderStaff.ts` 344、
+  `verticalDemand.ts` 126、`composeLayout.ts` 199 行；测试 `staff.verticalDemand.test.ts` 245、`system.composeLayout.staff.test.ts`
+  174、`architecture.t9bs.test.ts` 256、`renderer/staffVerticalParity.test.ts` 93 行，全部 ≤ 350。
+- 验证（**本阶段验证记录，不是长期 golden**）：typecheck；Vitest **103 files / 7126 pass**；fixture-report 105/105；corpus-test
+  11/11；T3–T9b baseline 401 条；render matrix 1215 条，全部通过。node 下 VexFlow 结构对照（符头 y、符干方向与末端、线距、热区）
+  通过；浏览器逐元素实测墨迹被包络覆盖 **50/50**（含相邻音附点和弦），最大富余 3.2u。独立只读 review 无 CRITICAL / HIGH
+  （3 条 MEDIUM 补测试、7 条 LOW 按裁决修复或记债）；独立 worktree mutation **46/46 杀死**（均为断言失败），主工作区 hash 零漂移。
+  真实语料组装探针（11 文件 × 3 种版式）不变量 0 违反；本次观测中只有一个语料含 Staff、少数行轻微扩高、分页总数不变——这些
+  数值随语料与参数变化，**不得**写成永久 golden。Electron 渲染进程 smoke（合成谱，100% / 125%）：极高 / 极低音、附点相邻音
+  和弦、跨行 resolved tie（两行都扩高）、unresolved tie（只扩源端）、占位热区真实点击命中、逐层墨迹都在层框内、相邻 system
+  墨迹零重叠、viewBox 高 = 层高、控制台 0 error。
+- 流程备注：tie 写法与时值写法先用 scratch 探针确认解析结果再写用例（例如和弦时值需写在成员上 `[G/8c'/8]`）；VexFlow 浏览器
+  实测使用 scratchpad 中的本地 VexFlow 5.0.0 副本，不发起下载；全程禁止 `npx` / `npm exec` / `pnpm dlx`。
 
 **M2 seal 与 M3 前置（T9 之后，恢复时从这里继续）**：**2026-09-22 追加裁决：M2 与 UI 目标版式确认之后、M3 之前先做 M2.5 Score System Layout（见 §30 路线表与 `docs/UI_DESIGN_BRIEF.md` §2.7.6、§10.17/10.18）；M2.5 的 System 模型 = overlay layers（chord diagrams）+ ordered voice layers（TAB/Jianpu/Staff 接受外部 system/measure 几何）+ attached layers（lyrics），chord 不是第四种声部 layout，system 高度由内容决定、分页只在 system 边界，`bracket` 只证明视觉分组、需定义 cross-voice measure mismatch policy。**原文：T0–T9 已全部完成并推送，
 下一步不是继续写渲染代码，而是：
@@ -4515,10 +4580,10 @@ Chord / Jianpu / TAB / Staff 四种记谱可渲染（T0–T7，T7 Staff + VexFlo
    **M2.5 T8 已完成**（`b513261`，三平台 CI 全绿，最终系统纵向编排，见 §30.1「M2.5 T8 实际状态」），
    **M2.5 T9a 已完成**（`49b0e11`，三平台 CI 全绿，页面模型，见 §30.1「M2.5 T9a 实际状态」），
    **M2.5 T9b 已完成**（`9eb5722`，三平台 CI 全绿，renderer system 化，见 §30.1「M2.5 T9b 实际状态」），
-   **当前主动暂停。下一步不是直接启动 T9c 并封板**，而是先裁决 Staff 纵向墨迹越界（§30.1「M2.5 T9b 实际状态」的
-   T9c 封板前裁决项）：A 接受 Staff tier 1 视觉越界、M3 以层 box 为交互边界；或 B 在 M2.5 封板前插入小阶段补 Staff
-   vertical demand（用户当前倾向 B）。裁决后再按指令推进（仍**不得**顺手实现 Staff tier 2）；启动时仍先给
-   实现方案 + 测试矩阵再编码；新的 architecture 守卫必须新建 `architecture.<stage>.test.ts`，不得再往
+   **M2.5 T9b.S 已完成**（`17efec3`，三平台 CI 全绿，Staff 纵向需求，T9c 前插入的 pre-seal 阶段，见 §30.1「M2.5 T9b.S 实际状态」）。
+   **下一步：T9c**（11 语料 corpus smoke + 文档同步 + seal），**待用户明确指令再启动**；Staff 纵向缺口已不再阻塞 system
+   geometry 封板，剩余的占位文本小余量与 tuplet / 高音视觉碰撞属 polish / robustness（仍**不得**顺手实现 Staff tier 2）；
+   启动时仍先给实现方案 + 测试矩阵再编码；新的 architecture 守卫必须新建 `architecture.<stage>.test.ts`，不得再往
    `architecture.test.ts` 追加；
 4. M2.5 封板后再规划 M3A（source/save/history）→ M3B（selection + 三向同步）→ M3C（可视化编辑）。
 ```
