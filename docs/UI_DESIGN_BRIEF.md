@@ -1,7 +1,8 @@
 # Muse Next — UI 设计需求说明（M3 前置）
 
-> 版本：v1.3.4 — 2026-10-04：附录 A 第 43 / 44 条话术随 M2.5 T2 诊断分工修正（总时值不等归 timing，不再称结构冲突）
-> 上一版：v1.3.3 — 2026-10-04：附录 A 诊断码 48 → 49（M2.5 T1 追加 `system.group-declaration-ignored`）；第 41 条话术随 T1 分组边界修正
+> 版本：v1.3.5 — 2026-10-05：§2.3 声部区 / 缩放、§2.7.4、§2.7.6、§3.2 V2 随 M2.5 T9b 更新为 systemized renderer（`.score-systems` 每系统一块）
+> 上一版：v1.3.4 — 2026-10-04：附录 A 第 43 / 44 条话术随 M2.5 T2 诊断分工修正（总时值不等归 timing，不再称结构冲突）
+> （v1.3.3 — 2026-10-04：附录 A 诊断码 48 → 49（M2.5 T1 追加 `system.group-declaration-ignored`）；第 41 条话术随 T1 分组边界修正
 > （v1.3.2 — 2026-10-04：附录 A 诊断码 39 → 48（M2.5 T0 追加 9 条 system / chord 码）；第 29 条改注为遗留码）
 > （v1.3.1 — 2026-09-22：单个系统不跨页；M2.5 只做 page layout model / system-page 分配，Print Preview/打印/PDF 仍属 M5）
 > （v1.3 — 2026-09-22：M2.5 架构边界修正（chord overlay、system 高度、
@@ -174,13 +175,17 @@ M4 Playback → M5 Import/Export/Print → M6 Compatibility / Packaging
    一行元信息（key / meter / tempo 的文本化结果）、右对齐 credits、左对齐 notes、
    左对齐文本块（`%%begintext`）。整个 `<header>` 带 `document` 级锚点，可被
    文档级诊断高亮（2px 墨绿描边）。
-2. **声部区**（`.score-voices`，纵向排列，间距 24px）：每个声部一个 `<section>`，
-   带 `data-voice-id` 与 voice 级锚点。四种分支：
-   - `jianpu` → 自绘 SVG（`jianpu-*` class）
-   - `tab` → 自绘 SVG（`tab-*` class）
-   - `staff` → VexFlow 画进独占 host（`.staff-canvas`），**异步**（先
-     `await document.fonts.ready`）
-   - 缺席/未知 style → 虚线框占位：一行大写小标签 + 一段等宽字体的事件文本摘要
+2. **系统区**（`.score-systems`，M2.5 T9b 起取代原「每声部一块」的 `.score-voices`）：整份谱经
+   `composeScoreLayout(screen)` 组装成若干 system，**每个 system 一个 `<section class="score-system">`**
+   （带 `data-system-index`），相邻 system 之间恰好一个 `systemGap`（24 单位 × zoom）。system 内：
+   - 顶部是**和弦 overlay**：和弦图 / 和弦名画在和弦变化的时间位置正上方（T6 精确查表），可点击并命中该和弦符号
+     事件；声部内不再重复画和弦符号；
+   - 其下按声部层自上而下绝对定位（层高 / 层 top 来自 T8），每层带 `data-voice-id` 与 voice 级锚点：
+     `jianpu` / `tab` → 按 system 切好的自绘 SVG；`staff` → 每个 (system, 声部) 一个 VexFlow 独占 host
+     （`.staff-canvas`），**异步**（先 `await document.fonts.ready`）；
+   - 所有 system 的音乐起点左对齐，行首和弦图向左伸出时整体留出左侧留白（可能带来横向滚动）。
+   缺席 / 未知 style 的声部在 system 内只占 0 高的层位，可见的虚线框占位（大写小标签 + 等宽字体事件摘要）
+   统一列在系统区下方，每个声部一项。
 3. **渲染诊断面板**（`DiagnosticsPanel.tsx`）：**当前渲染在纸面内部、谱面正下方**，
    列表项 = 诊断码（9px 等宽）+ 文案，按 info/warning 左边三色条，选中态浅黄底。
    这是明显的位置错误——诊断不该印在"纸"上。
@@ -194,8 +199,8 @@ M4 Playback → M5 Import/Export/Print → M6 Compatibility / Packaging
 对应节点与诊断列表对应条目同时高亮；反向点诊断条目也一样。**不做源码行定位**
 （`SourceRef` 是 AST 路径字符串，行级定位留给 M3）。换 `score` 时选中态清空。
 
-**缩放**：见 H2。`ResizeObserver` 量 `.score-voices` 的真实 CSS 宽度；测不到时
-退回固定 960 单位。
+**缩放**：见 H2。`ResizeObserver` 量 `.score-systems` 的真实 CSS 宽度（该容器宽度只由外层决定，
+system 画布溢出不会反过来改变它）；测不到时退回固定 960 单位。
 
 ### 2.4 右侧 JCX Source 面板（`SourceInspector.tsx`）
 
@@ -346,14 +351,16 @@ profile**，各自选择哪些层、以什么顺序出现，**不推翻 M2.5 的
 
 | 目标版式要求 | 当前实现 | 性质 |
 |---|---|---|
-| 各声部按小节在同一 x 对齐，构成"系统" | 每个声部独立布局、各自换行，纵向堆叠 | 架构差距（`primitives.ts` 的 `TimeSlot` 无 voice 维度） |
+| 各声部按小节在同一 x 对齐，构成"系统" | **M2.5 已实现**（T4 公共几何 + T8 纵向组装 + T9b 每系统一块渲染）；五线谱只承诺小节框对齐（Staff tier 1） | 已落地 |
 | 小节线贯穿全部声部层 | 每个声部各画各的小节线 | 架构差距 |
 | 行内两端对齐、撑满行宽 | 行右端参差（Staff 明确记为 debt） | 布局差距 |
-| 和弦图跟随和弦变化就地画在谱上 | 和弦图集中在纸面底部的总表 | 版式差距（见 §10.16） |
+| 和弦图跟随和弦变化就地画在谱上 | **M2.5 已实现**（T6 规划 + T9b system overlay）；纸面底部的 `%%gchord` 总表仍保留 | 已落地 |
 | 和弦名 → `%%gchord` 图形关联 | D11 默认关闭（仅 INFERRED） | 需产品开关 |
 | TAB beam grouping | 不做 beam，各画各的减时线 | 视觉 debt（2.6） |
 | 歌词跟随简谱行、音节居中 | 简谱歌词已实现，但**按列左对齐** | 视觉 debt（2.6） |
 | `bracket=N` 把若干声部连成一个系统 | `bracket` 已解析、**未渲染** | 未实现（§3.2 V2） |
+
+> 说明（v1.3.5）：本表其余行记录的是 M2.5 启动时的差距；M2.5 各任务（T1 分组、T3.5 节奏刻印、T4 两端对齐、T6 和弦查表、T8 歌词居中等）的实际落地状态以 `HANDOFF.md` §30.1 各「M2.5 Tn 实际状态」为准。
 | 按系统分页 + 页眉页脚页码 | 无限长单页、无页码 | 未实现（§3.2 V5–V7） |
 
 #### 2.7.5 对设计稿的直接要求
@@ -398,7 +405,7 @@ grouping**——先把版式从"按声部堆叠"改成"系统交错"，才不会
   而 `layoutChord(GuitarChord) → ChordLayout` **保持 document 级不变**（与 T8.1
   "chord 退出 voice matrix、独立 document chord matrix"的架构一致）；
 - `ScoreView` 由**"每声部一块"改为"每系统一块"**：DOM 结构、锚点归属、
-  `availableWidth` 的消费方式都随之变化；VexFlow 的 staff 也要按系统切分喂入；
+  `availableWidth` 的消费方式都随之变化；VexFlow 的 staff 也要按系统切分喂入（**M2.5 T9b 已落地**）；
 - 契约测试矩阵（C1/C2/C3）的"每声部一个 layout"假设需要复核。
 
 ---
@@ -425,7 +432,7 @@ grouping**——先把版式从"按声部堆叠"改成"系统交错"，才不会
 | # | 功能 | 优先级 | 来源 | UI 涉及面 | 状态与边界 |
 |---|---|---|---|---|---|
 | V1 | 四种记谱渲染 | P0 | `HANDOFF.md` §30.1、`src/notation/{chord,jianpu,tab,staff}` | 声部区 | 已实现。Jianpu/TAB/Chord 自绘 SVG，Staff 走 VexFlow |
-| V2 | **系统交错（目标）/ 声部堆叠（现状）** | P0（现状）+ P1（目标） | §2.7 成品谱参考、`ScoreView.tsx`、`primitives.ts` | 声部区整体结构 | **目标**：各声部按小节对齐成一个"系统"（和弦图 / 六线谱 / 简谱 / 歌词四层）。**现状**：每个声部独立布局、纵向堆叠，间距固定 24px，没有声部名标签、没有括号连接（`bracket` 已解析未渲染）。差距见 2.7.4 |
+| V2 | **系统交错（目标）/ 声部堆叠（现状）** | P0（现状）+ P1（目标） | §2.7 成品谱参考、`ScoreView.tsx`、`primitives.ts` | 声部区整体结构 | **目标**：各声部按小节对齐成一个"系统"（和弦图 / 六线谱 / 简谱 / 歌词四层）。**现状（M2.5 T9b 起）**：已按系统渲染——同一 group 的声部在一个 system 内按小节对齐、层自上而下排列，和弦图作为 system overlay 画在谱上，system 之间间距 24 单位；仍没有声部名标签、没有括号 / 连接符号（`bracket` 用于分组但不画符号）。差距见 2.7.4 |
 | V2a | 跨声部按小节对齐的统一 spacing | P1 | M2.5（§2.7.6） | 谱面全局 | 未实现。新增 System Layout 负责 measure grid 与 system packing；**jianpu / tab / staff 三个 voice layout** 接受外部几何；**和弦图是 overlay 层，不是第四种声部 layout** |
 | V2b | `bracket=N` 连成系统 | P1 | spec §12.2、M2.5 | 谱面行首 | 属性已解析，未渲染。**只证明视觉分组，不等价于节奏同步**——需配套 cross-voice measure mismatch policy（§2.7.2） |
 | V2c | 行内两端对齐（撑满行宽） | P1 | §2.7.2、M2.5 | 谱面 | 未实现（Staff 已记为 debt） |
