@@ -1,9 +1,8 @@
 /**
  * T7.4 —— `renderer/integrations/vexflow/vexEncoding.ts` 的映射表测试。
  *
- * 放在 `tests/unit/notation/` 而不是新建 `tests/unit/renderer/`：沿用
- * `scoreView.voiceRender.test.ts` 定下的仓库结构（renderer 侧的纯函数测试与 notation
- * 的测试同目录）。
+ * 放在 `tests/unit/notation/`：沿用 M2 时期定下的仓库结构（renderer 侧的纯函数测试与 notation
+ * 的测试同目录；M2.5 T9b 起新增的 system 渲染测试另放在 `tests/unit/renderer/`）。
  *
  * **本文件与被测文件都不 import vexflow**：映射表是纯字符串/字面量，node 环境下即可
  * 全覆盖，不需要 DOM、不需要字体、不需要 canvas。「这些字符串 VexFlow 真的认得吗」这

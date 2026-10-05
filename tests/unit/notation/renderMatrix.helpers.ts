@@ -1,8 +1,8 @@
 /**
  * M2 T8 / T8.1 —— 渲染矩阵的共用夹具（**只放机械操作，断言全部留在 `render.matrix.test.ts`**）。
  *
- * 分派按 `voice.style` 自行做（与 `renderer/components/notation/voiceRender.ts` 同一
- * 口径）：**不 import renderer、不 import vexflow**——矩阵到 layout 层为止，staff 的
+ * 分派按 `voice.style` 自行做（与 M2 时期 renderer 按声部分派的口径一致；M2.5 T9b 起 renderer
+ * 改走 system 化管线）：**不 import renderer、不 import vexflow**——矩阵到 layout 层为止，staff 的
  * adapter 不在矩阵内。`JianpuNodeBase` / `TabNodeBase` / `StaffNodeBase` 三者都带同名
  * 同义的 `anchor: Anchor` 与 `fallback: boolean`，因此泛化访问器按 `MatrixLayout` 这个
  * **判别联合**分支即可，全程零 `as` 断言。
@@ -188,7 +188,7 @@ export function layoutVoiceAs(
 }
 
 /**
- * 按 `voice.style` 分派（同 `voiceRender.buildVoiceRender`，但不 import renderer）。
+ * 按 `voice.style` 分派（M2 时期 renderer 按声部分派的同一口径，但不 import renderer）。
  * `style` 缺席 / 未知 → `undefined`：走 D12 的声部级 fallback summary，见文件头。
  */
 export function layoutVoiceForMatrix(voice: RenderVoice, ctx: MatrixContext): MatrixLayout | undefined {

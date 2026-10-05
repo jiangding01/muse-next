@@ -102,8 +102,8 @@ export const SCORE_VIEW_METRICS = {
    * 只活在 `ScoreView`（renderer 层）用真实 `ResizeObserver` 宽度换算
    * `availableWidth` 这一处，`notation/**` 内部仍然只谈 abstract unit，换算比例
    * 可以随时调整，不影响任何 layout 数值的语义。T6.4 起参与 `zoom` 换算的公式，
-   * 见 `zoomMin`/`zoomMax`/`zoomStep` 与 `renderer/components/notation/voiceRender.ts`
-   * 的 `computeAvailableWidthUnits`。
+   * 见 `zoomMin`/`zoomMax`/`zoomStep` 与 `renderer/components/notation/systemRender.ts`
+   * 的 `computeAvailableWidthUnits`（M2.5 T9b 起迁到该文件，公式不变）。
    */
   cssPixelsPerUnitAtZoom1: 1,
   /**

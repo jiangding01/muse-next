@@ -75,29 +75,35 @@ button { cursor: pointer; }
 .score-header-text-block-line { margin: 0; }
 .score-header[data-anchor-key].render-anchor-highlighted { outline: 2px solid var(--accent); outline-offset: 6px; border-radius: 4px; }
 
-.score-voices { display: grid; gap: 24px; }
-.score-voice { min-width: 0; }
-.score-voice.render-anchor-highlighted { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 4px; }
-.score-voice-jianpu .jianpu-canvas { max-width: 100%; }
-.score-voice-jianpu svg { width: 100%; height: auto; display: block; }
-/* TAB 画布（`notation/tab/toSvg.ts` 产出的 `tab-*` class）：与简谱同一条规则——
-   `.tab-canvas` 的 CSS 宽度已在 ScoreView 按 layout.width × cssPixelsPerUnitAtZoom1 ×
-   zoom 算好（D7：换行由 layout 层按 `availableWidth` 决定，不是 CSS 拉伸决定；
-   `svg { width: 100% }` 只是让 svg 的渲染尺寸跟随这个**已经算好**的画布宽度同步
-   缩放——这正是 zoom 的「外层像素换算」实现本身，不是另一套响应式拉伸）。 */
-.score-voice-tab .tab-canvas { max-width: 100%; }
-.score-voice-tab svg { width: 100%; height: auto; display: block; }
-/* 五线谱画布（VexFlow 画的 SVG，`renderer/integrations/vexflow/renderStaff.ts`）：
-   zoom 宽度写在**外层** `.score-voice-staff` 的内联 px 上（见 StaffVoiceView）；内层
-   `.staff-canvas` 是 VexFlow 独占的 host，只靠这里的 width:100%——`Renderer.resize()`
-   会往 host 与 svg 的 **inline style** 写死像素尺寸（svgcontext.js:133-141），那会盖过
-   样式表，所以 adapter 画完用 `fitSvgToContainer` 把它们清掉并显式写 viewBox；
-   svg 随后才吃得到下面这条 width:100%/height:auto，按容器等比缩放。
-   VexFlow 的 `openGroup(cls)` 会给 class 加 `vf-` 前缀，故自绘组的选择器是 `.vf-staff-*`。
-   根 <svg> 带 pointer-events:none，可点击性靠各元素自带的透明热区，不在这里放开。 */
-.score-voice-staff { max-width: 100%; }
-.score-voice-staff .staff-canvas { width: 100%; }
-.score-voice-staff svg { width: 100%; height: auto; display: block; }
+/* M2.5 T9b：谱面按 system 渲染（`SystemView.tsx`）。几何全部来自 T8：system 的宽 / 高 / 左偏移、层的 top / height
+   都由内联 px 给出（abstract unit × cssPixelsPerUnitAtZoom1 × zoom），CSS 不另算纵向布局、也不做等比缩放——
+   比容器更宽的 system（单个超宽小节、和弦左墨迹留白）横向溢出，由 `.page-stage` 滚动查看。
+   `.score-systems` 的 `min-width: 0` 让它的宽度只由外层决定：system 画布溢出不会撑大 grid 轨道，
+   ResizeObserver 量到的可用宽度不受子内容影响（避免反馈循环）。system 之间的 systemGap 由内联 row-gap 恰好放一次。 */
+.score-systems { display: grid; justify-items: start; min-width: 0; }
+.score-system { position: relative; overflow: visible; }
+.system-layer { position: absolute; left: 0; width: 100%; overflow: visible; }
+/* 高 0 的 fallback 层仍带 voice anchor（保留身份），但不画 0 高描边；可见的高亮目标是 system 外的 fallback 提示。 */
+.system-layer:not(.system-layer-fallback).render-anchor-highlighted { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+/* 简谱 / TAB 层：已切好的 SVG 铺满层（viewBox = 层 box），越界的歌词等墨迹保持可见（不裁剪）。 */
+.system-layer > svg { display: block; width: 100%; height: 100%; overflow: visible; }
+/* 五线谱层：内层 `.staff-canvas` 是 VexFlow 独占的 host，只靠 width:100%；`Renderer.resize()` 写的 inline 尺寸由
+   adapter 的 `fitSvgToContainer` 清掉，svg 随后按 width:100% / height:auto 等比到层的像素宽。
+   VexFlow 的 `openGroup(cls)` 会给 class 加 `vf-` 前缀，故自绘组的选择器是 `.vf-staff-*`。 */
+/* 五线谱的墨迹（多条加线、低位延音线等）可能越出层 box：层、host、svg 都不裁剪（UA 默认 svg:not(:root) 为 hidden）。 */
+.system-layer-staff .staff-canvas { width: 100%; overflow: visible; }
+.system-layer-staff .staff-canvas svg { width: 100%; height: auto; display: block; overflow: visible; }
+/* 和弦 overlay：system box 坐标系的 SVG，铺满 system、叠在各层之上；只有和弦组本身接收点击（命中 event anchor）。 */
+.score-system > .system-overlay { position: absolute; left: 0; top: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; z-index: 1; }
+.system-chord { pointer-events: visiblePainted; cursor: pointer; }
+/* 只画名的和弦名：字号由 SVG 属性 `font-size`（CHORD_METRICS.nameFontSize）给出，这里不写字号。 */
+.system-chord-name { font-family: ui-sans-serif, system-ui; font-weight: 600; fill: #292722; }
+.system-chord.render-anchor-highlighted text { fill: var(--accent); }
+/* 指法数字在深色按弦点上：高亮时保持白字（选择器特异性高于上一条）。 */
+.system-chord.render-anchor-highlighted .finger-number { fill: white; }
+.system-chord.render-anchor-highlighted line, .system-chord.render-anchor-highlighted circle { stroke: var(--accent); }
+.score-fallback-voices { display: grid; gap: 12px; }
+.score-voice-fallback.render-anchor-highlighted { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 4px; }
 .render-anchor-highlighted .vf-stavenote path,
 .render-anchor-highlighted .vf-stavenote text { fill: var(--accent); stroke: var(--accent); }
 .render-anchor-highlighted .vf-stavetie path { fill: var(--accent); stroke: var(--accent); }

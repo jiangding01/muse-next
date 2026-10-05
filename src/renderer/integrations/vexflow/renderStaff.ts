@@ -1,11 +1,11 @@
 /**
- * renderer/integrations/vexflow —— `StaffLayout` → 真实五线谱 SVG（M2 T7.4 入口）。
+ * renderer/integrations/vexflow —— `StaffSystemSlice` → 真实五线谱 SVG（M2 T7.4 入口；M2.5 T9b 改为按 system 切片）。
  *
  * **全仓唯一允许 import vexflow 的目录**（守卫见 `tests/unit/notation/architecture.test.ts`
  * 的「全仓 vexflow 守卫」）。入口固定 `vexflow/bravura`：它在模块加载时用 FontFace API
  * 注册内嵌的 Bravura / Academico 字体数据（`Font.load(...)`），**仓库里不放任何字体
  * 文件**。VexFlow 自己**不**等字体就绪，所以调用方必须先 `await document.fonts.ready`
- * ——这一步在 `StaffVoiceView.tsx` 里做，不在本文件。
+ * ——这一步在 `StaffSystemView.tsx` 里做，不在本文件。
  *
  * 职责分工（各文件 ≤350 行）：本文件负责 Renderer / Stave 循环 / Voice+Formatter /
  * 异常退化 / dispose；节点 → tickable 在 `vexTickables.ts`；tie / tuplet 在
@@ -24,6 +24,9 @@
  * `TextNote`（占位文本 / 和弦符号）包进一个自建的 `<g>` ——因为 `TextNote.draw()` 不
  * `openGroup`，不包就拿不到可写 `data-anchor-key` 的元素，那两类事件会变成点不到也
  * 高亮不了的死角。这不是「手工包 `Voice.draw()`」（那会让整个声部共用一个 anchor）。
+ *
+ * **M2.5 T9b**：systemized 路径在切片层（`components/notation/systemSlices.ts`）已经滤掉全部 chordSymbol，
+ * 和弦只由 system overlay 呈现；本文件与 `vexTickables.ts` 处理 chordSymbol 的分支保留不动，但在该路径下不会被触发。
  */
 
 import {
@@ -33,9 +36,8 @@ import {
 
 import type { EventId } from '../../../domain';
 import { STAFF_METRICS } from '../../../notation/layout/metrics';
-import type {
-  StaffBarlineForm, StaffEventNode, StaffLayout, StaffStaveSpec, StaffTimeSignature,
-} from '../../../notation/staff/staffTypes';
+import type { StaffBarlineForm, StaffEventNode, StaffStaveSpec } from '../../../notation/staff/staffTypes';
+import type { StaffSystemSlice } from './staffSystemSlice';
 import {
   appendHitArea, applyAnchorAttrs, drawAnchoredGroup, drawFallbackMarker, drawHitArea, drawText,
 } from './vexAnchors';
@@ -97,13 +99,13 @@ const NOOP_HANDLE: StaffRenderHandle = { dispose: () => undefined };
  * this.scale(...)  →  setViewBox(0, 0, w, h)
  * ```
  * 浏览器实测结果是 `<svg style="width: 664px; height: 96px">`——**inline style 的优先级
- * 高于样式表**，于是 `global.css` 里的 `.score-voice-staff svg { width: 100% }` 完全不
+ * 高于样式表**，于是 `global.css` 里的 `.staff-canvas svg { width: 100% }`（M2 时期写在声部容器上）完全不
  * 生效（`getComputedStyle(svg).width` 在 zoom 0.5 / 1 / 1.5 下恒为 `664px`）。后果就是
  * 五线谱永远按 1:1 像素画：缩小时超出页面右缘，放大时音符不变大、只占页面一小块，
  * 与 TAB / 简谱（React `SvgTree` + `width:100%` + viewBox）的 D6/D7 语义对不上。
  *
  * `viewBox` 本身是**在的**（实测 `"0 0 664 96"`），所以只要把写死的尺寸清掉、让
- * `width:100%; height:auto` 生效，整张谱就会按外层 wrapper 的像素宽（= `layout.width ×
+ * `width:100%; height:auto` 生效，整张谱就会按外层 wrapper 的像素宽（= `slice.width ×
  * cssPixelsPerUnitAtZoom1 × zoom`）等比缩放。这里仍显式写一遍 `viewBox`：它是本函数
  * 成立的前提，不该依赖 VexFlow 内部某条分支恰好设过。
  */
@@ -130,11 +132,9 @@ function staveOptions(): { readonly spaceAboveStaffLn: number } {
   return { spaceAboveStaffLn: STAFF_METRICS.staffTopOffset / VexFlow.STAVE_LINE_DISTANCE };
 }
 
-/** 整份布局的拍号：取第一条带拍号的行首 stave；没有就按 4/4（只用于构造 `Voice`）。 */
-function voiceTimeOf(layout: StaffLayout): { readonly numBeats: number; readonly beatValue: number } {
-  const time: StaffTimeSignature | undefined = layout.staves.find(
-    (spec) => spec.timeSignature !== undefined,
-  )?.timeSignature;
+/** 拍号：切片携带的「整份 StaffLayout 第一条带拍号的 stave」；没有就按 4/4（只用于构造 `Voice`）。 */
+function voiceTimeOf(slice: StaffSystemSlice): { readonly numBeats: number; readonly beatValue: number } {
+  const time = slice.timeSignature;
   return time === undefined
     ? { numBeats: 4, beatValue: 4 }
     : { numBeats: time.numerator, beatValue: time.denominator };
@@ -260,12 +260,13 @@ function groupNodesByMeasure(
 }
 
 /**
- * 把一个 `StaffLayout` 画进 `host`（一个**由 VexFlow 独占**的 div；React 只管它的外层
- * wrapper，见 `StaffVoiceView.tsx`）。返回的 handle 负责把 VexFlow 建的 `<svg>` 摘掉。
+ * 把一个 `(system, staff 声部)` 切片画进 `host`（一个**由 VexFlow 独占**的 div；React 只管它的外层 wrapper，见
+ * `StaffSystemView.tsx`）。M2.5 T9b 起 adapter 只画这一段：切片已由组装层平移到层内坐标、去掉 chordSymbol，
+ * 关系也已按 system 拆好；本函数不查 system、不拆关系。返回的 handle 负责把 VexFlow 建的 `<svg>` 摘掉。
  */
-export function renderStaff(host: HTMLDivElement, layout: StaffLayout): StaffRenderHandle {
-  const width = Math.max(layout.width, 1);
-  const height = Math.max(layout.height, 1);
+export function renderStaff(host: HTMLDivElement, slice: StaffSystemSlice): StaffRenderHandle {
+  const width = Math.max(slice.width, 1);
+  const height = Math.max(slice.height, 1);
   const renderer = new Renderer(host, Renderer.Backends.SVG);
   // `resize` 会建立 `viewBox`，但同时把 width/height 写成 inline style（优先级高于样式
   // 表）——随后由 `fitSvgToContainer` 清掉，见该函数的实测记录。
@@ -277,22 +278,22 @@ export function renderStaff(host: HTMLDivElement, layout: StaffLayout): StaffRen
   }
   fitSvgToContainer(host, ctx.svg, width, height);
 
-  const grouped = groupNodesByMeasure(layout.nodes);
-  const time = voiceTimeOf(layout);
+  const grouped = groupNodesByMeasure(slice.nodes);
+  const time = voiceTimeOf(slice);
   const staveNotes = new Map<EventId, StaveNote>();
   const nodeByEvent = new Map<EventId, StaffEventNode>();
-  for (const node of layout.nodes) {
+  for (const node of slice.nodes) {
     if (node.anchor.kind === 'event') nodeByEvent.set(node.anchor.eventId, node);
   }
 
-  for (const spec of layout.staves) {
+  for (const spec of slice.staves) {
     try {
       const stave = buildStave(spec);
       stave.setContext(ctx).draw();
       const nodes = grouped.get(spec.measureIndex) ?? [];
       drawBarlineHitAreas(ctx, stave, nodes);
 
-      const measure = buildMeasureTickables(nodes, layout.clef);
+      const measure = buildMeasureTickables(nodes, slice.clef);
       for (const [eventId, note] of measure.staveNotes) staveNotes.set(eventId, note);
       if (measure.tickables.length === 0) continue;
 
@@ -304,7 +305,8 @@ export function renderStaff(host: HTMLDivElement, layout: StaffLayout): StaffRen
       drawTickables(ctx, stave, measure.entries);
       // 和弦符号挂成 `Annotation`，随宿主音符一起画完；`Annotation.draw()` 实测
       // `openGroup('annotation', id)`，所以这里拿得到它自己的 `<g>` 来写 anchor。
-      // 它不画 `pointerRect`，热区用 `getBBox()` 事后补一块。
+      // 它不画 `pointerRect`，热区用 `getBBox()` 事后补一块。（M2.5 T9b：切片已滤掉 chordSymbol，此循环在
+      // systemized 路径下为空，保留以免改动 adapter 行为。）
       for (const { node, annotation } of measure.annotations) {
         const element = annotation.getSVGElement();
         applyAnchorAttrs(element, node.anchor, { fallback: node.fallback });
@@ -318,8 +320,8 @@ export function renderStaff(host: HTMLDivElement, layout: StaffLayout): StaffRen
   // 关系画在所有 stave 之后：tie 需要两端音符都已 format（`getYs()` 才有值），
   // tuplet 需要成员的 `getAbsoluteX()`。两者内部各自 try/catch，逐段降级。
   const index = { staveNotes, nodes: nodeByEvent };
-  drawStaffTies(ctx, layout.ties, index);
-  drawStaffTuplets(ctx, layout.tuplets, index);
+  drawStaffTies(ctx, slice.ties, index);
+  drawStaffTuplets(ctx, slice.tuplets, index);
 
   let disposed = false;
   return {
