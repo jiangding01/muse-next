@@ -8,7 +8,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { equals } from '../../../src/domain';
-import { arcSystemGeometries, buildArcSegments } from '../../../src/notation/jianpu/jianpuArcs';
+import { arcSystemGeometries, buildArcSegments, legacyArcEndpointX } from '../../../src/notation/jianpu/jianpuArcs';
 import { layoutJianpu } from '../../../src/notation/jianpu/layoutJianpu';
 import type { JianpuContext, JianpuLayout } from '../../../src/notation/jianpu/layoutJianpu';
 import { voiceMeasureOnsets } from '../../../src/notation/layout/measureOnsets';
@@ -111,11 +111,86 @@ describe('T5-1 简谱 external —— 与默认路径的不变量（C1 / C2 / C3
     expect(moved).toBeGreaterThan(0);
   });
 
-  it('跨行 tie 消费 external 节点：段数与默认相同，首段从 external 节点出发', () => {
+  it('跨行 tie 消费 external 节点：段数与默认相同，首段从 external 节点 x 出发（T9c.P D3：不是 x + glyphWidth/2）', () => {
     expect(plain.arcs.length).toBeGreaterThan(1);
     expect(external.arcs.map((a) => [a.kind, a.segment])).toEqual(plain.arcs.map((a) => [a.kind, a.segment]));
     const tied = external.nodes.find((n) => n.kind === 'note' && n.measureIndex === 0 && n.slotIndex === 8);
-    expect(external.arcs[0]?.x1).toBe((tied?.x ?? 0) + (tied?.glyphWidth ?? 0) / 2);
+    expect(tied).toBeDefined();
+    expect(external.arcs[0]?.x1).toBe(tied?.x);
+  });
+});
+
+describe('T9c.P —— 弧线端点：external = 节点 x，默认路径保留历史 x + glyphWidth/2（裁决 D3）', () => {
+  const lone = scoreOf([['jianpu', '(C D) E- E F G A B|']]);
+  const voice = voiceAt(lone.renderScore, 0);
+  const base = { score: {}, index: lone.index, measurer: externalMeasurer, availableWidth: 960 };
+  const ext = layoutJianpu(voice, { ...base, external: externalFor(composed(lone.renderScore), voice.voiceId) });
+  const legacy = layoutJianpu(voice, base);
+  /** 第 0 小节第 `nth` 个 note 节点（按源码顺序）。 */
+  const nodeAt = (layout: JianpuLayout, nth: number): JianpuLayout['nodes'][number] | undefined =>
+    layout.nodes.filter((n) => n.kind === 'note' && n.measureIndex === 0)[nth];
+
+  it.each([['slur', 0, 1], ['tie', 2, 3]] as const)('同行 %s：whole 段两端恰为首尾节点 x / 历史 x + glyphWidth/2', (kind, from, to) => {
+    const pick = (layout: JianpuLayout): JianpuLayout['arcs'][number] | undefined => layout.arcs.find((a) => a.kind === kind);
+    const [ea, la] = [pick(ext), pick(legacy)];
+    expect([ea?.segment, la?.segment]).toEqual(['whole', 'whole']);
+    const [e1, e2, l1, l2] = [nodeAt(ext, from), nodeAt(ext, to), nodeAt(legacy, from), nodeAt(legacy, to)];
+    expect([ea?.x1, ea?.x2]).toEqual([e1?.x, e2?.x]);
+    expect([la?.x1, la?.x2]).toEqual([(l1?.x ?? Number.NaN) + (l1?.glyphWidth ?? 0) / 2, (l2?.x ?? Number.NaN) + (l2?.glyphWidth ?? 0) / 2]);
+  });
+});
+
+describe('T9c.P —— 跨 system 弧：external 端点 = node.x，续行 clamp 不变量（x1 ≤ x2、不越出本段 system box）', () => {
+  // 窄宽度：每小节独占一行谱。slur 从第 0 行 E 跨到第 1 行 f；tie 从第 1 行末 d' 跨到第 2 行首 d'。
+  const cross = scoreOf([['jianpu', "C D (E F G A B c|d e f) g a b c' d'-|d' e' f' g' a' b' c'' d''|"]]);
+  const voice = voiceAt(cross.renderScore, 0);
+  const base = { score: {}, index: cross.index, measurer: externalMeasurer, availableWidth: 16 };
+  const ext = layoutJianpu(voice, { ...base, external: externalFor(composed(cross.renderScore, screen(16)), voice.voiceId) });
+  const legacy = layoutJianpu(voice, base);
+  /** 全曲第 `nth` 个 note 节点（按源码顺序）。 */
+  const noteAt = (layout: JianpuLayout, nth: number): JianpuLayout['nodes'][number] | undefined => layout.nodes.filter((n) => n.kind === 'note')[nth];
+  const segmentsOf = (layout: JianpuLayout, kind: 'tie' | 'slur'): JianpuLayout['arcs'] => layout.arcs.filter((a) => a.kind === kind);
+
+  it.each([['external', ext], ['legacy', legacy]] as const)('%s：每段 x1 ≤ x2，且 start / end 段都落在各自 system box 内', (_name, layout) => {
+    const boxOf = new Map(layout.systems.map((s) => [s.index, s.box]));
+    expect(layout.arcs.map((a) => a.segment)).toEqual(['start', 'end', 'start', 'end']);
+    for (const arc of layout.arcs) {
+      const box = boxOf.get(arc.systemIndex);
+      expect(box).toBeDefined();
+      const [left, right] = [box?.origin.x ?? Number.NaN, (box?.origin.x ?? Number.NaN) + (box?.width ?? Number.NaN)];
+      expect(arc.x1).toBeLessThanOrEqual(arc.x2);
+      expect(arc.x1).toBeGreaterThanOrEqual(left);
+      expect(arc.x2).toBeLessThanOrEqual(right);
+    }
+    // start 段在首端所在行谱、end 段在末端所在行谱（跨行切段确实发生）。
+    for (const kind of ['slur', 'tie'] as const) {
+      const [start, end] = segmentsOf(layout, kind);
+      expect((end?.systemIndex ?? Number.NaN) - (start?.systemIndex ?? Number.NaN)).toBe(1);
+    }
+  });
+
+  it.each([
+    ['external', ext, (n: JianpuLayout['nodes'][number] | undefined): number => n?.x ?? Number.NaN],
+    ['legacy', legacy, (n: JianpuLayout['nodes'][number] | undefined): number => (n?.x ?? Number.NaN) + (n?.glyphWidth ?? 0) / 2],
+  ] as const)('%s：起点 = 端点策略(首节点)；end 段终点 = clamp(max(端点策略(末节点), x1 + minSpan))', (_name, layout, endpoint) => {
+    const [slurStart, slurEnd] = segmentsOf(layout, 'slur');
+    const [tieStart, tieEnd] = segmentsOf(layout, 'tie');
+    const [e, f, d1, d2] = [noteAt(layout, 2), noteAt(layout, 10), noteAt(layout, 15), noteAt(layout, 16)];
+    expect(slurStart?.x1).toBe(endpoint(e));
+    expect(tieStart?.x1).toBe(endpoint(d1));
+    // slur 末端（f）离行首足够远：终点恰为端点策略本身，不被最小跨度改写。
+    expect(slurEnd?.x2).toBe(endpoint(f));
+    expect(endpoint(f)).toBeGreaterThan((slurEnd?.x1 ?? Number.NaN) + JIANPU_METRICS.arcContinuationMinSpan);
+    // tie 末端（行首 d'）贴着行首：终点由最小跨度撑开。
+    expect(tieEnd?.x2).toBe(Math.max(endpoint(d2), (tieEnd?.x1 ?? Number.NaN) + JIANPU_METRICS.arcContinuationMinSpan));
+  });
+
+  it('external 与 legacy 的端点确实不同（策略有区分力），且 external 不等于历史 x + glyphWidth/2', () => {
+    const [extSlur, legSlur] = [segmentsOf(ext, 'slur')[0], segmentsOf(legacy, 'slur')[0]];
+    const e = noteAt(ext, 2);
+    expect(e?.glyphWidth).toBeGreaterThan(0);
+    expect(extSlur?.x1).not.toBe(legSlur?.x1);
+    expect(extSlur?.x1).not.toBe((e?.x ?? Number.NaN) + (e?.glyphWidth ?? 0) / 2);
   });
 });
 
@@ -180,14 +255,14 @@ describe('T5-1 跨行弧只遍历实际存在的行谱，两端缺失仍抛错�
 
   it('行谱齐全时 start / middle / end 三段；缺中间行谱时只画两端', () => {
     expect([first.systemIndex, last.systemIndex]).toEqual([0, 2]);
-    expect(buildArcSegments(request, arcSystemGeometries(layout.systems, layout.nodes)).map((a) => [a.systemIndex, a.segment])).toEqual([[0, 'start'], [1, 'middle'], [2, 'end']]);
+    expect(buildArcSegments(request, arcSystemGeometries(layout.systems, layout.nodes), legacyArcEndpointX).map((a) => [a.systemIndex, a.segment])).toEqual([[0, 'start'], [1, 'middle'], [2, 'end']]);
     const sparse = arcSystemGeometries(layout.systems.filter((s) => s.index !== 1), layout.nodes);
-    expect(buildArcSegments(request, sparse).map((a) => [a.systemIndex, a.segment])).toEqual([[0, 'start'], [2, 'end']]);
+    expect(buildArcSegments(request, sparse, legacyArcEndpointX).map((a) => [a.systemIndex, a.segment])).toEqual([[0, 'start'], [2, 'end']]);
   });
 
   it('末端或首端所在行谱不存在 → 抛错，不静默少画', () => {
-    expect(() => buildArcSegments(request, arcSystemGeometries(layout.systems.filter((s) => s.index !== 2), layout.nodes))).toThrow();
-    expect(() => buildArcSegments(request, arcSystemGeometries(layout.systems.filter((s) => s.index !== 0), layout.nodes))).toThrow();
+    expect(() => buildArcSegments(request, arcSystemGeometries(layout.systems.filter((s) => s.index !== 2), layout.nodes), legacyArcEndpointX)).toThrow();
+    expect(() => buildArcSegments(request, arcSystemGeometries(layout.systems.filter((s) => s.index !== 0), layout.nodes), legacyArcEndpointX)).toThrow();
   });
 });
 

@@ -5,8 +5,9 @@
  * `RenderScore`，输出 React 只需逐字段映射的 `ScoreRender`。允许调用既有的 `summarizeEvents` / `layoutChord`；
  * **不重新 layout**、不重做 T6 / T8 的任何决策、不解释 `MusicEvent.kind`。切片与 overlay 见 `systemSlices.ts`。
  *
- * - 横向（裁决 J4）：`leftGutter = max(0, −system.box.origin.x…)`，每个 system `leftOffset = leftGutter + origin.x ≥ 0`。
- *   于是所有 system 的音乐 x = 0 都落在 `leftGutter`，和弦左墨迹不进入负滚动坐标（任何 zoom 都可横向滚动看全）。
+ * - 横向（裁决 J4 + T9c.P D4）：`leftGutter = max(0, −system.box.origin.x…, −简谱歌词左 extent…)`，每个 system
+ *   `leftOffset = leftGutter + origin.x ≥ 0`。于是所有 system 的音乐 x = 0 都落在 `leftGutter`，和弦左墨迹与行首长歌词
+ *   都不进入负滚动坐标（任何 zoom 都可横向滚动看全）。歌词不进 system box：这里只做纯 extent 测量，不反馈 compose / layout。
  * - 纵向：system 自上而下排列，相邻 system 之间由容器的 row-gap 恰好放一个 `systemGap`（不读 `box.origin.y`）；
  *   system 内的层用 `VoiceLayerLayout.top / height` 绝对定位。
  * - fallback（裁决 K1 + 修复轮 M4）：system 内保留高 0 的层身份（`kind: 'empty'`）；fallback 提示**不从 system / 层反推**
@@ -126,10 +127,26 @@ function fallbackNotices(renderScore: RenderScore): FallbackNotice[] {
   });
 }
 
+/**
+ * 全部简谱歌词的左 extent（T9c.P D4，与 `toSvg.ts` 的 anchor 同口径）：有目标以 `middle` 绘制 → `x − 宽/2`；
+ * 无目标以 `start` 绘制 → `x`。只量墨迹、不改任何坐标。
+ */
+function lyricLeftExtents(voiceLayouts: readonly VoiceLayoutEntry[], measurer: TextMeasurer): number[] {
+  return voiceLayouts.flatMap((entry) =>
+    entry.notation !== 'jianpu'
+      ? []
+      : entry.layout.lyrics.map(({ text, aligned }) =>
+          aligned ? text.x - measurer.measure(text.text, { fontSize: text.fontSize }).width / 2 : text.x,
+        ),
+  );
+}
+
 /** 整份文档的 screen system 渲染模型。 */
 export function buildScoreRender(scoreLayout: ScoreLayout, renderScore: RenderScore, measurer: TextMeasurer): ScoreRender {
   const systems = scoreLayout.composed.systems;
-  const leftGutter = Math.max(0, ...systems.map((system) => 0 - system.box.origin.x));
+  // reduce 而非展开：歌词可能很多，避免 `Math.max(...)` 的参数个数上限。
+  const lefts = [...systems.map((system) => system.box.origin.x), ...lyricLeftExtents(scoreLayout.voiceLayouts, measurer)];
+  const leftGutter = lefts.reduce((gutter, left) => Math.max(gutter, 0 - left), 0);
   const entryOf = new Map(scoreLayout.voiceLayouts.map((entry) => [entry.voiceId, entry]));
   return {
     leftGutter,

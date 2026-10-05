@@ -78,11 +78,21 @@ export interface JianpuNodeBase {
   readonly slotIndex: number;
   readonly measureIndex: number;
   readonly systemIndex: number;
-  /** `x` 是列左边界、`y` 是数字基线，都是绝对坐标。 */
+  /**
+   * `x` 是该列的 **onset anchor**（M2.5 T9c.P 订正：不是「列左边界」）、`y` 是数字基线，都是绝对坐标。
+   * note / rest / chord-member 的主字形以 `text-anchor: middle` 绘制，对它们而言 `x` 同时是字形的**视觉中心**；
+   * 其它 kind（小节线、降级占位、倚音等）按各自的绘制方式解释，不一概视为视觉中心。
+   */
   readonly x: number;
   readonly y: number;
   readonly width: number;
-  /** 主字形视觉 bbox 跨度，**不是**槽位宽 `width`；弧线端点用它。零成员 chord/grace 为 0。grace 字形整体相对 `x` 偏移 `±graceOffsetX`，`[x, x+glyphWidth]` 不是它的真实 bbox（grace 不作 tie/slur 端点）。 */
+  /**
+   * 主字形量出的宽度，**不是**槽位宽 `width`；零成员 chord/grace 为 0。它与 `x` 的关系按 kind 而定：
+   * note / rest / chord-member 以 `x` 为中心绘制，真实跨度是 `x ± glyphWidth/2`；文本类节点（装饰 / 和弦符号 / 未知 /
+   * 范围外）以 `x` 为左缘按 `start` 绘制，跨度即 `[x, x+glyphWidth]`；grace 字形整体相对 `x` 偏移 `±graceOffsetX`，
+   * `[x, x+glyphWidth]` 不是它的真实 bbox（grace 不作 tie/slur 端点）。M2 默认路径的弧线端点历史上按 `x + glyphWidth/2`，
+   * 见 `jianpuArcs.ts`。
+   */
   readonly glyphWidth: number;
   /** 是否走了降级路径（契约 C2：这类节点至少关联一条 `RenderDiagnostic`）。 */
   readonly fallback: boolean;

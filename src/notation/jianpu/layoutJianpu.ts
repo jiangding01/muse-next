@@ -57,6 +57,7 @@ import {
   relationLayout,
 } from './jianpuSections';
 import type { LyricAssignment, LyricColumn } from './jianpuSections';
+import { anchorArcEndpointX, legacyArcEndpointX } from './jianpuArcs';
 import { lyricBandHeight } from './jianpuVerticalDemand';
 import { pitchToNumber } from './pitchToNumber';
 
@@ -73,8 +74,9 @@ export interface JianpuContext {
    * M2.5 T5 external 几何（用户裁决 A1）：两项原子成对。缺席 = 走 M2 默认路径（逐字段不变）；存在 = 不换行、
    * 不 restack，measure 的 system / x / width 与 shared onset 的 x 全取自公共几何（`layout/measurePlacement.ts`）。
    * `measures` 是本声部所在 group 的公共 measure（按 participation 取本声部），`systems` 是本层所在的全部
-   * 公共行谱（全局 systemIndex 原样保留）。任何不变量失败抛 `RangeError`，绝不回退。有目标的歌词音节以目标
-   * 字形中心居中（M2.5 T8 裁决 D），默认路径仍左对齐列 x。
+   * 公共行谱（全局 systemIndex 原样保留）。任何不变量失败抛 `RangeError`，绝不回退。有目标的歌词音节两条路径都以
+   * `text.x` = 目标 onset anchor、`middle` 绘制（M2.5 T9c.P 裁决 D2，取代 T8 裁决 D）：默认路径取列 x，external 取
+   * 目标节点 `x`，二者数值相同；差异只在 tail 游标（见 `buildLyricNodes`）与弧线端点策略（见 `jianpuArcs.ts`）。
    */
   readonly external?: {
     readonly measures: readonly SystemMeasureGeometry[];
@@ -209,7 +211,9 @@ export function layoutJianpu(voice: RenderVoice, ctx: JianpuContext): JianpuLayo
   const lastSystem = systems[systems.length - 1];
   // 组成员只清空自己的逐音减时线（x / y / 宽度 / anchor 不变），关系与歌词照旧消费原节点几何。
   const engraved = engraveJianpuBeams(nodes, plans);
-  const relations = relationLayout(voice, ctx.index, nodeByEvent, systems, sink);
+  // T9c.P D3：弧线端点按路径显式选择——external（当前 renderer）取 `node.x`；默认路径保留历史端点（golden 零漂移）。
+  const arcEndpointX = ctx.external === undefined ? legacyArcEndpointX : anchorArcEndpointX;
+  const relations = relationLayout(voice, ctx.index, nodeByEvent, systems, sink, arcEndpointX);
   const lyrics = buildLyricNodes(
     lyricLines,
     voice.voiceId,
@@ -222,11 +226,9 @@ export function layoutJianpu(voice: RenderVoice, ctx: JianpuContext): JianpuLayo
     },
     ctx.measurer,
     sink,
-    // T8 裁决 D：只有 external（systemized）路径以目标字形中心居中；默认路径不传，逐字段不变。
-    ctx.external === undefined ? undefined : (eventId) => {
-      const node = nodeByEvent.get(eventId);
-      return node === undefined ? undefined : node.x + node.glyphWidth / 2;
-    },
+    // T8 裁决 D + T9c.P D2：只有 external（systemized）路径传入；目标中心 = 节点的 onset anchor `x`（数字以 middle 绘制，
+    // 即视觉中心）。默认路径不传，逐字段不变。
+    ctx.external === undefined ? undefined : (eventId) => nodeByEvent.get(eventId)?.x,
   );
   const labels = buildHeaderLabels(ctx.score.key, ctx.score.meter, ctx.measurer, sink);
 

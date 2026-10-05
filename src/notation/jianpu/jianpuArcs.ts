@@ -86,13 +86,20 @@ export function arcSystemGeometries(
   return geometries;
 }
 
+/** 弧线端点的 x 策略（M2.5 T9c.P 裁决 D3）：由 `layoutJianpu.ts` 按路径显式选择后经 `relationLayout` 传入。 */
+export type ArcEndpointX = (node: JianpuNode) => number;
+
 /**
- * 端点取**字形中心**而非槽位中心：`width` 是按时值分配的槽位宽（全音符/breve 最宽），
- * 数字字形本身靠槽左侧绘制，只有 `glyphWidth` 宽——弧线要贴数字，不是贴时值占位。
+ * external / systemized 路径（当前 ScoreView 的唯一路径）：端点 = `node.x`。`x` 是列 onset anchor，数字主字形以
+ * middle anchor 绘制，所以它就是数字的视觉中心；不取槽位中心（`width` 是按时值分配的槽位宽）。
  */
-function centerOf(node: JianpuNode): number {
-  return node.x + node.glyphWidth / 2;
-}
+export const anchorArcEndpointX: ArcEndpointX = (node) => node.x;
+
+/**
+ * M2 默认路径的**历史兼容**端点：`x + glyphWidth/2`。它源自「数字靠槽左侧绘制」的旧理解（实际数字以 `x` 为中心
+ * 绘制，所以此值偏右半个字形宽）；为保持默认路径 golden 零漂移而保留，不用于当前 renderer。
+ */
+export const legacyArcEndpointX: ArcEndpointX = (node) => node.x + node.glyphWidth / 2;
 
 /**
  * 节点的 `systemIndex` 只可能来自 `layoutJianpu.ts` 里已经存在的行谱，所以查不到就是
@@ -112,8 +119,9 @@ function geometryOf(
 /**
  * 续行段的「最小可见跨度 + clamp」（T6.5）。
  *
- * - `end` 段（有对端在上一行）：`x2 = clamp(max(字形中心, x1 + minSpan), …, boxRight)`；
- * - `start` 段（有对端在下一行）：`x1 = clamp(min(字形中心, x2 − minSpan), boxLeft, …)`；
+ * - `end` 段（有对端在上一行）：`x2 = clamp(max(端点 x, x1 + minSpan), …, boxRight)`；
+ * - `start` 段（有对端在下一行）：`x1 = clamp(min(端点 x, x2 − minSpan), boxLeft, …)`；
+ * （「端点 x」由调用方传入的 `ArcEndpointX` 策略给出：external = `node.x`，默认路径 = 历史 `x + glyphWidth/2`。）
  * - `middle` / `whole`：不参与，原样按 min/max 归正。
  *
  * 夹取基准是 `system.box`，**不是**内容边界——最小跨度的整个目的就是越过内容边界那点
@@ -180,13 +188,14 @@ function arcAt(
 export function buildArcSegments(
   request: ArcRequest,
   geometries: ReadonlyMap<number, ArcSystemGeometry>,
+  endpointX: ArcEndpointX,
 ): readonly JianpuArc[] {
   const { first, last, open } = request;
   const startSystem = first.systemIndex;
   const startY = geometryOf(geometries, startSystem).y;
 
   if (open) {
-    const x1 = centerOf(first);
+    const x1 = endpointX(first);
     return [arcAt(request, startSystem, x1, x1 + JIANPU_METRICS.arcOpenLength, startY, 'whole')];
   }
 
@@ -194,7 +203,7 @@ export function buildArcSegments(
   // 写成 `<=` 是让「不可能的反向关系」也落到单段而不是空数组。
   const endSystem = last.systemIndex;
   if (endSystem <= startSystem) {
-    return [arcAt(request, startSystem, centerOf(first), centerOf(last), startY, 'whole')];
+    return [arcAt(request, startSystem, endpointX(first), endpointX(last), startY, 'whole')];
   }
 
   // 只遍历**实际存在**的行谱（M2.5 T5）：external 模式的 systemIndex 是全文档全局序号，不保证从 0 起、
@@ -206,12 +215,12 @@ export function buildArcSegments(
     const geometry = geometryOf(geometries, index);
     const isStart = index === startSystem;
     const isEnd = index === endSystem;
-    // 端点已经在续行边界之外时（列中心落在 padding 外）夹一下，免得画出反向的一段；
+    // 端点已经在续行边界之外时（端点 x 落在 padding 外）夹一下，免得画出反向的一段；
     // 续行段另外保证最小可见跨度，不退化成贴着字形的尖角（T6.5）。
     const span = continuationSpan(
       geometry,
-      isStart ? centerOf(first) : geometry.left,
-      isEnd ? centerOf(last) : geometry.right,
+      isStart ? endpointX(first) : geometry.left,
+      isEnd ? endpointX(last) : geometry.right,
       isStart,
       isEnd,
     );

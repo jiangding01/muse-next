@@ -262,9 +262,18 @@ function arcToSvg(arc: JianpuArc): SvgNode {
   );
 }
 
-/** 歌词音节；`aligned === false` 表示按顺序落在行尾而非对齐到目标列，视为降级。 */
+/**
+ * 歌词音节；`aligned === false` 表示按顺序落在行尾而非对齐到目标列，视为降级。
+ * anchor 显式写在节点上（T9c.P D2，CSS 不再统一指定）：有目标 `text.x` 是目标中心 → `middle`；无目标是顺序左缘 → `start`。
+ */
 function lyricToSvg(node: JianpuLyricNode): SvgNode {
-  const glyph = textGlyphToSvg(node.text, `jianpu-lyric jianpu-lyric-${node.syllableKind}`);
+  const glyph = textElement('text', node.text.text, {
+    x: node.text.x,
+    y: node.text.y,
+    'font-size': node.text.fontSize,
+    'text-anchor': node.aligned ? 'middle' : 'start',
+    class: `jianpu-lyric jianpu-lyric-${node.syllableKind}`,
+  });
   const children: SvgNode[] = [glyph];
   if (!node.aligned) children.push(fallbackMarker(node.text.x + node.text.fontSize, node.text.y));
   return element(

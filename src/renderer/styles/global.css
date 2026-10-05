@@ -124,7 +124,8 @@ button { cursor: pointer; }
 .jianpu-text-unknown, .jianpu-text-outOfScope { fill: #a34632; }
 .jianpu-grace { fill: #6b6459; }
 .jianpu-label-text { fill: #6b6459; }
-.jianpu-lyric { fill: #33312d; text-anchor: middle; }
+/* 歌词的 text-anchor 由 SVG 节点按是否对齐显式给出（有目标 middle、无目标 start，M2.5 T9c.P），CSS 不统一指定。 */
+.jianpu-lyric { fill: #33312d; }
 .jianpu-beam, .jianpu-dash, .jianpu-barline-line, .jianpu-unit-length-line { stroke: #23211d; stroke-width: 1.4; }
 /* M2.5 T3.5：beam 组横线只给颜色，线粗来自 SVG 呈现属性（JIANPU_METRICS / TAB_METRICS.beamThickness）；
    这里写 stroke-width 会覆盖它，metric 就成了名义消费。 */

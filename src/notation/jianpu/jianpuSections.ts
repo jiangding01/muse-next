@@ -28,6 +28,7 @@ import { RENDER_DIAGNOSTIC_CODES as CODES } from '../model/diagnostics';
 import { resolveVoiceRelations } from '../model/relations';
 import type { Anchor, RenderVoice } from '../model/types';
 import { arcSystemGeometries, buildArcSegments } from './jianpuArcs';
+import type { ArcEndpointX } from './jianpuArcs';
 import { draftOf, glyph } from './jianpuGlyphs';
 import type {
   DraftSink,
@@ -46,7 +47,7 @@ export interface RelationLayout {
 /**
  * tuplet 只额外画方括号 + `p` 数字，**不读 `p`/`q` 去推算 effective duration**
  * （P1-C / U25：`q === 0` 的语义未验证，渲染层不去猜）；tie / slur 的 A 类恢复状态
- * （`unresolved` / `unclosed`）画**单端弧**，不为缺失的对端造端点。
+ * （`unresolved` / `unclosed`）画**单端弧**，不为缺失的对端造端点。`arcEndpointX` 由调用方按路径显式给出（T9c.P D3）。
  */
 export function relationLayout(
   voice: RenderVoice,
@@ -54,6 +55,7 @@ export function relationLayout(
   nodeByEvent: ReadonlyMap<string, JianpuNode>,
   systems: readonly System[],
   sink: DraftSink,
+  arcEndpointX: ArcEndpointX,
 ): RelationLayout {
   const tuplets: JianpuTupletBracket[] = [];
   const arcs: JianpuArc[] = [];
@@ -112,7 +114,7 @@ export function relationLayout(
       relation.kind === 'tie' ? relation.status !== 'resolved' : relation.status !== 'closed';
     // 一条关系可能被换行切成多段弧（T5.2-B）：段数是视觉事实，relation 仍只有一条，
     // 每段共用同一个 `anchor`，下面的恢复状态诊断也只发一次。
-    arcs.push(...buildArcSegments({ anchor, kind: relation.kind, first, last, open }, arcGeometries));
+    arcs.push(...buildArcSegments({ anchor, kind: relation.kind, first, last, open }, arcGeometries, arcEndpointX));
     if (open) {
       sink(
         draftOf(
@@ -131,7 +133,7 @@ export function relationLayout(
 /** 歌词里的 `-` / `_` / `|` 在 Domain 里是普通字符（U31/U32）：原样输出，不做语义。 */
 const LYRIC_LITERAL_MARKERS = ['-', '_', '|'];
 
-/** 事件在布局产物里的落点：列左边界 + 它被换行分到了第几行谱。 */
+/** 事件在布局产物里的落点：列的 onset anchor（= 该列 `node.x`）+ 它被换行分到了第几行谱。 */
 export interface LyricColumn {
   readonly x: number;
   readonly systemIndex: number;
@@ -237,8 +239,12 @@ export function lyricRowsBySystem(
  * 它**不会被钉在 x = 0**——把一串无目标音节全堆在原点，视觉上等同于「丢了」。
  * `aligned: false` 如实标出，并发一条诊断（每声部首次）。
  *
- * `centerOf`（M2.5 T8 裁决 D，只由 external 路径传入）：有目标的音节改为以目标字形中心居中（left = 中心 − 音节宽 / 2）；
- * 缺席 = 默认路径，仍左对齐列 x（逐字段不变）。无目标音节不受影响。
+ * **两种 anchor 语义**（M2.5 T9c.P 裁决 D2；`toSvg.ts` 按 `aligned` 显式写 `text-anchor`）：
+ * - 有目标（`aligned`）：`text.x` = 目标中心，以 `middle` 绘制。`centerOf` 只由 external 路径传入（= 目标节点 `x`，
+ *   即数字的视觉中心）；缺席 = 默认路径，取列 x（与该列 `node.x` 相同，逐字段不变）。
+ * - 无目标：`text.x` = 顺序左缘，以 `start` 绘制。
+ * 游标按**每个音节实际解析出的 center** 推进（再加 `lyricSyllableGap`）：解析出 center（external 居中歌词）→
+ * 真实右缘 `x + 宽/2`；未解析出（默认路径对齐歌词、无目标）→ 保持历史 `x + 宽`（T5 golden 零漂移）。
  */
 export function buildLyricNodes(
   lines: readonly (readonly LyricAssignment[])[],
@@ -264,8 +270,8 @@ export function buildLyricNodes(
       const row = `${String(systemIndex)}/${String(verseIndex)}`;
       const width = measurer.measure(syllable.text, { fontSize: size }).width;
       const center = alignedX === undefined || syllable.target === undefined ? undefined : centerOf?.(syllable.target.eventId);
-      const x = center === undefined ? alignedX ?? tailX.get(row) ?? 0 : center - width / 2;
-      tailX.set(row, x + width + JIANPU_METRICS.lyricSyllableGap);
+      const x = center ?? alignedX ?? tailX.get(row) ?? 0;
+      tailX.set(row, (center === undefined ? x + width : x + width / 2) + JIANPU_METRICS.lyricSyllableGap);
 
       if (alignedX === undefined && !missingReported) {
         missingReported = true;

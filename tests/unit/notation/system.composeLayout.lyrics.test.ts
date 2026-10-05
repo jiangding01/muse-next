@@ -2,11 +2,13 @@
  * M2.5 T8 —— `system/composeLayout.ts` 的简谱歌词部分（裁决 C / D）。
  *
  * 覆盖：prepass 层高与最终 layout 的歌词行数 / TAB 补高 / Staff 高一致（全部 fixture × 两档宽）；歌词行数 prepass 的边界
- * （verse 乱序取 max、无目标兜底到本声部最小行谱）；external 歌词以目标字形中心居中、missing-target 不变、默认路径不变。
+ * （verse 乱序取 max、无目标兜底到本声部最小行谱）；external 歌词以目标节点 x 为中心（T9c.P D2）、missing-target 按上一音节
+ * 真实右缘顺排、默认路径不变。
  */
 import { describe, expect, it } from 'vitest';
 
 import { layoutJianpu } from '../../../src/notation/jianpu/layoutJianpu';
+import type { JianpuLayout } from '../../../src/notation/jianpu/layoutJianpu';
 import { lyricBandHeight } from '../../../src/notation/jianpu/jianpuVerticalDemand';
 import { JIANPU_METRICS, STAFF_METRICS, TAB_METRICS } from '../../../src/notation/layout/metrics';
 import type { RenderItem, RenderScore } from '../../../src/notation/model/types';
@@ -103,36 +105,61 @@ describe('T8 composeLayout —— 歌词居中只改 external 路径（裁决 D�
   }
   const widthOf = (text: string): number => measurer.measure(text, { fontSize: JIANPU_METRICS.lyricFontSize }).width;
 
-  it('有目标音节：left = 目标字形中心 − 音节宽 / 2（不是列 x、不是 slot 中心）', () => {
+  it('有目标音节：text.x = 目标节点 x（T9c.P D2：中心 anchor，以 middle 绘制；不再减半宽、不再加 glyphWidth/2）', () => {
     const jianpu = jianpuOf(compose(main));
     const nodeOf = new Map(jianpu.nodes.map((n) => [n.anchor.kind === 'event' ? n.anchor.eventId : '', n]));
     const syllables = visibleSyllables(main.renderScore);
     expect(jianpu.lyrics).toHaveLength(syllables.length);
-    let differsFromColumn = 0;
-    let differsFromSlot = 0;
+    let checked = 0;
+    let differsFromT8 = 0;
     jianpu.lyrics.forEach((lyric, i) => {
       const node = nodeOf.get(syllables[i]?.target ?? '');
       if (node === undefined || !lyric.aligned) return;
-      const width = widthOf(lyric.text.text);
-      expect(lyric.text.x).toBe(node.x + node.glyphWidth / 2 - width / 2);
-      if (lyric.text.x !== node.x) differsFromColumn += 1;
-      if (lyric.text.x !== node.x + node.width / 2 - width / 2) differsFromSlot += 1;
+      expect(lyric.text.x).toBe(node.x);
+      checked += 1;
+      if (lyric.text.x !== node.x + node.glyphWidth / 2 - widthOf(lyric.text.text) / 2) differsFromT8 += 1;
     });
-    expect(differsFromColumn).toBeGreaterThan(0);
-    expect(differsFromSlot).toBeGreaterThan(0);
+    expect(checked).toBeGreaterThan(4);
+    expect(differsFromT8).toBeGreaterThan(0);
   });
 
-  it('missing-target 音节不居中：仍从同一 (行谱, verse) 上一音节右侧 + lyricSyllableGap 顺排', () => {
+  it('missing-target 音节不居中：左缘从同一 (行谱, verse) 上一音节的真实右缘 + lyricSyllableGap 顺排、互不重叠', () => {
     const lyrics = jianpuOf(compose(matrixScoreFrom(ORPHAN))).lyrics;
     expect(lyrics.map((l) => l.aligned)).toEqual([true, true, false, false]);
+    // 上一音节居中（aligned）→ 右缘 x + 宽/2；上一音节左对齐（unaligned）→ 右缘 x + 宽。
+    const rightOf = (i: number): number => {
+      const prev = lyrics[i];
+      const width = widthOf(prev?.text.text ?? '');
+      return (prev?.text.x ?? Number.NaN) + (prev?.aligned === true ? width / 2 : width);
+    };
     for (const i of [2, 3]) {
-      const prev = lyrics[i - 1];
-      const expected = (prev?.text.x ?? Number.NaN) + widthOf(prev?.text.text ?? '') + JIANPU_METRICS.lyricSyllableGap;
-      expect(lyrics[i]?.text.x).toBe(expected);
+      expect(lyrics[i]?.text.x).toBe(rightOf(i - 1) + JIANPU_METRICS.lyricSyllableGap);
+      expect(lyrics[i]?.text.x).toBeGreaterThan(rightOf(i - 1));
     }
   });
 
-  it('默认路径（不传 external）逐字段不变：有目标音节仍左对齐列 x', () => {
+  it('同样的 aligned → unaligned：默认路径 = alignedX + 全宽 + gap；external 路径 = node.x + 半宽 + gap', () => {
+    const orphan = matrixScoreFrom(ORPHAN);
+    const render = orphan.renderScore.voices[0];
+    if (render === undefined) throw new Error('no voice');
+    const legacy = layoutJianpu(render, { score: {}, index: orphan.index, measurer, availableWidth: 960 });
+    const external = jianpuOf(compose(orphan));
+    const targetOf = (layout: JianpuLayout, eventId: string): number | undefined =>
+      layout.nodes.find((n) => n.anchor.kind === 'event' && n.anchor.eventId === eventId)?.x;
+    const second = render.voice.lyricLines[0]?.syllables[1]?.target?.eventId ?? '';
+    const gap = JIANPU_METRICS.lyricSyllableGap;
+    const width = widthOf(legacy.lyrics[1]?.text.text ?? '');
+    expect([legacy.lyrics[1]?.aligned, legacy.lyrics[2]?.aligned]).toEqual([true, false]);
+    expect([external.lyrics[1]?.aligned, external.lyrics[2]?.aligned]).toEqual([true, false]);
+    const alignedX = targetOf(legacy, second);
+    const nodeX = targetOf(external, second);
+    expect(legacy.lyrics[1]?.text.x).toBe(alignedX);
+    expect(external.lyrics[1]?.text.x).toBe(nodeX);
+    expect(legacy.lyrics[2]?.text.x).toBe((alignedX ?? Number.NaN) + width + gap);
+    expect(external.lyrics[2]?.text.x).toBe((nodeX ?? Number.NaN) + width / 2 + gap);
+  });
+
+  it('默认路径（不传 external）逐字段不变：有目标音节 text.x 仍等于列 x（= 目标 node.x，middle 绘制）', () => {
     const voice = main.renderScore.voices[0];
     if (voice === undefined) throw new Error('no voice');
     const legacy = layoutJianpu(voice, { score: {}, index: main.index, measurer, availableWidth: 960 });
