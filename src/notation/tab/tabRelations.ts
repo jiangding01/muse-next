@@ -72,9 +72,12 @@ interface SystemBounds {
   readonly right: number;
 }
 
-/** 一行谱 box 本身的左右界（不是内容边界）——线段坐标的**最终**夹取基准。 */
+/**
+ * 一行谱 box 本身的左右界（不是内容边界）——线段坐标的**最终**夹取基准。按 `System.index` 查找（M2.5 T5：
+ * external 模式的 systemIndex 是全文档全局序号，不是数组下标；默认路径二者相同）。
+ */
 function boxBoundsOf(systems: readonly System[], systemIndex: number): SystemBounds | undefined {
-  const system = systems[systemIndex];
+  const system = systems.find((candidate) => candidate.index === systemIndex);
   if (system === undefined) return undefined;
   return { left: system.box.origin.x, right: system.box.origin.x + system.box.width };
 }

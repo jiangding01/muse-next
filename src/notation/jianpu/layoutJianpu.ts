@@ -23,15 +23,17 @@
  */
 
 import type { DomainIndex, EventId, KeySignature, Meter, VoiceId } from '../../domain';
+import { externalExtent, mapExternalMeasures, placeExternalMeasure } from '../layout/measurePlacement';
 import { JIANPU_METRICS } from '../layout/metrics';
 import type { System } from '../layout/primitives';
-import type { SpacedSlot } from '../layout/spacing';
+import type { MeasureSpacing, SpacedSlot } from '../layout/spacing';
 import { layoutSystems, restackSystems, splitMeasures } from '../layout/systems';
-import type { MeasureSlice } from '../layout/systems';
+import type { MeasureSlice, SystemGeometry } from '../layout/systems';
 import type { TextMeasurer } from '../layout/textMeasurer';
 import { RENDER_DIAGNOSTIC_CODES as CODES, collectRenderDiagnostics } from '../model/diagnostics';
 import type { RenderDiagnosticDraft } from '../model/diagnostics';
 import type { RenderDiagnostic, RenderVoice } from '../model/types';
+import type { SystemMeasureGeometry } from '../system/contracts';
 import { engraveJianpuBeams, jianpuMeasureSpacing, planJianpuBeams } from './jianpuBeams';
 import type { JianpuBeamGroup } from './jianpuBeams';
 import { buildUnitLengthMark } from './jianpuGlyphBuilders';
@@ -54,7 +56,7 @@ import {
   lyricRowsBySystem,
   relationLayout,
 } from './jianpuSections';
-import type { LyricColumn } from './jianpuSections';
+import type { LyricAssignment, LyricColumn } from './jianpuSections';
 import { pitchToNumber } from './pitchToNumber';
 
 /** 布局输入。`measurer` **显式注入**：无模块级单例、无全局兜底（§2.8）。 */
@@ -64,8 +66,18 @@ export interface JianpuContext {
   /** 与 `score` 同源的 `DomainIndex`（§2.4.1）：关系反查只查它，本层零自建 Domain lookup。 */
   readonly index: DomainIndex;
   readonly measurer: TextMeasurer;
-  /** 容器可用宽度（abstract unit）：贪心换行的唯一阈值（D7）。 */
+  /** 容器可用宽度（abstract unit）：贪心换行的唯一阈值（D7）；`external` 存在时不使用。 */
   readonly availableWidth: number;
+  /**
+   * M2.5 T5 external 几何（用户裁决 A1）：两项原子成对。缺席 = 走 M2 默认路径（逐字段不变）；存在 = 不换行、
+   * 不 restack，measure 的 system / x / width 与 shared onset 的 x 全取自公共几何（`layout/measurePlacement.ts`）。
+   * `measures` 是本声部所在 group 的公共 measure（按 participation 取本声部），`systems` 是本层所在的全部
+   * 公共行谱（全局 systemIndex 原样保留）。任何不变量失败抛 `RangeError`，绝不回退。
+   */
+  readonly external?: {
+    readonly measures: readonly SystemMeasureGeometry[];
+    readonly systems: readonly System[];
+  };
 }
 
 export interface JianpuLayout {
@@ -94,21 +106,25 @@ function lyricBandHeight(rows: number): number {
   return rows === 0 ? 0 : JIANPU_METRICS.lyricFirstOffset + rows * JIANPU_METRICS.lyricLineGap;
 }
 
-/**
- * 简谱布局入口。纯函数：同一 `(voice, ctx)` 必然得到逐字段相等的输出
- * （`ctx.measurer` 按 §2.8 的契约也必须是纯函数）。
- */
-export function layoutJianpu(voice: RenderVoice, ctx: JianpuContext): JianpuLayout {
-  const measures = splitMeasures(voice.items);
-  // beam 分组（M2.5 T3.5）只用 `M:` 决定哪些音连成一组，列宽仍只来自 duration 与字形（P1-3 窄化）。
-  const plans = planJianpuBeams(measures, voice, ctx.score.meter);
-  const spacings = measures.map((measure, i) => jianpuMeasureSpacing(measure, plans[i]));
-  const geometry = {
-    availableWidth: ctx.availableWidth,
-    systemHeight: JIANPU_METRICS.systemHeight,
-    systemGap: JIANPU_METRICS.systemGap,
-    originY: JIANPU_METRICS.headerHeight,
-  };
+/** 第一趟的产物：每项的横向位置、行谱、歌词归属（默认路径按歌词回填行高，external 路径原样采用外部行谱）。 */
+interface FirstPass {
+  readonly placed: readonly Placed[];
+  readonly systems: readonly System[];
+  readonly lyricLines: readonly (readonly LyricAssignment[])[];
+}
+
+function columnsOf(placed: readonly Placed[]): (eventId: string) => LyricColumn | undefined {
+  const columnByEvent = new Map<string, LyricColumn>();
+  for (const item of placed) {
+    columnByEvent.set(item.item.eventId, { x: item.x, systemIndex: item.systemIndex });
+  }
+  return (id) => columnByEvent.get(id);
+}
+
+/** M2 默认路径：`layoutSystems` 横向打包 → 歌词归属 → `restackSystems` 回填行高（逐字段不变）。 */
+function defaultPass(
+  voice: RenderVoice, measures: readonly MeasureSlice[], spacings: readonly MeasureSpacing[], geometry: SystemGeometry,
+): FirstPass {
   const packed = layoutSystems(spacings.map((spacing) => spacing.width), geometry);
 
   // 第一趟：只定横向（哪一行谱、行内 x）。行高还不知道——它取决于各行谱用掉几行歌词。
@@ -128,14 +144,56 @@ export function layoutJianpu(voice: RenderVoice, ctx: JianpuContext): JianpuLayo
   }
 
   // 歌词归属：`skip`（`*`）在这一步就被滤掉，既不画也不参与行尾顺排（T5.2-A）。
-  const columnByEvent = new Map<string, LyricColumn>();
-  for (const item of placed) {
-    columnByEvent.set(item.item.eventId, { x: item.x, systemIndex: item.systemIndex });
-  }
-  const lyricLines = assignLyricSyllables(voice, (id) => columnByEvent.get(id));
+  const lyricLines = assignLyricSyllables(voice, columnsOf(placed));
   const rowsBySystem = lyricRowsBySystem(lyricLines, packed.systems.length);
   // 第二趟：按各行谱实际的歌词行数补高度重排，下一行谱的数字行才不会压到上一行的歌词。
   const systems = restackSystems(packed.systems, rowsBySystem.map(lyricBandHeight), geometry);
+  return { placed, systems, lyricLines };
+}
+
+/** M2.5 T5 external 路径：measure → 公共框只按 participation 映射；**不 restack**（行高归 T8，H-a）。 */
+function externalPass(
+  voice: RenderVoice, measures: readonly MeasureSlice[], spacings: readonly MeasureSpacing[],
+  external: NonNullable<JianpuContext['external']>,
+): FirstPass {
+  const mapped = mapExternalMeasures(voice.voiceId, measures, external);
+  const placed: Placed[] = [];
+  for (const [measureIndex, measure] of measures.entries()) {
+    const spacing = spacings[measureIndex];
+    const box = mapped.byLocal.get(measureIndex);
+    if (spacing === undefined || box === undefined) continue;
+    const left = (mapped.systemByIndex.get(box.systemIndex)?.box.origin.x ?? 0) + box.x;
+    const slots = placeExternalMeasure(measure, spacing, box);
+    for (const [offset, item] of measure.items.entries()) {
+      const slot = slots[offset];
+      if (slot === undefined) continue;
+      placed.push({ item, slot, measureIndex, systemIndex: box.systemIndex, x: left + slot.slot.x });
+    }
+  }
+  const lyricLines = assignLyricSyllables(voice, columnsOf(placed), mapped.systems[0]?.index ?? 0);
+  return { placed, systems: mapped.systems, lyricLines };
+}
+
+/**
+ * 简谱布局入口。纯函数：同一 `(voice, ctx)` 必然得到逐字段相等的输出
+ * （`ctx.measurer` 按 §2.8 的契约也必须是纯函数）。
+ */
+export function layoutJianpu(voice: RenderVoice, ctx: JianpuContext): JianpuLayout {
+  const measures = splitMeasures(voice.items);
+  // beam 分组（M2.5 T3.5）只用 `M:` 决定哪些音连成一组，列宽仍只来自 duration 与字形（P1-3 窄化）。
+  const plans = planJianpuBeams(measures, voice, ctx.score.meter);
+  const spacings = measures.map((measure, i) => jianpuMeasureSpacing(measure, plans[i]));
+  const geometry = {
+    availableWidth: ctx.availableWidth,
+    systemHeight: JIANPU_METRICS.systemHeight,
+    systemGap: JIANPU_METRICS.systemGap,
+    originY: JIANPU_METRICS.headerHeight,
+  };
+  const { placed, systems, lyricLines } = ctx.external === undefined
+    ? defaultPass(voice, measures, spacings, geometry)
+    : externalPass(voice, measures, spacings, ctx.external);
+  // 行谱一律按 `System.index` 查（T5）：external 模式的 index 是全文档全局序号，不是本数组下标。
+  const systemByIndex = new Map(systems.map((system) => [system.index, system]));
 
   const nodes: JianpuNode[] = [];
   const slots: SpacedSlot[] = [];
@@ -145,7 +203,7 @@ export function layoutJianpu(voice: RenderVoice, ctx: JianpuContext): JianpuLayo
   const nodeByEvent = new Map<string, JianpuNode>();
 
   for (const item of placed) {
-    const system = systems[item.systemIndex];
+    const system = systemByIndex.get(item.systemIndex);
     if (system === undefined) continue;
     slots.push(item.slot);
     const cursor: Cursor = { ...item, y: system.box.origin.y + JIANPU_METRICS.baselineOffset };
@@ -162,7 +220,7 @@ export function layoutJianpu(voice: RenderVoice, ctx: JianpuContext): JianpuLayo
     lyricLines,
     voice.voiceId,
     (systemIndex, verseIndex) => {
-      const system = systems[systemIndex];
+      const system = systemByIndex.get(systemIndex);
       const top = system === undefined
         ? JIANPU_METRICS.headerHeight
         : system.box.origin.y + JIANPU_METRICS.baselineOffset;
@@ -182,13 +240,19 @@ export function layoutJianpu(voice: RenderVoice, ctx: JianpuContext): JianpuLayo
     sink(draftOf(CODES.unitLengthChanged, 'info', `此处 L: 变为 ${change.raw}：渲染直接用已解算好的 duration，不重新解释作用域（spec §8.5，U06 已由 Domain 选定）`, anchor, change.origin));
   }
 
+  // external 模式（I）：宽高取全部行谱的最大外沿，不依赖数组顺序；没有行谱时取默认路径的空值。
+  const extent = ctx.external === undefined ? undefined : externalExtent(systems);
   return {
     voiceId: voice.voiceId, systems, measures, slots, nodes: engraved.nodes,
     tuplets: relations.tuplets, arcs: relations.arcs, lyrics, labels, unitLengthMarks, beams: engraved.beams,
-    width: systems.reduce((max, system) => Math.max(max, system.box.width), 0),
-    height: lastSystem === undefined
-      ? JIANPU_METRICS.headerHeight
-      : lastSystem.box.origin.y + lastSystem.box.height,
+    width: ctx.external === undefined
+      ? systems.reduce((max, system) => Math.max(max, system.box.width), 0)
+      : extent?.width ?? 0,
+    height: ctx.external === undefined
+      ? lastSystem === undefined
+        ? JIANPU_METRICS.headerHeight
+        : lastSystem.box.origin.y + lastSystem.box.height
+      : extent?.height ?? JIANPU_METRICS.headerHeight,
     diagnostics: collectRenderDiagnostics(drafts),
   };
 }

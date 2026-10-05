@@ -712,4 +712,88 @@ describe('M2.5 架构守卫 —— system/ 依赖方向（§B.2 / §Q7.4）', ()
     expect(layoutEntryImports(COMPOSE_FILE, "import { layoutChord } from '../chord/layoutChord';")).toEqual(['../chord/layoutChord']);
     expect(layoutEntryImports(COMPOSE_FILE, "import { tabMeasureSpacing } from '../tab/tabBeams';")).toEqual([]);
   });
+
+  // ---------------------------------------------------------------------------
+  // T5（用户裁决 L / N-a / 额外裁决 1 / 9）：三个 voice layout → system/contracts 的正面边；共享摆放 helper
+  // 住在 layout/ 且不认识 system/** 与任何记谱目录；composer → voice layout 的正面边归 T8（上面的 T4 负面
+  // 守卫保持不变）；本期不接 renderer。
+  // ---------------------------------------------------------------------------
+
+  const VOICE_LAYOUT_FILES = ['jianpu/layoutJianpu.ts', 'tab/layoutTab.ts', 'staff/layoutStaff.ts'];
+  const PLACEMENT_FILE = join(LAYOUT_DIR, 'measurePlacement.ts');
+
+  /** 从 `spec` 以 `import type { … }` 导入的名字。 */
+  function typeImportsFrom(source: string, spec: string): string[] {
+    const re = /^\s*import\s+type\s*\{([^}]*)\}\s*from\s*['"]([^'"]+)['"]/gm;
+    return [...stripComments(source).matchAll(re)]
+      .filter((m) => m[2] === spec)
+      .flatMap((m) => (m[1] ?? '').split(',').map((name) => name.trim()).filter((name) => name !== ''));
+  }
+
+  /** 去掉 import 语句与注释后，`name` 作为标识符出现的次数（只 import 不用 = 0）。 */
+  function usageCount(source: string, name: string): number {
+    const body = stripComments(source).replace(/^\s*import\b[^;]*;/gm, '');
+    return [...body.matchAll(new RegExp(`\\b${name}\\b`, 'g'))].length;
+  }
+
+  function contractsEdge(source: string): { readonly typeNames: string[]; readonly valueNames: string[]; readonly uses: number } {
+    return {
+      typeNames: typeImportsFrom(source, '../system/contracts'),
+      valueNames: valueImportsFrom(source, '../system/contracts'),
+      uses: usageCount(source, 'SystemMeasureGeometry'),
+    };
+  }
+
+  it.each(VOICE_LAYOUT_FILES)('T5 正面守卫：%s type-only import system/contracts 的 SystemMeasureGeometry 并实际使用', (file) => {
+    const edge = contractsEdge(readFileSync(join(NOTATION_DIR, file), 'utf8'));
+    expect(edge.typeNames).toContain('SystemMeasureGeometry');
+    expect(edge.valueNames).toEqual([]);
+    expect(edge.uses).toBeGreaterThan(0);
+  });
+
+  it('T5 正面守卫反例：只 import 不用、值 import、注释里的 import 都不算', () => {
+    const unused = contractsEdge("import type { SystemMeasureGeometry } from '../system/contracts';\nexport const x = 1;");
+    expect(unused.uses).toBe(0);
+    const value = contractsEdge("import { SystemMeasureGeometry } from '../system/contracts';\nlet g: SystemMeasureGeometry;");
+    expect(value.typeNames).toEqual([]);
+    expect(value.valueNames).toEqual(['SystemMeasureGeometry']);
+    const commented = contractsEdge("// import type { SystemMeasureGeometry } from '../system/contracts';\nlet g: SystemMeasureGeometry;");
+    expect(commented.typeNames).toEqual([]);
+    const ok = contractsEdge("import type { SystemMeasureGeometry } from '../system/contracts';\nlet g: readonly SystemMeasureGeometry[];");
+    expect([ok.typeNames, ok.valueNames, ok.uses]).toEqual([['SystemMeasureGeometry'], [], 1]);
+  });
+
+  it('T5：三个 voice layout 真正调用 layout/measurePlacement 的映射与摆放', () => {
+    for (const file of VOICE_LAYOUT_FILES) {
+      const source = readFileSync(join(NOTATION_DIR, file), 'utf8');
+      expect(usesAll(source, '../layout/measurePlacement', ['mapExternalMeasures', 'placeExternalMeasure', 'externalExtent'])).toEqual([]);
+    }
+  });
+
+  function placementViolations(file: string, source: string): string[] {
+    const forbidden = [SYSTEM_DIR, ...SIBLINGS.map((name) => join(NOTATION_DIR, name))];
+    return collectSpecifiers(stripComments(source)).filter((spec) => {
+      const target = resolveSpec(file, spec);
+      return target !== undefined && forbidden.some((dir) => isInside(target, dir));
+    });
+  }
+
+  it('T5：layout/measurePlacement.ts 不 import system/** 与任何记谱目录（含反例）', () => {
+    expect(existsSync(PLACEMENT_FILE)).toBe(true);
+    expect(placementViolations(PLACEMENT_FILE, readFileSync(PLACEMENT_FILE, 'utf8'))).toEqual([]);
+    expect(placementViolations(PLACEMENT_FILE, "import type { MeasureTimeline } from '../system/contracts';")).toEqual(['../system/contracts']);
+    expect(placementViolations(PLACEMENT_FILE, "import { tabMeasureSpacing } from '../tab/tabBeams';")).toEqual(['../tab/tabBeams']);
+    expect(placementViolations(PLACEMENT_FILE, "import { voiceMeasureOnsets } from './measureOnsets';")).toEqual([]);
+  });
+
+  const RENDERER_DIR = join(NOTATION_DIR, '../renderer');
+  const rendererFiles = collectFiles(RENDERER_DIR).filter((file) => /\.(?:ts|tsx)$/.test(file));
+  const mentionsExternal = (source: string): boolean => /\bexternal\b/.test(stripComments(source));
+
+  it('T5（T9b 前）：renderer/** 不向 voice layout 传 external——本期不接 renderer', () => {
+    expect(rendererFiles.length).toBeGreaterThan(0);
+    expect(rendererFiles.filter((file) => mentionsExternal(readFileSync(file, 'utf8'))).map((file) => relative(RENDERER_DIR, file))).toEqual([]);
+    expect(mentionsExternal('layoutTab(voice, { ...ctx, external });')).toBe(true);
+    expect(mentionsExternal('// external 留给 T9b')).toBe(false);
+  });
 });

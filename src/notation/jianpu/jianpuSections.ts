@@ -167,12 +167,14 @@ export interface LyricAssignment {
  *       退而取 `firstEventId`。`bodyRange` 记的是这条 `w:` 绑定的正文**产生的全部事件**
  *       （含 rest / barline 等不可唱事件），它们照样有布局节点，所以即便一个可唱事件都
  *       没有（整行是休止），歌词也能落到**正确的那一行谱**，而不是被打回第 0 行谱。
- *    `bodyRange` 为 `null`（该 `w:` 没有绑定目标）或解析不到列时才退到第 0 行谱——那是
+ *    `bodyRange` 为 `null`（该 `w:` 没有绑定目标）或解析不到列时才退到 `fallbackSystemIndex`（默认路径
+ *    为第 0 行谱；M2.5 T5 external 模式为本声部 index 最小的公共行谱，全局 systemIndex 不从 0 起）——那是
  *    「确实无从得知」的保守兜底，`buildLyricNodes` 会照常发 target-missing 诊断。
  */
 export function assignLyricSyllables(
   voice: RenderVoice,
   columnOf: (eventId: string) => LyricColumn | undefined,
+  fallbackSystemIndex = 0,
 ): readonly (readonly LyricAssignment[])[] {
   const systemOfEvent = (eventId: string | undefined): number | undefined =>
     eventId === undefined ? undefined : columnOf(eventId)?.systemIndex;
@@ -183,7 +185,7 @@ export function assignLyricSyllables(
     let currentSystem =
       systemOfEvent(line.bodyRange?.lastEventId) ??
       systemOfEvent(line.bodyRange?.firstEventId) ??
-      0;
+      fallbackSystemIndex;
 
     for (const syllable of line.syllables) {
       if (syllable.kind === 'skip') continue;

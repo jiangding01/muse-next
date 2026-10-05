@@ -36,15 +36,17 @@
  */
 
 import type { DomainIndex, Meter, VoiceId } from '../../domain';
+import { externalExtent, mapExternalMeasures, placeExternalMeasure } from '../layout/measurePlacement';
 import { TAB_METRICS } from '../layout/metrics';
 import type { System } from '../layout/primitives';
-import type { SpacedSlot } from '../layout/spacing';
+import type { MeasureSpacing, SpacedSlot } from '../layout/spacing';
 import { layoutSystems, restackSystems, splitMeasures } from '../layout/systems';
-import type { MeasureSlice } from '../layout/systems';
+import type { MeasureSlice, SystemGeometry } from '../layout/systems';
 import type { TextMeasurer } from '../layout/textMeasurer';
 import { collectRenderDiagnostics } from '../model/diagnostics';
 import type { RenderDiagnosticDraft } from '../model/diagnostics';
 import type { RenderDiagnostic, RenderItem, RenderVoice } from '../model/types';
+import type { SystemMeasureGeometry } from '../system/contracts';
 import { requiredSystemDepth } from './tabDurationGlyphs';
 import { engraveTabBeams, planTabBeams, tabMeasureSpacing } from './tabBeams';
 import type { TabBeamGroup } from './tabBeams';
@@ -75,6 +77,16 @@ export interface TabContext {
    * 缺席 / raw / 表外拍号 → 不分组，输出与改造前逐字段相同（`beams` 恒为 `[]`）。
    */
   readonly meter?: Meter;
+  /**
+   * M2.5 T5 external 几何（用户裁决 A1）：两项原子成对。缺席 = 走 M2 默认路径（逐字段不变）；存在 = 不换行、
+   * 不 restack（最深时值的补高归 T8），measure 的 system / x / width 与 shared onset 的 x 全取自公共几何
+   * （`layout/measurePlacement.ts`）；弦线只覆盖本声部在该行谱上真实 measure 的范围（G-2a）。任何不变量
+   * 失败抛 `RangeError`，绝不回退。`availableWidth` 此时不使用。
+   */
+  readonly external?: {
+    readonly measures: readonly SystemMeasureGeometry[];
+    readonly systems: readonly System[];
+  };
 }
 
 export interface TabLayout {
@@ -110,17 +122,21 @@ function extraSystemHeight(measureItems: readonly (readonly RenderItem[])[]): nu
   return Math.max(0, deepest - TAB_METRICS.systemHeight);
 }
 
-/** TAB 布局入口。 */
-export function layoutTab(voice: RenderVoice, ctx: TabContext): TabLayout {
-  const measures = splitMeasures(voice.items);
-  const plans = planTabBeams(measures, voice, ctx.meter);
-  const spacings = measures.map((measure, i) => tabMeasureSpacing(measure, plans[i], ctx.measurer));
-  const geometry = {
-    availableWidth: ctx.availableWidth,
-    systemHeight: TAB_METRICS.systemHeight,
-    systemGap: TAB_METRICS.systemGap,
-    originY: TAB_METRICS.headerHeight,
-  };
+/** 一个 measure 的横向归属：行谱、左缘、逐项 slot（默认路径 = 本声部 spacing；external = 最终分配）。 */
+interface MeasureFrame {
+  readonly systemIndex: number;
+  readonly left: number;
+  readonly slots: readonly SpacedSlot[];
+}
+
+interface FirstPass {
+  readonly frames: readonly (MeasureFrame | undefined)[];
+  readonly systems: readonly System[];
+  readonly staffLines: readonly TabStaffLines[];
+}
+
+/** M2 默认路径：`layoutSystems` 横向打包 → 按最深时值装饰 `restackSystems`（逐字段不变）。 */
+function defaultPass(measures: readonly MeasureSlice[], spacings: readonly MeasureSpacing[], geometry: SystemGeometry): FirstPass {
   const packed = layoutSystems(spacings.map((spacing) => spacing.width), geometry);
 
   // 第一趟只定横向（哪一行谱、行内 x），与 `jianpu/layoutJianpu.ts` 按歌词行数
@@ -137,6 +153,58 @@ export function layoutTab(voice: RenderVoice, ctx: TabContext): TabLayout {
   // 第二趟：按各行谱实际的最深装饰补高度重排，下一行谱的弦线才不会压到上一行的
   // 符干 / 减时线。`extra === 0` 的行谱（覆盖到十六分音符的常规情形）不受影响。
   const systems = restackSystems(packed.systems, extraHeights, geometry);
+  const frames = measures.map((_, measureIndex): MeasureFrame | undefined => {
+    const spacing = spacings[measureIndex];
+    const placement = packed.placements[measureIndex];
+    return spacing === undefined || placement === undefined
+      ? undefined
+      : { systemIndex: placement.systemIndex, left: placement.x, slots: spacing.slots };
+  });
+  return { frames, systems, staffLines: systems.map((system) => buildStaffLines(system)) };
+}
+
+/** M2.5 T5 external 路径：measure → 公共框只按 participation 映射；**不 restack**（H-a）。 */
+function externalPass(
+  voice: RenderVoice, measures: readonly MeasureSlice[], spacings: readonly MeasureSpacing[],
+  external: NonNullable<TabContext['external']>,
+): FirstPass {
+  const mapped = mapExternalMeasures(voice.voiceId, measures, external);
+  const spans = new Map<number, { left: number; right: number }>();
+  const frames = measures.map((measure, measureIndex): MeasureFrame | undefined => {
+    const spacing = spacings[measureIndex];
+    const box = mapped.byLocal.get(measureIndex);
+    if (spacing === undefined || box === undefined) return undefined;
+    const left = (mapped.systemByIndex.get(box.systemIndex)?.box.origin.x ?? 0) + box.x;
+    const span = spans.get(box.systemIndex);
+    spans.set(box.systemIndex, { left: Math.min(span?.left ?? left, left), right: Math.max(span?.right ?? left, left + box.width) });
+    return { systemIndex: box.systemIndex, left, slots: placeExternalMeasure(measure, spacing, box) };
+  });
+  // G-2a：弦线只覆盖本声部在该行谱上真实 measure 的范围；本声部没有 measure 的行谱不画弦线（不造空小节）。
+  const staffLines = mapped.systems.flatMap((system) => {
+    const span = spans.get(system.index);
+    return span === undefined
+      ? []
+      : [buildStaffLines({ index: system.index, box: { ...system.box, origin: { x: span.left, y: system.box.origin.y }, width: span.right - span.left } })];
+  });
+  return { frames, systems: mapped.systems, staffLines };
+}
+
+/** TAB 布局入口。 */
+export function layoutTab(voice: RenderVoice, ctx: TabContext): TabLayout {
+  const measures = splitMeasures(voice.items);
+  const plans = planTabBeams(measures, voice, ctx.meter);
+  const spacings = measures.map((measure, i) => tabMeasureSpacing(measure, plans[i], ctx.measurer));
+  const geometry = {
+    availableWidth: ctx.availableWidth,
+    systemHeight: TAB_METRICS.systemHeight,
+    systemGap: TAB_METRICS.systemGap,
+    originY: TAB_METRICS.headerHeight,
+  };
+  const { frames, systems, staffLines } = ctx.external === undefined
+    ? defaultPass(measures, spacings, geometry)
+    : externalPass(voice, measures, spacings, ctx.external);
+  // 行谱一律按 `System.index` 查（T5）：external 模式的 index 是全文档全局序号，不是本数组下标。
+  const systemByIndex = new Map(systems.map((system) => [system.index, system]));
 
   const nodes: TabNode[] = [];
   const nodeByEvent = new Map<string, TabNode>();
@@ -147,23 +215,22 @@ export function layoutTab(voice: RenderVoice, ctx: TabContext): TabLayout {
   };
 
   for (const [measureIndex, measure] of measures.entries()) {
-    const spacing = spacings[measureIndex];
-    const placement = packed.placements[measureIndex];
-    if (spacing === undefined || placement === undefined) continue;
-    const system = systems[placement.systemIndex];
+    const frame = frames[measureIndex];
+    if (frame === undefined) continue;
+    const system = systemByIndex.get(frame.systemIndex);
     if (system === undefined) continue;
     const staffTop = system.box.origin.y + TAB_METRICS.staffTopOffset;
 
     for (const [offset, item] of measure.items.entries()) {
-      const slot = spacing.slots[offset];
+      const slot = frame.slots[offset];
       if (slot === undefined) continue;
       slots.push(slot);
       const cursor: Cursor = {
         item,
         slot,
         measureIndex,
-        systemIndex: placement.systemIndex,
-        x: placement.x + slot.slot.x,
+        systemIndex: frame.systemIndex,
+        x: frame.left + slot.slot.x,
         staffTop,
       };
       const node = buildTabNode(cursor, voice.voiceId, ctx.measurer, sink);
@@ -180,20 +247,26 @@ export function layoutTab(voice: RenderVoice, ctx: TabContext): TabLayout {
   const engraved = engraveTabBeams(nodes, plans);
 
   const lastSystem = systems[systems.length - 1];
+  // external 模式（I）：宽高取全部行谱的最大外沿，不依赖数组顺序；没有行谱时取默认路径的空值。
+  const extent = ctx.external === undefined ? undefined : externalExtent(systems);
   return {
     voiceId: voice.voiceId,
     systems,
     measures,
     slots,
     nodes: engraved.nodes,
-    staffLines: systems.map((system) => buildStaffLines(system)),
+    staffLines,
     relations,
     strokes,
     beams: engraved.beams,
-    width: systems.reduce((max, system) => Math.max(max, system.box.width), 0),
-    height: lastSystem === undefined
-      ? TAB_METRICS.headerHeight
-      : lastSystem.box.origin.y + lastSystem.box.height,
+    width: ctx.external === undefined
+      ? systems.reduce((max, system) => Math.max(max, system.box.width), 0)
+      : extent?.width ?? 0,
+    height: ctx.external === undefined
+      ? lastSystem === undefined
+        ? TAB_METRICS.headerHeight
+        : lastSystem.box.origin.y + lastSystem.box.height
+      : extent?.height ?? TAB_METRICS.headerHeight,
     diagnostics: collectRenderDiagnostics(drafts),
   };
 }

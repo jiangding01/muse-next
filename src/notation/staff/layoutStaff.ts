@@ -39,14 +39,17 @@
  */
 
 import type { EventId, Score, DomainIndex, Voice } from '../../domain';
+import { externalExtent, mapExternalMeasures, placeExternalMeasure } from '../layout/measurePlacement';
 import { STAFF_METRICS } from '../layout/metrics';
-import type { SpacedSlot } from '../layout/spacing';
+import type { MeasureSpacing, SpacedSlot } from '../layout/spacing';
 import type { System } from '../layout/primitives';
 import { layoutSystems, restackSystems, splitMeasures } from '../layout/systems';
+import type { MeasureSlice } from '../layout/systems';
 import type { TextMeasurer } from '../layout/textMeasurer';
 import { collectRenderDiagnostics, RENDER_DIAGNOSTIC_CODES as CODES } from '../model/diagnostics';
 import type { RenderDiagnosticDraft } from '../model/diagnostics';
 import type { Anchor, RenderItem, RenderVoice } from '../model/types';
+import type { SystemMeasureGeometry } from '../system/contracts';
 import { buildStaffNode, classifyStaffBarline } from './staffEventNodes';
 import type { StaffDraftSink } from './staffEventNodes';
 import { buildStaffTies, buildStaffTuplets } from './staffRelations';
@@ -70,8 +73,53 @@ export interface StaffContext {
   readonly score: Score;
   readonly index: DomainIndex;
   readonly measurer: TextMeasurer;
-  /** 容器可用宽度（abstract unit）：贪心换行的唯一阈值（D7）。 */
+  /** 容器可用宽度（abstract unit）：贪心换行的唯一阈值（D7）；`external` 存在时不使用。 */
   readonly availableWidth: number;
+  /**
+   * M2.5 T5 external 几何（用户裁决 A1，Staff 只承诺 tier 1）：两项原子成对。缺席 = 走 M2 默认路径（逐字段
+   * 不变）；存在 = stave 的 x / width 直接取公共 measure（行首 measure 的 `width` 已含 `lineStartReserve`，
+   * **不再叠加** `staffLineHeaderReserve`），行首判据为 `contentOffsetX > 0`（K-b），stave 内音符 x 仍由
+   * 渲染器 formatter 排（tier 2 归 T5.S）。任何不变量失败抛 `RangeError`，绝不回退。
+   */
+  readonly external?: {
+    readonly measures: readonly SystemMeasureGeometry[];
+    readonly systems: readonly System[];
+  };
+}
+
+/** 一个 stave 的横向几何与逐项 slot（默认路径 = 本声部 spacing；external = 最终分配）。 */
+interface StaveFrame {
+  readonly systemIndex: number;
+  readonly x: number;
+  readonly width: number;
+  readonly lineStart: boolean;
+  readonly slots: readonly SpacedSlot[];
+}
+
+interface StaffPass {
+  readonly frames: readonly (StaveFrame | undefined)[];
+  readonly systems: readonly System[];
+}
+
+/** M2.5 T5 external 路径（tier 1）：measure → 公共框只按 participation 映射；不换行、不 restack。 */
+function externalPass(
+  voice: RenderVoice, measures: readonly MeasureSlice[], spacings: readonly MeasureSpacing[],
+  external: NonNullable<StaffContext['external']>,
+): StaffPass {
+  const mapped = mapExternalMeasures(voice.voiceId, measures, external);
+  const frames = measures.map((measure, measureIndex): StaveFrame | undefined => {
+    const spacing = spacings[measureIndex];
+    const box = mapped.byLocal.get(measureIndex);
+    if (spacing === undefined || box === undefined) return undefined;
+    return {
+      systemIndex: box.systemIndex,
+      x: (mapped.systemByIndex.get(box.systemIndex)?.box.origin.x ?? 0) + box.x,
+      width: box.width,
+      lineStart: box.contentOffsetX > 0,
+      slots: placeExternalMeasure(measure, spacing, box),
+    };
+  });
+  return { frames, systems: mapped.systems };
 }
 
 /** 缺省谱号：`treble`（**产品决定**——spec 从未规定 `clef` 缺席时的缺省值）。 */
@@ -144,9 +192,90 @@ export function layoutStaff(voice: RenderVoice, ctx: StaffContext): StaffLayout 
   const measures = splitMeasures(voice.items);
   const spacings = measures.map((measure) => staffMeasureSpacing(measure, ctx.measurer));
 
+  const { frames, systems } = ctx.external === undefined
+    ? defaultPass(spacings, lineHeaderReserve, ctx.availableWidth)
+    : externalPass(voice, measures, spacings, ctx.external);
+  // 行谱一律按 `System.index` 查（T5）：external 模式的 index 是全文档全局序号，不是本数组下标。
+  const systemByIndex = new Map(systems.map((system) => [system.index, system]));
+
+  const nodes: StaffEventNode[] = [];
+  const slots: SpacedSlot[] = [];
+  const staves: StaffStaveSpec[] = [];
+  // 索引的是**布局产物**（事件 → 本次布局的节点），不是 Domain lookup（§2.4.1，P2-G）；
+  // T7.3 的关系拆段靠它判断端点落在第几行、画不画得出来。
+  const nodeByEvent = new Map<EventId, StaffEventNode>();
+
+  for (const [measureIndex, measure] of measures.entries()) {
+    const frame = frames[measureIndex];
+    if (frame === undefined) continue;
+    const system = systemByIndex.get(frame.systemIndex);
+    if (system === undefined) continue;
+
+    // 行首 stave 才带谱号/调号/拍号：每行重画是记谱惯例。
+    const lineStart = frame.lineStart;
+    const beginBarline = measure.items.length > 1 ? barlineFormAt(measure.items, 0) : undefined;
+    const endBarline = barlineFormAt(measure.items, measure.items.length - 1);
+    staves.push({
+      systemIndex: frame.systemIndex,
+      measureIndex,
+      x: frame.x,
+      y: system.box.origin.y,
+      width: frame.width,
+      ...(lineStart ? { clef } : {}),
+      ...(lineStart && keySignature !== undefined ? { keySignature } : {}),
+      ...(lineStart && timeSignature !== undefined ? { timeSignature } : {}),
+      ...(beginBarline === undefined ? {} : { beginBarline }),
+      ...(endBarline === undefined ? {} : { endBarline }),
+    });
+
+    for (const [offset, item] of measure.items.entries()) {
+      const slot = frame.slots[offset];
+      if (slot === undefined) continue;
+      slots.push(slot);
+      const node = buildStaffNode(
+        { item, slot, measureIndex, systemIndex: frame.systemIndex },
+        voice.voiceId,
+        sink,
+      );
+      nodes.push(node);
+      nodeByEvent.set(item.eventId, node);
+    }
+  }
+
+  const ties = buildStaffTies(voice, ctx.index, nodeByEvent, sink);
+  const tuplets = buildStaffTuplets(voice, ctx.index, nodeByEvent, sink);
+  sinkVoiceDiagnostics(voice.voice, sink);
+
+  const lastSystem = systems[systems.length - 1];
+  // external 模式（I）：宽高取全部行谱的最大外沿，不依赖数组顺序；没有行谱时取默认路径的空值。
+  const extent = ctx.external === undefined ? undefined : externalExtent(systems);
+  return {
+    voiceId: voice.voiceId,
+    clef,
+    systems,
+    measures,
+    slots,
+    staves,
+    nodes,
+    ties,
+    tuplets,
+    width: ctx.external === undefined
+      ? systems.reduce((max, system) => Math.max(max, system.box.width), 0)
+      : extent?.width ?? 0,
+    height: ctx.external === undefined
+      ? lastSystem === undefined ? 0 : lastSystem.box.origin.y + lastSystem.box.height
+      : extent?.height ?? 0,
+    diagnostics: collectRenderDiagnostics(drafts),
+  };
+}
+
+/**
+ * M2 默认路径（逐字段不变）：packing 前先扣行首预留；预留空间归行首 stave 自己（见文件头）。
+ */
+function defaultPass(spacings: readonly MeasureSpacing[], lineHeaderReserve: number, availableWidth: number): StaffPass {
   const geometry = {
     // 行首预留在**打包之前**就从可用宽度里扣掉：排完再补会让行首那一小节把整行挤超宽。
-    availableWidth: Math.max(0, ctx.availableWidth - lineHeaderReserve),
+    availableWidth: Math.max(0, availableWidth - lineHeaderReserve),
     systemHeight: STAFF_METRICS.systemHeight,
     systemGap: STAFF_METRICS.systemGap,
     // 谱面头部走 HTML 路径（`scoreHeader.ts`），不占 Staff 画布纵向空间，故从 0 起排。
@@ -171,70 +300,18 @@ export function layoutStaff(voice: RenderVoice, ctx: StaffContext): StaffLayout 
     index: system.index,
     box: { ...system.box, width: system.box.width + lineHeaderReserve },
   }));
-
-  const nodes: StaffEventNode[] = [];
-  const slots: SpacedSlot[] = [];
-  const staves: StaffStaveSpec[] = [];
-  // 索引的是**布局产物**（事件 → 本次布局的节点），不是 Domain lookup（§2.4.1，P2-G）；
-  // T7.3 的关系拆段靠它判断端点落在第几行、画不画得出来。
-  const nodeByEvent = new Map<EventId, StaffEventNode>();
-
-  for (const [measureIndex, measure] of measures.entries()) {
-    const spacing = spacings[measureIndex];
+  const frames = spacings.map((spacing, measureIndex): StaveFrame | undefined => {
     const placement = packed.placements[measureIndex];
-    if (spacing === undefined || placement === undefined) continue;
-    const system = systems[placement.systemIndex];
-    if (system === undefined) continue;
-
-    // 行首 stave（`placement.x === 0`）才带谱号/调号/拍号：每行重画是记谱惯例。
+    if (placement === undefined) return undefined;
+    // 行首 stave（`placement.x === 0`）；见文件头「行首预留」：reserve 是行首 stave 的一部分，不是整行的左边距。
     const lineStart = placement.x === 0;
-    const beginBarline = measure.items.length > 1 ? barlineFormAt(measure.items, 0) : undefined;
-    const endBarline = barlineFormAt(measure.items, measure.items.length - 1);
-    staves.push({
+    return {
       systemIndex: placement.systemIndex,
-      measureIndex,
-      // 见文件头「行首预留」：reserve 是行首 stave 的一部分，不是整行的左边距。
       x: lineStart ? placement.x : placement.x + lineHeaderReserve,
-      y: system.box.origin.y,
       width: lineStart ? spacing.width + lineHeaderReserve : spacing.width,
-      ...(lineStart ? { clef } : {}),
-      ...(lineStart && keySignature !== undefined ? { keySignature } : {}),
-      ...(lineStart && timeSignature !== undefined ? { timeSignature } : {}),
-      ...(beginBarline === undefined ? {} : { beginBarline }),
-      ...(endBarline === undefined ? {} : { endBarline }),
-    });
-
-    for (const [offset, item] of measure.items.entries()) {
-      const slot = spacing.slots[offset];
-      if (slot === undefined) continue;
-      slots.push(slot);
-      const node = buildStaffNode(
-        { item, slot, measureIndex, systemIndex: placement.systemIndex },
-        voice.voiceId,
-        sink,
-      );
-      nodes.push(node);
-      nodeByEvent.set(item.eventId, node);
-    }
-  }
-
-  const ties = buildStaffTies(voice, ctx.index, nodeByEvent, sink);
-  const tuplets = buildStaffTuplets(voice, ctx.index, nodeByEvent, sink);
-  sinkVoiceDiagnostics(voice.voice, sink);
-
-  const lastSystem = systems[systems.length - 1];
-  return {
-    voiceId: voice.voiceId,
-    clef,
-    systems,
-    measures,
-    slots,
-    staves,
-    nodes,
-    ties,
-    tuplets,
-    width: systems.reduce((max, system) => Math.max(max, system.box.width), 0),
-    height: lastSystem === undefined ? 0 : lastSystem.box.origin.y + lastSystem.box.height,
-    diagnostics: collectRenderDiagnostics(drafts),
-  };
+      lineStart,
+      slots: spacing.slots,
+    };
+  });
+  return { frames, systems };
 }

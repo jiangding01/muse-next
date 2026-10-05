@@ -197,8 +197,12 @@ export function buildArcSegments(
     return [arcAt(request, startSystem, centerOf(first), centerOf(last), startY, 'whole')];
   }
 
+  // 只遍历**实际存在**的行谱（M2.5 T5）：external 模式的 systemIndex 是全文档全局序号，不保证从 0 起、
+  // 也不保证连续；两端仍必须存在（`geometryOf` 照旧抛错）。默认路径的行谱连续，结果与逐个 +1 相同。
+  geometryOf(geometries, endSystem);
+  const indices = [...geometries.keys()].filter((index) => index >= startSystem && index <= endSystem).sort((a, b) => a - b);
   const segments: JianpuArc[] = [];
-  for (let index = startSystem; index <= endSystem; index += 1) {
+  for (const index of indices) {
     const geometry = geometryOf(geometries, index);
     const isStart = index === startSystem;
     const isEnd = index === endSystem;
