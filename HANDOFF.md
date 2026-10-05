@@ -2,7 +2,7 @@
 
 > 面向后续实现 Agent 的项目交接文档  
 > 项目代号：`muse-next`  
-> 当前阶段：**M0–M1.8 已封板；M2 Notation Rendering T0–T9 已全部完成（Chord / Jianpu / TAB / Staff 四种记谱可渲染 + T8 render matrix 契约测试 + T9 文档封板），✅ 2026-09-22 封板（原始 seal CI run 35700198783；T8.1 post-seal 契约收紧 run 35702615344；当前 HEAD run 35702885112 三平台全绿）；UI 设计 Brief 已完成（`docs/UI_DESIGN_BRIEF.md` v1.3.4）；M2.5 Score System Layout 方案冻结为 v1.0，**T0 已完成（2026-10-04，`6e5a532` + 命名修订 `3f5b48c`），T1 声部视觉分组已完成（`2b9882c`），T2 跨声部 measure identity 已完成（`218d143`），T2.1 小节错位锁存已完成（`9037351`），T3 共享小节时间轴已完成（`7ee1e27`），T3.5 TAB / 简谱节奏刻印已完成（`d2486aa`），T4 公共几何编排已完成（2026-10-05，`9661810`），T5 三个 voice layout 的外部几何适配已完成（2026-10-05，`ed4ea88`），均三平台 CI 全绿；T5.S VexFlow shared timing spike 已完成（2026-10-05，结论 `feasible-with-cost` / no adapter merged，M2.5 只承诺 Staff tier 1）；T6 和弦图层水平规划已完成（2026-10-05，`c74094e`）；下一任务 T8 待用户明确指令**；M3 排在 M2.5 之后**（详见 §30 里程碑表、§30.1「M2 进行中状态」与「M2.5 T0 实际状态」、§69「当前明确的下一任务」）  
+> 当前阶段：**M0–M1.8 已封板；M2 Notation Rendering T0–T9 已全部完成（Chord / Jianpu / TAB / Staff 四种记谱可渲染 + T8 render matrix 契约测试 + T9 文档封板），✅ 2026-09-22 封板（原始 seal CI run 35700198783；T8.1 post-seal 契约收紧 run 35702615344；当前 HEAD run 35702885112 三平台全绿）；UI 设计 Brief 已完成（`docs/UI_DESIGN_BRIEF.md` v1.3.4）；M2.5 Score System Layout 方案冻结为 v1.0，**T0 已完成（2026-10-04，`6e5a532` + 命名修订 `3f5b48c`），T1 声部视觉分组已完成（`2b9882c`），T2 跨声部 measure identity 已完成（`218d143`），T2.1 小节错位锁存已完成（`9037351`），T3 共享小节时间轴已完成（`7ee1e27`），T3.5 TAB / 简谱节奏刻印已完成（`d2486aa`），T4 公共几何编排已完成（2026-10-05，`9661810`），T5 三个 voice layout 的外部几何适配已完成（2026-10-05，`ed4ea88`），均三平台 CI 全绿；T5.S VexFlow shared timing spike 已完成（2026-10-05，结论 `feasible-with-cost` / no adapter merged，M2.5 只承诺 Staff tier 1）；T6 和弦图层水平规划已完成（2026-10-05，`c74094e`）；T8 最终系统纵向编排已完成（2026-10-05，`b513261`）；下一任务 T9a PageModel 待用户明确指令**；M3 排在 M2.5 之后**（详见 §30 里程碑表、§30.1「M2 进行中状态」与「M2.5 T0 实际状态」、§69「当前明确的下一任务」）  
 > 核心目标：以现代 TypeScript 技术栈重建已停止维护的 **Muse Pro 2.70** 的核心能力，并优先恢复其 `.jcx` 乐谱格式、谱面渲染、编辑与播放能力。
 
 ---
@@ -1795,7 +1795,8 @@ T3.5 ✅ 2026-10-04（`d2486aa`，CI run 37212689335 三平台全绿，TAB / 简
 T4 ✅ 2026-10-05（`9661810`，CI run 37271250936 三平台全绿，公共几何编排）；
 T5 ✅ 2026-10-05（`ed4ea88`，CI run 37284116914 三平台全绿，外部几何适配）；
 T5.S ✅ 2026-10-05（VexFlow shared timing spike，`feasible-with-cost` / no adapter merged，Staff 保持 tier 1）；
-T6 ✅ 2026-10-05（`c74094e`，CI run 37296973259 三平台全绿，和弦图层水平规划），下一任务 T8 待用户指令）
+T6 ✅ 2026-10-05（`c74094e`，CI run 37296973259 三平台全绿，和弦图层水平规划）；
+T8 ✅ 2026-10-05（`b513261`，CI run 37305952319 三平台全绿，最终系统纵向编排），下一任务 T9a PageModel 待用户指令）
 
 → M3
 Editor Core
@@ -2683,6 +2684,7 @@ visual debt、T7 第 6 条），按 视觉 / 架构 / 测试 分类，每行注�
 - **T5 ✅（2026-10-05，`ed4ea88`，CI run 37284116914 三平台全绿；见下方「M2.5 T5 实际状态」）**。
 - **T5.S ✅（2026-10-05，spike，结论 `feasible-with-cost` / no adapter merged；见下方「M2.5 T5.S 结论」与 `docs/M2.5_T5S_VEXFLOW_SHARED_TIMING_SPIKE.md`）**。
 - **T6 ✅（2026-10-05，`c74094e`，CI run 37296973259 三平台全绿；见下方「M2.5 T6 实际状态」）**。
+- **T8 ✅（2026-10-05，`b513261`，CI run 37305952319 三平台全绿；见下方「M2.5 T8 实际状态」）**。
 - 前置条件（M2.5 之前、独立 formats 小任务）：~~`strokePrefix → TabGroupEvent.stroke` 回填~~ **已完成（2026-09-22，M2.5 formats preflight）**：`scan.ts` 顶层循环把紧邻 `tabGroup` 的 `strokePrefix` 绑进 `TabGroupEvent.stroke`，不改 Domain 类型/serializer 代码，dangling-stroke 诊断未对绑定成功的 group stroke 误报（真悬空的仍照常发 info）。U06（body `L:` 按声部作用域）已于 `8a74e8e` 结案。
 - 架构：`src/notation/system/**`（contracts 叶子层 → groupVoices / measureIdentity / timeline / composeSystem / justify / chordOverlay / pageModel）；System = overlay layers（chord diagrams，`layoutChord` 保持 document 级）+ ordered voice layers（jianpu/tab/staff 接受外部 system/measure 几何）+ attached layers（lyrics）；voice layout 不得反向 import composer。
 - 关键裁决：`MeasureTimeline` 只含 timed onset（绝对 Rational 累计 offset）+ `chordSymbol` zero-time overlay，barline 固定 `endX`，decoration/grace/unknown 走 voice-local slot；跨 voice measure identity = ordinal candidate + 结构兼容性校验（时值总量逐 measure 绝对相等，不预设相等，不等进 tier 3；缺 measure 留空保留公共宽度；冲突 fallback + 诊断，不重写事件）；公共 measure width = 各 voice demand 取 max → packing → water-filling justify（`justified: full|partial|none`，末行不拉）；D11 精确名匹配（0 只画名 / 1 名+图 / >1 只画名 + ambiguity 诊断）；`ComposedSystemLayout {target:'screen'|'page'}`，PageModel 只收 page 产物，单 system 不跨页；Staff 验收 = tier 1（共享 measure 边界/宽度），T5.S 为非阻塞 spike。
@@ -2791,7 +2793,7 @@ visual debt、T7 第 6 条），按 视觉 / 架构 / 测试 分类，每行注�
 - **tier 2 的三个 prerequisite（post-M2.5，单独立项）**：① Staff demand calibration（T4 范围：lead 计入 VexFlow 内部缩进与首音左侧修饰，行首预留按实际升降号宽度或 renderer 注入的测量接口；notation 层不得 import vexflow）；② Staff 契约扩展（标记哪些 stave 是 shared，或由 T8 / T9b 把公共几何交给 renderer；`StaffEventNode.slot` 不含 x）；③ renderer adapter（约 40–60 行，限 `renderer/integrations/vexflow/**`，只对 shared 小节覆写，tier 3 仍交 Formatter）。
 - **硬约束**：**T6 / T8 期间不得顺手实现 Staff tier 2**（含 adapter、Staff demand 调整、契约标记）；下一任务为 **T6（chord overlay）**，待用户明确指令。
 
-**M2.5 T6 实际状态（2026-10-05，`c74094e`，CI run 37296973259 三平台全绿；T8 未启动，需用户明确指令）**：
+**M2.5 T6 实际状态（2026-10-05，`c74094e`，CI run 37296973259 三平台全绿；T8 已于 `b513261` 完成）**：
 - 范围：**只做和弦图 overlay 的水平规划**——chordSymbol 收集、来源选择 / 语义去重、精确查表、shared / tier 3 x、footprint、碰撞与三种诊断；**不做**最终 y、`VoiceLayerLayout.top / height`、和弦带纵向堆叠、`system.box.height`、`ScoreSystemLayout` 组装与 renderer（均归 T8 / T9）。`chord/**`、三个 voice layout、contracts、renderer、Domain / parser / serializer 零改动。按用户裁决分 4 个内部阶段（T6-0 analysis 暴露 → T6-1 lookup / source / x → T6-2 collision / diagnostics → T6-3 tests / guards），一个代码提交（7 文件：4 改 + 3 新）。
 - **用户裁决 A–N + 附加裁决 1–10（2026-10-05，冻结方案的 post-freeze amendment，方案顶部修订记录与 §Q5.2 / §Q7.4 / §D 已同步）**。
 - **产物（A-a）**：`system/chordOverlay.ts` 导出 `planChordOverlays(renderScore, composed, measurer): ChordOverlayPlanning { plans: ChordOverlayPlan[], diagnostics }`；`ChordOverlayPlan { anchor, sourceRef, displayText, form: 'diagram' | 'name', shapeIndex?, groupIndex, systemIndex, measureOrdinal, x, footprint { left, right, height } }`，**不带 y**；T8 再加 y 组装最终 `ChordDiagramOverlay`。
@@ -2807,6 +2809,63 @@ visual debt、T7 第 6 条），按 视觉 / 架构 / 测试 分类，每行注�
   - **TAB**：T8 调 external `layoutTab` 时必须继续传 `score.meter`，否则 tier 3 spacing（`planTabBeams`）与 T6 分叉。
   - **Chord**：T9 再调 `layoutChord` 时必须保持 `width = SYSTEM_METRICS.chordDiagramWidth`、`showFinger = score.showFinger`；不得重新做查表 / 去重 / 碰撞决策。
   - **T8 ownership**：左缘溢出（行首和弦图伸出 system 左缘）、和弦带高度（取各 plan `footprint.height`）、F-11 纵向次序（和弦名 → 和弦图 → 扫弦箭头 → TAB 第 1 弦）、最终 y 与 system 高度；TAB 扫弦与 voice 内 chordSymbol primary 节点同 x 的 54 处也在 T8 集成处理。
+
+**M2.5 T8 实际状态（2026-10-05，`b513261`，CI run 37305952319 三平台全绿；T9a 未启动，需用户明确指令）**：
+- 范围：**最终 vertical system 组装**——把 T4 公共几何、T6 和弦 overlay 规划与三种 voice layout（T5 external 路径）组装成
+  最终 `ScoreSystemLayout` / `ComposedSystemLayout`。不接 renderer、不实现 Staff tier 2、不做 PageModel。一个代码提交
+  （14 文件：5 改 + 9 新）。用户裁决 A–L + 修复轮裁决（2026-10-05，冻结方案顶部修订记录与 §Q7.4 / §D 已同步）。
+- **API**：`system/composeLayout.ts` 导出 `composeScoreLayout(renderScore, index, measurer, policy): ScoreLayout
+  { composed: ComposedSystemLayout, voiceLayouts: VoiceLayoutEntry[], diagnostics }`。`VoiceLayoutEntry` 为
+  jianpu / tab / staff 判别联合（contracts 是叶子层，不能引用 voice layout 类型，所以非 contract 包装住在 system/）。
+- **vertical-demand prepass（A）**：`system/verticalDemand.ts` 只凭 measure → system 归属算每个 (声部, system) 层高，不依赖
+  y，因此「行高 ↔ layout y」不成环；每个真实 voice layout 最终**恰好调用一次**（守卫钉住）。
+  - 简谱 = `systemHeight + lyricBandHeight(rows)`，沿用既有公式（**C**：不收紧 46u 余量）；行数口径与 external 路径一致
+    （无目标兜底 = 本声部最小 systemIndex）。
+  - TAB = `systemHeight + extraSystemHeight(本声部本行 measure)`，按 (声部, system) 计，不跨行、不跨声部。
+  - Staff 固定 96；fallback 0。
+  - **B**：已知记谱声部尾部缺 measure 的行仍保留基础高度空层，并照常作为该声部 external `systems` 的一项传入。
+  - 缺失预期需求 / rebase 后 measure / 纵向 frame / 声部层 → `RangeError`（结构不变量被破坏，不静默给 0）。
+- **纵向堆叠（`system/verticalLayout.ts`，E / G / I）**：和弦带 = `max(footprint.height) + chordBandGap`（无和弦 0、不留 gap），
+  带在全部层之上（F-11）；层 top 相对 box 递推，`layerGap` 只在相邻已知记谱层之间；**fallback 层 `height = 0`、不计
+  `layerGap`、不调用 layout、不进 `voiceLayouts`、绝不回退 Staff**；y 自 0 起，`systemGap` 只在相邻 system 之间、不计入
+  box，跨 group 不重置。`ChordDiagramOverlay.y` = **overlay 块顶**（块底对齐带底）。
+- **横向 extent（F + post-freeze amendment）**：`ScoreSystemLayout.box` 包含 **T4 system geometry + T6 chord ink extents**，
+  **不宣称包含歌词墨迹**。left 向下、right 向上吸附到 `geometryQuantum = 1/1024`（各多 < 1 tick 的不可见留白，不裁墨迹），
+  `box.origin.x = left`、`box.width = right − left`、`dx = −left`；最终 `measures[].x` 与 overlay x 统一 `+dx`，external
+  `System.origin.x = left`、`width = box.width`。**精度契约**：T4 measure / shared x 为 bitwise-preserving rebase（二进制
+  定点可证明）；tier 3 voice-local x 只承诺严格浮点误差界 `4ε·max(1,|x|,|local|,|origin|)`（合成用例 57.6 + 54 跨 2⁶
+  即不逐位还原）；真实语料 2368 个 overlay 实测逐位相等只是 observed evidence，不是契约；也不加运行时相等断言。
+- **简谱歌词居中（D）**：只改 external / systemized 路径——有目标音节 left = `node.x + node.glyphWidth/2 − 音节宽/2`；
+  missing-target 仍从同一 (行谱, verse) 上一音节右侧顺排；legacy 默认路径逐字段不变（T5 golden 945 项未更新）。
+  `buildLyricNodes` 新增可选 `centerOf` 参数，只由 external 路径传入。
+- **诊断（H）**：`composed.diagnostics`（已含 renderScore / T1 / T2 / T3）→ T6 chord → voice layouts（group 顺序、组内
+  `voiceIds` 顺序），只拼接、不重排、不去重、不重复合并 renderScore。
+- **TAB / 简谱 meter**：两者都传文档 `meter`（beam 分组）；Staff 传整份 `score`。
+- **守卫（J）**：三个 voice layout 入口只允许 `composeLayout.ts` 值导入，且各**恰好调用 1 次**（防止以后在测量趟再调一次、
+  重开双布局循环）；`verticalLayout.ts` 不 import 任何记谱目录；`verticalDemand.ts` 只经 `jianpuVerticalDemand` /
+  `tabVerticalDemand` 取层高；两个 helper 不得 import 各自的 layout 入口；`layoutTab` / `layoutJianpu` 默认路径真正使用
+  迁出的 `extraSystemHeight` / `lyricBandHeight`。
+- 文件：`composeLayout.ts` 195、`verticalLayout.ts` 116、`verticalDemand.ts` 98、`jianpuVerticalDemand.ts` 61、
+  `tabVerticalDemand.ts` 49 行；测试 `system.composeLayout.test.ts` 244 / `.lyrics.test.ts` 150 / `.helpers.ts` 69、
+  `system.verticalLayout.test.ts` 176 行。**文件规则**：自 T8 起新增或实质修改的 source / test 文件 ≤ 350 行；
+  **`architecture.test.ts`（913 行）为历史冻结超长文件**，T8 守卫按豁免保留，**T9a / T9b / T9c 及以后任何新 architecture
+  守卫不得再追加到该文件，必须新建 `architecture.<stage>.test.ts`**。
+- 验证：typecheck；Vitest **95 files / 6710 pass**；fixture-report 105/105；corpus-test 11/11；T3 / T3.5 / T4 / T5 / T6
+  baseline（5 files / 110）全绿。独立只读 review 无 CRITICAL / HIGH（MEDIUM：tier 3 精度不可证明 → 改为分级契约 + 合成
+  用例；LOW：右界未吸附、测试 `as`、不可达兜底、守卫只验 ≥1、测试超 350 行、TAB 分 system 补高测试不足——均按裁决修复）。
+  独立 worktree 变异 **60/60 杀死、0 等价**（含右界不吸附 / 向下吸附、缺失需求兜底 0、只平移一半路径、overlay 不随
+  measure rebase、fallback 计入 gap、renderScore 诊断重复合并等）；主工作区 hash 零漂移。真实语料 11 文件 × 4 宽 ×
+  screen/page 共 88 次运行：0 抛错，6232 measure 逐位还原，2368 overlay（shared 1952 / tier 3 416）全在误差界内，box 全部
+  包住和弦墨迹；随机右溢出探针 20000 例 0 违反。
+- **T9 集成前提（必须遵守）**：
+  - **T9b chordSymbol**：systemized renderer 必须 suppress **全部** voice-local chordSymbol glyph（不是只 suppress 保留下来
+    的 overlay anchor；被跨声部去重的同名事件也有 primary 节点）；layout nodes 保留，不改 voice layout。
+  - **T9b 歌词溢出**：systemized 歌词居中后可能横向越过 system box（box 只含 T4 geometry + T6 chord ink；歌词墨迹要在
+    external Jianpu layout 后才知道，纳入会重开 layout → box → layout 循环）；T9b / PageModel 联调时检查
+    overflow-visible / clipping 策略。
+  - **Staff**：仍是 tier 1，音符 x 由 VexFlow Formatter 决定，与 overlay x 不保证逐音一致。
+  - **Chord**：T9 调 `layoutChord` 保持 `width = SYSTEM_METRICS.chordDiagramWidth`、`showFinger = score.showFinger`，
+    不重新查表 / 去重 / 碰撞；overlay y 是块顶。
 
 **M2 seal 与 M3 前置（T9 之后，恢复时从这里继续）**：**2026-09-22 追加裁决：M2 与 UI 目标版式确认之后、M3 之前先做 M2.5 Score System Layout（见 §30 路线表与 `docs/UI_DESIGN_BRIEF.md` §2.7.6、§10.17/10.18）；M2.5 的 System 模型 = overlay layers（chord diagrams）+ ordered voice layers（TAB/Jianpu/Staff 接受外部 system/measure 几何）+ attached layers（lyrics），chord 不是第四种声部 layout，system 高度由内容决定、分页只在 system 边界，`bracket` 只证明视觉分组、需定义 cross-voice measure mismatch policy。**原文：T0–T9 已全部完成并推送，
 下一步不是继续写渲染代码，而是：
@@ -4348,8 +4407,10 @@ Chord / Jianpu / TAB / Staff 四种记谱可渲染（T0–T7，T7 Staff + VexFlo
    **M2.5 T5 已完成**（`ed4ea88`，三平台 CI 全绿，三个 voice layout 的外部几何适配，见 §30.1「M2.5 T5 实际状态」），
    **M2.5 T5.S 已完成**（VexFlow shared timing spike，`feasible-with-cost` / no adapter merged，M2.5 只承诺 Staff tier 1，见 §30.1「M2.5 T5.S 结论」），
    **M2.5 T6 已完成**（`c74094e`，三平台 CI 全绿，和弦图层水平规划，见 §30.1「M2.5 T6 实际状态」），
-   **当前主动暂停，下一任务 T8（纵向 system 组装 + 歌词层）启动需用户明确指令**（T8 期间**不得**顺手实现 Staff tier 2）；启动时仍先给
-   实现方案 + 测试矩阵再编码；
+   **M2.5 T8 已完成**（`b513261`，三平台 CI 全绿，最终系统纵向编排，见 §30.1「M2.5 T8 实际状态」），
+   **当前主动暂停，下一任务 T9a（PageModel）启动需用户明确指令**（仍**不得**顺手实现 Staff tier 2）；启动时仍先给
+   实现方案 + 测试矩阵再编码；新的 architecture 守卫必须新建 `architecture.<stage>.test.ts`，不得再往
+   `architecture.test.ts` 追加；
 4. M2.5 封板后再规划 M3A（source/save/history）→ M3B（selection + 三向同步）→ M3C（可视化编辑）。
 ```
 
