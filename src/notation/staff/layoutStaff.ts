@@ -50,6 +50,7 @@ import { collectRenderDiagnostics, RENDER_DIAGNOSTIC_CODES as CODES } from '../m
 import type { RenderDiagnosticDraft } from '../model/diagnostics';
 import type { Anchor, RenderItem, RenderVoice } from '../model/types';
 import type { SystemMeasureGeometry } from '../system/contracts';
+import { resolveStaffClef } from './staffClef';
 import { buildStaffNode, classifyStaffBarline } from './staffEventNodes';
 import type { StaffDraftSink } from './staffEventNodes';
 import { buildStaffTies, buildStaffTuplets } from './staffRelations';
@@ -76,14 +77,21 @@ export interface StaffContext {
   /** 容器可用宽度（abstract unit）：贪心换行的唯一阈值（D7）；`external` 存在时不使用。 */
   readonly availableWidth: number;
   /**
-   * M2.5 T5 external 几何（用户裁决 A1，Staff 只承诺 tier 1）：两项原子成对。缺席 = 走 M2 默认路径（逐字段
-   * 不变）；存在 = stave 的 x / width 直接取公共 measure（行首 measure 的 `width` 已含 `lineStartReserve`，
+   * M2.5 T5 external 几何（用户裁决 A1，Staff 只承诺 tier 1）：三项（measures / systems / topInsets）一起给出。
+   * 缺席 = 走 M2 默认路径（逐字段不变）；存在 = stave 的 x / width 直接取公共 measure（行首 measure 的 `width` 已含 `lineStartReserve`，
    * **不再叠加** `staffLineHeaderReserve`），行首判据为 `contentOffsetX > 0`（K-b），stave 内音符 x 仍由
    * 渲染器 formatter 排（tier 2 归 T5.S）。任何不变量失败抛 `RangeError`，绝不回退。
    */
   readonly external?: {
     readonly measures: readonly SystemMeasureGeometry[];
     readonly systems: readonly System[];
+    /**
+     * M2.5 T9b.S（用户裁决 M3）：systemIndex → 本行 Staff 内容的上内缩（= vertical prepass 的 `topExtra`，有限且
+     * ≥ 0）。**必填**，`systems` 的每一行恰好一个条目（本行没有本声部 measure 时为 0）；层 box 高必须 ≥ 基础
+     * `systemHeight` 且 `内缩 + systemHeight ≤ 层高`。缺条目 / 多条目 / 非法值 / 结构不一致一律 `RangeError`，
+     * 不 clamp、不回退 0。stave 的 `y` = 层 box 顶 + 内缩；本层只消费，不重算纵向需求。
+     */
+    readonly topInsets: ReadonlyMap<number, number>;
   };
 }
 
@@ -91,6 +99,8 @@ export interface StaffContext {
 interface StaveFrame {
   readonly systemIndex: number;
   readonly x: number;
+  /** stave 相对层 box 顶的下移量（默认路径恒 0）。 */
+  readonly topInset: number;
   readonly width: number;
   readonly lineStart: boolean;
   readonly slots: readonly SpacedSlot[];
@@ -101,18 +111,46 @@ interface StaffPass {
   readonly systems: readonly System[];
 }
 
+/**
+ * T9b.S：`topInsets` 的键集合必须恰为 `systems` 的 index 集合；值有限且 ≥ 0；层高有限且 ≥ 基础 `systemHeight`，
+ * 并容得下「内缩 + 基础高」（裁决 L-3：只做一致性校验，不重算需求）。
+ */
+function checkedTopInsets(external: NonNullable<StaffContext['external']>): ReadonlyMap<number, number> {
+  const { systems, topInsets } = external;
+  const base = STAFF_METRICS.systemHeight;
+  for (const system of systems) {
+    const label = `staff external: system ${String(system.index)}`;
+    const inset = topInsets.get(system.index);
+    const height = system.box.height;
+    if (inset === undefined) throw new RangeError(`${label} 缺少 topInset 条目`);
+    if (!Number.isFinite(inset) || inset < 0) throw new RangeError(`${label} 的 topInset ${String(inset)} 非法`);
+    if (!Number.isFinite(height) || height < base) throw new RangeError(`${label} 的层高 ${String(height)} 小于基础高 ${String(base)}`);
+    if (inset + base > height) throw new RangeError(`${label} 的 topInset ${String(inset)} + 基础高超出层高 ${String(height)}`);
+  }
+  const indices = new Set(systems.map((system) => system.index));
+  for (const key of topInsets.keys()) {
+    if (!indices.has(key)) throw new RangeError(`staff external: topInset 条目 ${String(key)} 不对应任何 system`);
+  }
+  return topInsets;
+}
+
 /** M2.5 T5 external 路径（tier 1）：measure → 公共框只按 participation 映射；不换行、不 restack。 */
 function externalPass(
   voice: RenderVoice, measures: readonly MeasureSlice[], spacings: readonly MeasureSpacing[],
   external: NonNullable<StaffContext['external']>,
 ): StaffPass {
   const mapped = mapExternalMeasures(voice.voiceId, measures, external);
+  const topInsets = checkedTopInsets(external);
   const frames = measures.map((measure, measureIndex): StaveFrame | undefined => {
     const spacing = spacings[measureIndex];
     const box = mapped.byLocal.get(measureIndex);
     if (spacing === undefined || box === undefined) return undefined;
+    const topInset = topInsets.get(box.systemIndex);
+    // `mapExternalMeasures` 已保证 box 的 systemIndex 在 systems 里，`checkedTopInsets` 已保证每个 system 有条目。
+    if (topInset === undefined) throw new RangeError(`staff external: system ${String(box.systemIndex)} 缺少 topInset 条目`);
     return {
       systemIndex: box.systemIndex,
+      topInset,
       x: (mapped.systemByIndex.get(box.systemIndex)?.box.origin.x ?? 0) + box.x,
       width: box.width,
       lineStart: box.contentOffsetX > 0,
@@ -120,12 +158,6 @@ function externalPass(
     };
   });
   return { frames, systems: mapped.systems };
-}
-
-/** 缺省谱号：`treble`（**产品决定**——spec 从未规定 `clef` 缺席时的缺省值）。 */
-const DEFAULT_CLEF: StaffClef = 'treble';
-function isKnownClef(value: string): value is StaffClef {
-  return value === 'treble' || value === 'bass' || value === 'alto' || value === 'tenor';
 }
 
 function draftOf(code: RenderDiagnosticDraft['code'], level: 'info' | 'warning',
@@ -137,24 +169,20 @@ function draftOf(code: RenderDiagnosticDraft['code'], level: 'info' | 'warning',
 }
 
 /**
- * 谱号：**只读 `voice.clef`，不解析 `K:` 里的谱号文本**（spec §8.7 明写 `K:` 的 clef
- * 不解析，`KeySignature` 里根本没有 clef 字段）。三态：缺席 → 默认 + info；值落在
- * `{treble, bass, alto, tenor}` → 采用；其它值（含 `standardtab`、`treble+8` 这类
- * `INFERRED` 的扩展写法——**能不能出现在 `.jcx` 里本层没有证据，不得写成「已确认
- * JCX 格式能力」**）→ 默认 + warning 并把原值带进消息，不静默。
+ * 谱号：三态规则的唯一实现在 `staffClef.ts`（纯、不发诊断）；本函数只按 `status` 发原有诊断——缺席 → 默认 + info；
+ * 不可识别 → 默认 + warning 并把原值带进消息，不静默。
  */
 function resolveClef(voice: Voice, sink: StaffDraftSink): StaffClef {
   const anchor: Anchor = { kind: 'voice', voiceId: voice.id };
   const ref = voice.origins[0];
-  if (voice.clef === undefined) {
-    sink(draftOf(CODES.staffClefAbsent, 'info', `声部未声明 clef：按默认谱号 ${DEFAULT_CLEF} 呈现（产品决定，spec 未规定缺省谱号）`, anchor, ref));
-    return DEFAULT_CLEF;
+  const resolved = resolveStaffClef(voice.clef);
+  if (resolved.status === 'absent') {
+    sink(draftOf(CODES.staffClefAbsent, 'info', `声部未声明 clef：按默认谱号 ${resolved.clef} 呈现（产品决定，spec 未规定缺省谱号）`, anchor, ref));
   }
-  if (isKnownClef(voice.clef)) {
-    return voice.clef;
+  if (resolved.status === 'unrecognized') {
+    sink(draftOf(CODES.staffClefUnrecognized, 'warning', `clef=${resolved.raw} 不是本层已知的谱号（treble / bass / alto / tenor）：按默认谱号 ${resolved.clef} 呈现并显示原值，不猜它的含义`, anchor, ref));
   }
-  sink(draftOf(CODES.staffClefUnrecognized, 'warning', `clef=${voice.clef} 不是本层已知的谱号（treble / bass / alto / tenor）：按默认谱号 ${DEFAULT_CLEF} 呈现并显示原值，不猜它的含义`, anchor, ref));
-  return DEFAULT_CLEF;
+  return resolved.clef;
 }
 
 /** 小节首/末项若是小节线就把形态带上；缺席表示作者没写，**不代表「普通单线」**。 */
@@ -219,7 +247,7 @@ export function layoutStaff(voice: RenderVoice, ctx: StaffContext): StaffLayout 
       systemIndex: frame.systemIndex,
       measureIndex,
       x: frame.x,
-      y: system.box.origin.y,
+      y: system.box.origin.y + frame.topInset,
       width: frame.width,
       ...(lineStart ? { clef } : {}),
       ...(lineStart && keySignature !== undefined ? { keySignature } : {}),
@@ -283,16 +311,10 @@ function defaultPass(spacings: readonly MeasureSpacing[], lineHeaderReserve: num
   };
   const packed = layoutSystems(spacings.map((spacing) => spacing.width), geometry);
 
-  // 两趟布局的结构照 T6 保留：第一趟只定横向归属，第二趟按每行实际需要的额外高度
-  // 回填。本步节点都画在 `systemHeight` 之内（加线空间已含在 `staffTopOffset` 与
-  // `systemHeight` 的推导里），额外高度恒为 0。
-  //
-  // **T7.3 判断：tie / tuplet bracket 不补高**。两条理由缺一不可：① 它们在本层
-  // **不带任何 y**（见 `StaffTie` / `StaffTupletBracket`），notation 层根本没有可以
-  // 折算成「额外高度」的量，硬补就是凭空造几何；② tuplet 括号画在谱表上方，而
-  // `staffTopOffset(32)` 已按 3 条上加线 + 呼吸空间预留，tie 的弧落在符头附近同样在
-  // `systemHeight(96)` 的包络内——真要超出，那是 adapter（T7.4）拿到实际 y 之后才判
-  // 得出来的事，届时由它回填，不由这里猜。
+  // 两趟布局的结构照 T6 保留：第一趟只定横向归属，第二趟回填额外高度。**M2 默认路径的额外高度恒为 0**
+  // （用户裁决 M4：本路径保持基础 96，不重做动态 restack）——超出谱表上方 32 / 下方 24 的加线、符干、
+  // 升降号、附点、tie 墨迹在这条路径上**不被包住**；M2.5 systemized external 路径的纵向需求由
+  // `staffVerticalDemand.ts` 在 T8 prepass 中算出（T9b.S），经 `external.topInsets` 与层高传入。
   const extraHeights = packed.systems.map(() => 0);
   const restacked = restackSystems(packed.systems, extraHeights, geometry);
   // `layoutSystems` 只知道内容宽度；行首预留是 Staff 自己的事，在这里补回行宽。
@@ -307,6 +329,7 @@ function defaultPass(spacings: readonly MeasureSpacing[], lineHeaderReserve: num
     const lineStart = placement.x === 0;
     return {
       systemIndex: placement.systemIndex,
+      topInset: 0,
       x: lineStart ? placement.x : placement.x + lineHeaderReserve,
       width: lineStart ? spacing.width + lineHeaderReserve : spacing.width,
       lineStart,

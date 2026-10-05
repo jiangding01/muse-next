@@ -1,17 +1,19 @@
 /**
- * notation/system —— 最终 system 的 **vertical prepass**（M2.5 T8，用户裁决 A / B / C / I，2026-10-05）。
+ * notation/system —— 最终 system 的 **vertical prepass**（M2.5 T8，用户裁决 A / B / C / I，2026-10-05；T9b.S 补 Staff）。
  *
  * 每个 (声部, system) 的层高只凭 T4 的 measure → system 归属算出，不依赖任何 y（所以「行高 ↔ layout y」不成环）：
  * - 简谱 = `systemHeight + lyricBandHeight(歌词行数)`（`jianpu/jianpuVerticalDemand.ts`，沿用默认公式，裁决 C）；
  * - TAB = `systemHeight +` 本声部在该行最深时值的补高（`tab/tabVerticalDemand.ts`）；
- * - Staff = `STAFF_METRICS.systemHeight`；fallback = 0（裁决 I）。
+ * - Staff = `systemHeight + topExtra + bottomExtra`（`staff/staffVerticalDemand.ts`，T9b.S）：由 `composeLayout.ts` 以
+ *   `StaffDemandSource` 注入（T8 冻结守卫要求本文件只 import 简谱 / TAB helper）；`topExtra` 同时作为该行 Staff 内容的
+ *   上内缩，经 `VoicePlan.staffTopInsets` 唯一地交给 `layoutStaff`（不由它重算）；
+ * - fallback = 0（裁决 I）。
  * 已知记谱声部在其 group 的**每一行**都有层（本行没有 measure 也保留基础高度，裁决 B）。
  * 只调用记谱侧的纯 helper，不 import 任何 voice layout 入口；输出交给 `verticalLayout.ts` 堆叠。
  */
 
 import type { VoiceId } from '../../domain';
 import { jianpuLayerHeights } from '../jianpu/jianpuVerticalDemand';
-import { STAFF_METRICS } from '../layout/metrics';
 import type { RenderScore, RenderVoice } from '../model/types';
 import { tabLayerHeights } from '../tab/tabVerticalDemand';
 import type { ChordOverlayPlan } from './chordOverlay';
@@ -27,9 +29,23 @@ export interface VoicePlan {
   readonly groupIndex: number;
   /** 所在 group 的全部行。 */
   readonly lines: readonly SystemLineGeometry[];
-  /** systemIndex → 层高（`lines` 的每一行都有条目）。 */
+  /** systemIndex → 层高（`lines` 的每一行都有条目）——最终层高的唯一真源。 */
   readonly heights: ReadonlyMap<number, number>;
+  /** Staff 声部：systemIndex → 内容上内缩（= 该行 `topExtra`，`lines` 的每一行都有条目）；其它记谱为空表。 */
+  readonly staffTopInsets: ReadonlyMap<number, number>;
 }
+
+type LayerVertical = Pick<VoicePlan, 'heights' | 'staffTopInsets'>;
+
+/**
+ * Staff 纵向需求的来源（T9b.S）：`composeLayout.ts` 传入绑定了 `DomainIndex` 的 `staffLayerDemands`。
+ * `systemIndices` 的每一项都必须有条目（缺失在 `heightAt` / `layoutStaff` 处 `RangeError`）。
+ */
+export type StaffDemandSource = (
+  voice: RenderVoice,
+  systemOfMeasure: ReadonlyMap<number, number>,
+  systemIndices: readonly number[],
+) => ReadonlyMap<number, { readonly topExtra: number; readonly height: number }>;
 
 /** 本地 measure 下标 → 全局 systemIndex（absent 不出条目）。 */
 function systemOfMeasure(voiceId: VoiceId, lines: readonly SystemLineGeometry[]): ReadonlyMap<number, number> {
@@ -44,20 +60,32 @@ function systemOfMeasure(voiceId: VoiceId, lines: readonly SystemLineGeometry[])
   return out;
 }
 
-function layerHeights(
+function layerVertical(
   voice: RenderVoice,
   notation: VoiceLayerNotation,
   lines: readonly SystemLineGeometry[],
-): ReadonlyMap<number, number> {
+  staffDemand: StaffDemandSource,
+): LayerVertical {
   const indices = lines.map((line) => line.systemIndex);
-  if (notation === 'fallback') return new Map(indices.map((index) => [index, 0]));
-  if (notation === 'staff') return new Map(indices.map((index) => [index, STAFF_METRICS.systemHeight]));
+  const none = new Map<number, number>();
+  if (notation === 'fallback') return { heights: new Map(indices.map((systemIndex) => [systemIndex, 0])), staffTopInsets: none };
   const owned = systemOfMeasure(voice.voiceId, lines);
-  return notation === 'jianpu' ? jianpuLayerHeights(voice, owned, indices) : tabLayerHeights(voice, owned, indices);
+  if (notation === 'staff') {
+    const demands = [...staffDemand(voice, owned, indices)];
+    return {
+      heights: new Map(demands.map(([systemIndex, demand]) => [systemIndex, demand.height])),
+      staffTopInsets: new Map(demands.map(([systemIndex, demand]) => [systemIndex, demand.topExtra])),
+    };
+  }
+  const heights = notation === 'jianpu' ? jianpuLayerHeights(voice, owned, indices) : tabLayerHeights(voice, owned, indices);
+  return { heights, staffTopInsets: none };
 }
 
-/** 全部声部的层计划；group 里的声部缺少 `RenderVoice` 是上游不变量被破坏 → `RangeError`。 */
-export function planVoiceLayers(renderScore: RenderScore, geometry: ComposedSystemGeometry): readonly VoicePlan[] {
+/**
+ * 全部声部的层计划；group 里的声部缺少 `RenderVoice` 是上游不变量被破坏 → `RangeError`。
+ * `staffDemand`：Staff 声部的纵向需求来源（见 `StaffDemandSource`）。
+ */
+export function planVoiceLayers(renderScore: RenderScore, geometry: ComposedSystemGeometry, staffDemand: StaffDemandSource): readonly VoicePlan[] {
   const renderVoiceOf = new Map(renderScore.voices.map((voice) => [voice.voiceId, voice]));
   return geometry.analysis.grouping.groups.flatMap((group) => {
     const lines = geometry.lines.filter((line) => line.groupIndex === group.index);
@@ -65,7 +93,7 @@ export function planVoiceLayers(renderScore: RenderScore, geometry: ComposedSyst
       const voice = renderVoiceOf.get(voiceId);
       if (voice === undefined) throw new RangeError(`score layout: 声部 ${voiceId} 缺少 RenderVoice`);
       const notation = voiceNotation(voice);
-      return { voice, notation, groupIndex: group.index, lines, heights: layerHeights(voice, notation, lines) };
+      return { voice, notation, groupIndex: group.index, lines, ...layerVertical(voice, notation, lines, staffDemand) };
     });
   });
 }

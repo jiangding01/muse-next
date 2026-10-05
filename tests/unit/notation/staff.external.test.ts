@@ -13,7 +13,7 @@ import { staffLineHeaderReserve } from '../../../src/notation/staff/staffHeader'
 import { staffMeasureSpacing } from '../../../src/notation/staff/staffSlotWidths';
 import type { StaffLayout } from '../../../src/notation/staff/staffTypes';
 import type { ExternalInput } from './systemExternal.helpers';
-import { composed, externalFor, externalMeasurer, scoreOf, screen, voiceAt } from './systemExternal.helpers';
+import { composed, externalFor, externalMeasurer, scoreOf, screen, voiceAt, withZeroTopInsets } from './systemExternal.helpers';
 
 const source = scoreOf([['staff', 'C D E F G A B c-|c B A G F E D C|C8|'], ['jianpu', 'C D E F G A B c|'.repeat(4)]]);
 const render = source.renderScore;
@@ -21,7 +21,7 @@ const staff = voiceAt(render, 0);
 
 function ctx(availableWidth: number, external?: ExternalInput): StaffContext {
   const base = { score: source.score, index: source.index, measurer: externalMeasurer, availableWidth };
-  return external === undefined ? base : { ...base, external };
+  return external === undefined ? base : { ...base, external: withZeroTopInsets(external) };
 }
 const externalLayout = (external: ExternalInput): StaffLayout => layoutStaff(staff, ctx(960, external));
 const own = (input: ExternalInput) => input.measures.filter((m) => m.participation.some((p) => p.voiceId === staff.voiceId && p.kind !== 'absent'));

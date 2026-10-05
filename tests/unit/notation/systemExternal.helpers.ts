@@ -8,6 +8,8 @@
  * - `reverse`：把 `systems` 倒序给出（layout 必须按 index 升序返回，不依赖输入顺序）；
  * - `originX`：行谱 box 的 `origin.x`（模拟页边距 / 缩进；节点、stave、弦线都必须加上它）；
  * - `flipY`：y 随 index **递减**（数组最后一项不是最低的行谱，用来杀「取最后一项」的宽高实现）。
+ *
+ * Staff 的 external 另有必填 `topInsets`（T9b.S，用户裁决 M3）：T8 之前的测试一律经 `withZeroTopInsets` 显式给 0。
  */
 import type { VoiceId } from '../../../src/domain';
 import type { System } from '../../../src/notation/layout/primitives';
@@ -64,4 +66,9 @@ export function externalFor(out: ComposedSystemGeometry, voiceId: VoiceId, optio
     return { index, box: { origin: { x: options.originX ?? 0, y }, width: line.width, height: SYSTEM_HEIGHT } };
   });
   return { measures, systems: options.reverse === true ? [...systems].reverse() : systems };
+}
+
+/** Staff external 输入：每一行显式 0 内缩（T9b.S 裁决 M3：字段必填，legacy 测试不得靠缺席回退）。 */
+export function withZeroTopInsets(input: ExternalInput): ExternalInput & { readonly topInsets: ReadonlyMap<number, number> } {
+  return { ...input, topInsets: new Map(input.systems.map((system) => [system.index, 0])) };
 }

@@ -6,8 +6,9 @@
  * 1. T4 `composeSystemGeometry` → T6 `planChordOverlays`；
  * 2. vertical prepass（`verticalDemand.ts`，裁决 A）→ 纵向堆叠与 box（`verticalLayout.ts`）；
  * 3. 每个已知记谱声部的 external 布局**恰好调用一次**：`systems` = 它所在 group 的全部行（层 box，`origin.x` = 最终
- *    box 左界），`measures` = 同一批 rebase 后的公共 measure（`x + dx`，裁决 F）；fallback 不调用任何 layout、绝不
- *    回退 Staff，也不进 `voiceLayouts`（裁决 I）；
+ *    box 左界），`measures` = 同一批 rebase 后的公共 measure（`x + dx`，裁决 F）；Staff 另带 prepass 算好的
+ *    `topInsets`（T9b.S，唯一来源，`layoutStaff` 只消费不重算）；fallback 不调用任何 layout、绝不回退 Staff，
+ *    也不进 `voiceLayouts`（裁决 I）；
  * 4. 和弦 overlay 直接由 T6 plan 映射（不重新查表 / 判碰撞），x 与 measure 一起 rebase，y 取块顶（裁决 E）。
  *
  * 诊断（裁决 H）= composed（已含 renderScore + T1 / T2 / T3）→ T6 → 各 voice layout（group 顺序、组内 `voiceIds`
@@ -21,6 +22,7 @@ import type { System } from '../layout/primitives';
 import type { TextMeasurer } from '../layout/textMeasurer';
 import type { RenderDiagnostic, RenderScore, RenderVoice } from '../model/types';
 import { layoutStaff } from '../staff/layoutStaff';
+import { staffLayerDemands } from '../staff/staffVerticalDemand';
 import type { StaffLayout } from '../staff/staffTypes';
 import { layoutTab } from '../tab/layoutTab';
 import type { TabLayout } from '../tab/layoutTab';
@@ -105,6 +107,7 @@ function layoutVoice(
   voice: RenderVoice,
   notation: KnownNotation,
   external: ExternalInput,
+  staffTopInsets: ReadonlyMap<number, number>,
   ctx: VoiceContext,
 ): VoiceLayoutEntry {
   const { index, measurer, availableWidth } = ctx;
@@ -121,7 +124,7 @@ function layoutVoice(
       return { notation, voiceId, layout: layoutTab(voice, tabCtx) };
     }
     case 'staff': {
-      const staffCtx = { score: ctx.renderScore.score, index, measurer, availableWidth, external };
+      const staffCtx = { score: ctx.renderScore.score, index, measurer, availableWidth, external: { ...external, topInsets: staffTopInsets } };
       return { notation, voiceId, layout: layoutStaff(voice, staffCtx) };
     }
   }
@@ -152,7 +155,8 @@ export function composeScoreLayout(
     chordPlansOf.set(chordPlan.systemIndex, [...(chordPlansOf.get(chordPlan.systemIndex) ?? []), chordPlan]);
   }
 
-  const voicePlans = planVoiceLayers(renderScore, geometry);
+  // Staff 纵向需求由这里注入（tie 端点要用同源的 index）；verticalDemand.ts 只经此函数拿到它，layoutStaff 不重算。
+  const voicePlans = planVoiceLayers(renderScore, geometry, (voice, owned, indices) => staffLayerDemands(voice, index, owned, indices));
   const frames = stackSystems(systemDemands(geometry, voicePlans, chordPlansOf));
   const frameOf = new Map(frames.map((frame) => [frame.systemIndex, frame]));
   // rebase 只做一次：最终 system 与各声部 external 输入共用同一批 measure 对象。
@@ -171,7 +175,7 @@ export function composeScoreLayout(
     const { notation } = voicePlan;
     // fallback 唯一的排除点（裁决 I）：不调用任何 layout、不进 voiceLayouts。
     if (notation === 'fallback') return [];
-    return [layoutVoice(voicePlan.voice, notation, externalOf(voicePlan, frameOf, measuresOf), ctx)];
+    return [layoutVoice(voicePlan.voice, notation, externalOf(voicePlan, frameOf, measuresOf), voicePlan.staffTopInsets, ctx)];
   });
 
   const systems = geometry.lines.map((line): ScoreSystemLayout => {

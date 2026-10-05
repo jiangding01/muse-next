@@ -12,11 +12,12 @@ import { layoutJianpu } from '../../../src/notation/jianpu/layoutJianpu';
 import { lyricBandHeight } from '../../../src/notation/jianpu/jianpuVerticalDemand';
 import { JIANPU_METRICS, STAFF_METRICS, SYSTEM_METRICS, TAB_METRICS } from '../../../src/notation/layout/metrics';
 import { layoutStaff } from '../../../src/notation/staff/layoutStaff';
+import { staffLayerDemands } from '../../../src/notation/staff/staffVerticalDemand';
 import { planChordOverlays } from '../../../src/notation/system/chordOverlay';
 import { layoutTab } from '../../../src/notation/tab/layoutTab';
 import { planVoiceLayers, systemDemands } from '../../../src/notation/system/verticalDemand';
 import { TAB_BAR, TAB_DEEP_BAR, compose, entryOf, jianpuOf, layerHeight, main, systemAt, tabScoreOf, xsOf } from './system.composeLayout.helpers';
-import { composed, externalFor, externalMeasurer as measurer, screen } from './systemExternal.helpers';
+import { composed, externalFor, externalMeasurer as measurer, screen, withZeroTopInsets } from './systemExternal.helpers';
 
 const { geometryQuantum: q, chordBandGap, layerGap, systemGap } = SYSTEM_METRICS;
 const onGrid = (x: number): boolean => Number.isInteger(x / q);
@@ -89,7 +90,7 @@ describe('T8 composeLayout —— 声部层与 voice layout 调用（裁决 A / 
 
   it('LOW 4：声部计划缺少某行的纵向需求 → RangeError（不静默给 0）', () => {
     const geometry = composed(main.renderScore);
-    const [first, ...rest] = planVoiceLayers(main.renderScore, geometry);
+    const [first, ...rest] = planVoiceLayers(main.renderScore, geometry, (voice, owned, indices) => staffLayerDemands(voice, main.index, owned, indices));
     if (first === undefined) throw new Error('plans');
     expect(systemDemands(geometry, [first, ...rest], new Map())).toHaveLength(geometry.lines.length);
     expect(() => systemDemands(geometry, [{ ...first, heights: new Map() }, ...rest], new Map())).toThrow(RangeError);
@@ -162,7 +163,7 @@ describe('T8 composeLayout —— 横向：box = T4 geometry + T6 chord ink，re
           ? layoutJianpu(voice, { ...ctx, score: meter, external })
           : entry.notation === 'tab'
             ? layoutTab(voice, { ...ctx, ...meter, external })
-            : layoutStaff(voice, { ...ctx, score: main.score, external });
+            : layoutStaff(voice, { ...ctx, score: main.score, external: withZeroTopInsets(external) });
         expect(xsOf(entry.layout)).toEqual(xsOf(reference));
         if (entry.notation === 'jianpu' && 'lyrics' in reference) {
           expect(entry.layout.lyrics.map((l) => l.text.x)).toEqual(reference.lyrics.map((l) => l.text.x));

@@ -127,9 +127,15 @@ function fitSvgToContainer(
   host.style.removeProperty('height');
 }
 
-/** 谱表在 system box 内的垂直位置：`STAFF_METRICS.staffTopOffset` 换算成 VexFlow 的「线数」。 */
-function staveOptions(): { readonly spaceAboveStaffLn: number } {
-  return { spaceAboveStaffLn: STAFF_METRICS.staffTopOffset / VexFlow.STAVE_LINE_DISTANCE };
+/**
+ * 线距与谱表纵向位置（M2.5 T9b.S，用户裁决 M1）：`STAFF_METRICS.lineGap` 是 Muse Next 唯一的线距真源，**显式**传给
+ * VexFlow；`staffTopOffset` 按同一线距换算成「线数」。不读 `VexFlow.STAVE_LINE_DISTANCE`——它只是 VexFlow 的默认值。
+ */
+export function staffStaveOptions(): { readonly spacingBetweenLinesPx: number; readonly spaceAboveStaffLn: number } {
+  return {
+    spacingBetweenLinesPx: STAFF_METRICS.lineGap,
+    spaceAboveStaffLn: STAFF_METRICS.staffTopOffset / STAFF_METRICS.lineGap,
+  };
 }
 
 /** 拍号：切片携带的「整份 StaffLayout 第一条带拍号的 stave」；没有就按 4/4（只用于构造 `Voice`）。 */
@@ -141,7 +147,7 @@ function voiceTimeOf(slice: StaffSystemSlice): { readonly numBeats: number; read
 }
 
 function buildStave(spec: StaffStaveSpec): Stave {
-  const stave = new Stave(spec.x, spec.y, Math.max(spec.width, 1), staveOptions());
+  const stave = new Stave(spec.x, spec.y, Math.max(spec.width, 1), staffStaveOptions());
   // 行首才有 clef / key / time（每行重画是记谱惯例，`layoutStaff.ts` 已经决定好了）。
   if (spec.clef !== undefined) stave.addClef(vexClefName(spec.clef));
   if (spec.keySignature !== undefined) {
@@ -198,6 +204,15 @@ function annotateTickable(
   }
 }
 
+/**
+ * 文本 tickable（占位 / 段末和弦符号）的纵向热区 = 本行谱的**基础 Staff box**（M2.5 T9b.S 裁决 L-1）：
+ * 第一线上方 `staffTopOffset` 起、高 `systemHeight`。动态内缩下自然得到层内 `[topInset, topInset + systemHeight]`；
+ * 不按线距倍数推导（旧写法 `第一线 − 3 × lineGap` 在线距同步后会漏掉谱表最下方一段）。
+ */
+export function staffBaseHitBand(topLineY: number): { readonly y: number; readonly height: number } {
+  return { y: topLineY - STAFF_METRICS.staffTopOffset, height: STAFF_METRICS.systemHeight };
+}
+
 function drawTickables(
   ctx: SVGContext,
   stave: Stave,
@@ -217,14 +232,9 @@ function drawTickables(
       node.anchor,
       () => {
         tickable.drawWithStyle();
-        const x = tickable.getAbsoluteX();
-        const y = stave.getYForLine(0);
-        drawHitArea(ctx, {
-          x,
-          y: y - STAFF_METRICS.lineGap * 3,
-          width: Math.max(tickable.getWidth(), STAFF_METRICS.minNoteSlotWidth),
-          height: STAFF_METRICS.systemHeight - STAFF_METRICS.staffTopOffset,
-        });
+        const band = staffBaseHitBand(stave.getYForLine(0));
+        const width = Math.max(tickable.getWidth(), STAFF_METRICS.minNoteSlotWidth);
+        drawHitArea(ctx, { x: tickable.getAbsoluteX(), y: band.y, width, height: band.height });
         annotateTickable(ctx, node, tickable, stave);
       },
       { fallback: node.fallback },

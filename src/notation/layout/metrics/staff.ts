@@ -15,22 +15,60 @@ export const STAFF_METRICS = {
    * 不因作者写的 `.jcx` 而变化，唯一不算产品决定的一项）。
    */
   lineCount: 5,
-  /** 相邻两条谱线的垂直间距（产品决定）；与 `TAB_METRICS.lineGap` 同量级取值。 */
-  lineGap: 8,
   /**
-   * 第 1 线（最上一条谱线）相对 system box 顶边的垂直偏移（产品决定）。
-   * 推导：需要给谱表上方的加线留出空间——常规记谱最多按 3 条上加线估算
-   * （`3 × lineGap = 24`），再加一点呼吸空间（8），故 `24 + 8 = 32`。
+   * 相邻两条谱线的垂直间距（产品决定）——**Muse Next 五线谱线距的唯一真源**（M2.5 T9b.S，用户裁决 M1：8 → 10）。
+   *
+   * 原值 8 与实际谱面不一致：谱线一直按 VexFlow 默认的 10 绘制，只有自绘的 tuplet 括号与占位热区读的是 8。
+   * 10 与 Bravura 字形在 VexFlow 默认字号下的设计线距一致；`renderStaff.ts` 把它**显式**传给 VexFlow 的
+   * `spacingBetweenLinesPx`，不再依赖 `VexFlow.STAVE_LINE_DISTANCE` 定义任何几何。同步后的预期变化（不是债务）：
+   * 自绘 tuplet 括号离第一线 16 → 20、腿长 4 → 5、最小跨度 8 → 10；占位热区改为基础 Staff box，不再按线距推导。
+   */
+  lineGap: 10,
+  /**
+   * 第 1 线（最上一条谱线）相对 Staff 层**内容顶**的垂直偏移（产品决定）= 上方基础余量 32。
+   * M2.5 systemized 路径下内容顶 = 层顶 + 本行谱的 `topExtra`（`staff/staffVerticalDemand.ts`）。
    */
   staffTopOffset: 32,
   /**
-   * 一行谱（system）的整体高度（产品决定）。
-   * 推导：`staffTopOffset(32)` + 谱表本身跨度 `4 × lineGap(32)`（5 线 4 间）
-   * + 下方 3 条加线的空间 `3 × lineGap(24)` + 底部余量（8）= 96。
-   * 与 `TAB_METRICS.systemHeight` 的推导方式同构（都是「基准情形，不是硬上限」，
-   * 更深的装饰由 `layout/systems.ts` 按行谱实际内容回填）。
+   * 一行谱（system）的**基础**高度（产品决定）：上方余量 `staffTopOffset`(32) + 谱表跨度 `4 × lineGap`(40)
+   * + 下方余量 24 = 96。这是基准情形，不是硬上限：M2.5 systemized 路径由 `staffVerticalDemand.ts` 按本行谱
+   * 实际纵向墨迹在上 / 下各补 `topExtra` / `bottomExtra`；M2 默认路径仍恒为 96（用户裁决 M4）。
    */
   systemHeight: 96,
+  /**
+   * 纵向墨迹包络（M2.5 T9b.S，产品决定，按 `lineGap = 10` 下 Bravura / VexFlow 5.0.0 的浏览器实测标定，取值 ≥ 实测）。
+   *
+   * 只用于 `staff/staffVerticalDemand.ts` 估算一行谱的纵向需求，目标是**包住**音高相关墨迹（containment），
+   * 不是复制渲染器的 SVG bbox。全部以「符头中心」为基准，向上 / 向下的距离（abstract unit）。
+   */
+  verticalInk: {
+    /** 符头半高（一个线距的一半）；加线笔画半宽远小于它，加线墨迹由符头包络覆盖。 */
+    noteheadHalfHeight: 5,
+    /** 符干标准长度（3.5 个线距）。 */
+    stemLength: 35,
+    /** 未成束短时值的符尾使符干额外延长的量（实测 32 分 4.4、64 分 12.5、128 分 20.7）。 */
+    flagStemExtension: { thirtySecond: 5, sixtyFourth: 13, hundredTwentyEighth: 21 },
+    /** 升降号字形相对符头中心的上 / 下伸展（实测：降号上 17.6、升号下 13.9、还原上 13.6、重升 5.1）。 */
+    accidental: {
+      sharp: { above: 14, below: 14 },
+      doubleSharp: { above: 6, below: 6 },
+      flat: { above: 18, below: 7 },
+      doubleFlat: { above: 18, below: 7 },
+      natural: { above: 14, below: 14 },
+    },
+    /**
+     * 附点相对符头中心的**上下双向**保守包络：VexFlow 把线上音的附点移到上方或下方的间（和弦里相邻音会迫使附点
+     * 下移），位移至多半个线距，加上附点半径；浏览器实测单音与相邻音和弦的附点墨迹最远距符头中心恰为 7。
+     */
+    dotVerticalPadding: 7,
+    /** 笔画与抗锯齿的安全边距：最终上 / 下墨迹各外扩一次。 */
+    padding: 1,
+  },
+  /**
+   * tie 端点音的纵向保守包络（M2.5 T9b.S，用户裁决 M2）：端点音符头中心上下各留这么多，覆盖向外弯的弧线
+   * （实测弧线外缘距符头中心 13）。不复制渲染器的 tie 曲线算法。
+   */
+  tieVerticalPadding: 13,
   /** 相邻两行谱之间的垂直间隙（产品决定）；与 `TAB_METRICS.systemGap` 同量级取值。 */
   systemGap: 16,
   /**

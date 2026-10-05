@@ -26,7 +26,7 @@ import type { VoiceLayerLayout, VoiceLayerNotation } from './contracts';
 export interface LayerDemand {
   readonly voiceId: VoiceId;
   readonly notation: VoiceLayerNotation;
-  /** 层高（已知记谱 = 基础高 + 歌词带 / 深时值补高；fallback 恒 0）。 */
+  /** 层高（已知记谱 = 基础高 + 歌词带 / TAB 深时值补高 / Staff 纵向墨迹上下补高；fallback 恒 0）。 */
   readonly height: number;
 }
 

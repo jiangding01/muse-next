@@ -19,7 +19,7 @@ import { layoutTab } from '../../../src/notation/tab/layoutTab';
 import { fixtureBytes, fixtureNames } from '../jcx/serialize/roundtrip.helpers';
 import { matrixScoreFrom } from './renderMatrix.helpers';
 import type { ExternalInput } from './systemExternal.helpers';
-import { composed, externalFor, externalMeasurer, scoreOf, screen, voiceAt } from './systemExternal.helpers';
+import { composed, externalFor, externalMeasurer, scoreOf, screen, voiceAt, withZeroTopInsets } from './systemExternal.helpers';
 
 type Source = ReturnType<typeof matrixScoreFrom>;
 
@@ -44,7 +44,7 @@ function layoutExternal(voice: RenderVoice, source: Source, external: ExternalIn
       return { nodes: layout.nodes.map((n): PlacedNode => ({ eventId: eventIdOf(n.anchor), x: n.x })), staves: undefined };
     }
     case 'staff': {
-      const layout = layoutStaff(voice, { ...common, score: source.score });
+      const layout = layoutStaff(voice, { ...common, score: source.score, external: withZeroTopInsets(external) });
       return { nodes: layout.nodes.map((n): PlacedNode => ({ eventId: eventIdOf(n.anchor), x: Number.NaN })), staves: layout.staves };
     }
     default:
