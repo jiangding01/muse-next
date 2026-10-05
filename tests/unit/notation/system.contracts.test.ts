@@ -126,6 +126,7 @@ describe('M2.5 T0 —— SYSTEM_METRICS（产品初值，abstract unit）', () =
       chordBandGap: 6,
       maxJustifyRatio: 1.5,
       minJustifySlack: 2,
+      geometryQuantum: 1 / 1024,
       page: {
         width: 794,
         height: 1123,

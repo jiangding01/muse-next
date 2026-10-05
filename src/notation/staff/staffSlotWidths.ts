@@ -27,8 +27,10 @@
  */
 
 import { SLOT_SPACING_METRICS, STAFF_METRICS } from '../layout/metrics';
+import { spaceItems } from '../layout/spacing';
 import type { MeasureSpacing, SpacedSlot } from '../layout/spacing';
 import type { TimeSlot } from '../layout/primitives';
+import type { MeasureSlice } from '../layout/systems';
 import type { TextMeasurer } from '../layout/textMeasurer';
 import type { RenderItem } from '../model/types';
 import { planStaffNode } from './staffEventNodes';
@@ -87,4 +89,12 @@ export function widenForStaffGlyphs(
   }
 
   return { slots, width: x, equidistant: spacing.equidistant };
+}
+
+/**
+ * 一个 measure 的 Staff 列宽需求（M2.5 T4，用户裁决 O-a）：`spaceItems` → 符头 / 占位兜底。`layoutStaff`
+ * 与 T4 的 `system/measureDemand.ts` 共用这一个出口，同一 voice / measure 的需求只有一个权威来源。
+ */
+export function staffMeasureSpacing(slice: MeasureSlice, measurer: TextMeasurer): MeasureSpacing {
+  return widenForStaffGlyphs(spaceItems(slice.items, slice.startIndex), slice.items, measurer);
 }

@@ -1,10 +1,8 @@
 /**
  * notation/system —— M2.5 Score System Layout 的**纯类型契约**（叶子层）。
  *
- * 依据：`docs/M2.5_SYSTEM_LAYOUT_PLAN.md` v1.0 §B.3 + T0 拍板（2026-10-04）：
- * `MeasureParticipation` 收紧为判别联合；单页结构命名 `PageLayout`；补齐
- * `LayoutTarget` / `PackingPolicy` / `PageSpec` / `PageComposedSystemLayout`；
- * `ChordDiagramOverlay.anchor` 收窄为 `EventAnchor`（§Q5.4 由类型保证）。
+ * 依据：方案 v1.0 §B.3 + T0 拍板：`MeasureParticipation` 判别联合；单页 `PageLayout`；补齐 `LayoutTarget` /
+ * `PackingPolicy` / `PageSpec` / `PageComposedSystemLayout`；`ChordDiagramOverlay.anchor` 收窄为 `EventAnchor`。
  *
  * **叶子层硬规则**（§B.2 / §Q7.4 守卫 1）：只允许 **type-only** import `../../domain`、
  * `../layout/primitives`、`../model/types` 三条精确路径，三个 voice layout 引用本文件不成环。
@@ -66,9 +64,9 @@ export interface MeasureTimeline {
   readonly offsets: readonly Rational[];
   /** 小节内容总时长（= 末 onset + 该事件时值）。 */
   readonly total: Rational;
-  /** 与 `offsets` 同序的 measure 内相对 x。 */
+  /** 与 `offsets` 同序的 measure 内相对 x；`[0] = contentOffsetX + lead`（T4 裁决 D/E，已含行首预留）。 */
   readonly xByOffsetIndex: readonly number[];
-  /** measure 右边界的相对 x（= 该 measure 的内容宽）；barline 固定画在这里。 */
+  /** 收尾 barline 的相对 x（无收尾 barline 时 = 逻辑内容末端）；`width = endX + tail`（T4 裁决 D/E）。 */
   readonly endX: number;
 }
 
@@ -79,17 +77,19 @@ export interface SystemMeasureGeometry {
   readonly systemIndex: number;
   /** system box 内的左边界。 */
   readonly x: number;
-  /** 公共宽度（justify 之后的最终值）；恒 `≥` 每个 voice 的 demand（§Q4.6）。 */
+  /** 公共宽度（justify 后终值，含 `contentOffsetX`）；恒 `≥` 每个 voice 的 demand（§Q4.6）。 */
   readonly width: number;
-  /** justify 之前的最大需求宽（诊断 / 测试用）。 */
+  /** justify 之前的内容需求宽（量化后的 operational minimum，不含行首预留）。 */
   readonly demandWidth: number;
+  /** 内容起点：行首 measure = 该行 `lineStartReserve`，其余 0（T4 裁决 G-b；timeline 已含，T5 不得重复加）。 */
+  readonly contentOffsetX: number;
   /** 缺席 = 本 measure 退出 shared intra-measure timing（tier 3，§Q2.4）。 */
   readonly timeline?: MeasureTimeline;
   /** 每个 voice 的参与情况，顺序同 `SystemGroup.voiceIds`。 */
   readonly participation: readonly MeasureParticipation[];
 }
 
-/** 声部层的记谱种类；`fallback` = 无法识别 style 时的占位层。 */
+/** 声部层的记谱种类；`fallback` = 无法识别 style 时的占位层（T4：demand / 预留恒 0）。 */
 export type VoiceLayerNotation = 'jianpu' | 'tab' | 'staff' | 'fallback';
 
 /** 一个声部层在某个 system 上的归属与纵向位置（不复制几何，§B.3）。 */

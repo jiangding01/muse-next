@@ -38,10 +38,8 @@
  * `toSvg` 与 renderer 接入（T7.4）。
  */
 
-import type { EventId, KeySignature, Meter, Score, DomainIndex, Voice } from '../../domain';
-import { keyHasExtraText } from '../layout/keySpelling';
+import type { EventId, Score, DomainIndex, Voice } from '../../domain';
 import { STAFF_METRICS } from '../layout/metrics';
-import { spaceItems } from '../layout/spacing';
 import type { SpacedSlot } from '../layout/spacing';
 import type { System } from '../layout/primitives';
 import { layoutSystems, restackSystems, splitMeasures } from '../layout/systems';
@@ -52,15 +50,14 @@ import type { Anchor, RenderItem, RenderVoice } from '../model/types';
 import { buildStaffNode, classifyStaffBarline } from './staffEventNodes';
 import type { StaffDraftSink } from './staffEventNodes';
 import { buildStaffTies, buildStaffTuplets } from './staffRelations';
-import { widenForStaffGlyphs } from './staffSlotWidths';
+import { staffLineHeaderReserveOf, staffKeySignature, staffTimeSignature } from './staffHeader';
+import { staffMeasureSpacing } from './staffSlotWidths';
 import type {
   StaffBarlineForm,
   StaffClef,
   StaffEventNode,
-  StaffKeySignature,
   StaffLayout,
   StaffStaveSpec,
-  StaffTimeSignature,
 } from './staffTypes';
 
 /**
@@ -112,39 +109,6 @@ function resolveClef(voice: Voice, sink: StaffDraftSink): StaffClef {
   return DEFAULT_CLEF;
 }
 
-/**
- * 调号：只有 `tonic` 存在且 `raw` 里**没有规范拼写以外的文本**时才画（见
- * `layout/keySpelling.ts`）。不画时**不发新诊断**——`keyAbsent` / `keyUnresolved` /
- * `keyModeUnrecognized` 已由 `scoreHeader.ts` 在文档级表达（§4.2）；T7.4 把 staff
- * 并进那边的 consumer 谓词。
- */
-function staffKeySignature(key: KeySignature | undefined): StaffKeySignature | undefined {
-  if (key === undefined || key.tonic === undefined || keyHasExtraText(key)) return undefined;
-  return key.alter === undefined ? { tonic: key.tonic } : { tonic: key.tonic, alter: key.alter };
-}
-
-/**
- * 拍号：只认 `fraction` 分支。`raw`（`C` / `C|` / 复合拍号）与缺席一律省略字段
- * ——**不换算成 4/4**；`meterRaw` 诊断由 `scoreHeader.ts` 在文档级发一次，本层不重发。
- * 也**不做任何满拍 / tick 校验**（P1-3：`Meter` 不参与任何列宽计算）。
- */
-function staffTimeSignature(meter: Meter | undefined): StaffTimeSignature | undefined {
-  if (meter === undefined || meter.kind !== 'fraction') return undefined;
-  return { numerator: meter.num, denominator: meter.den };
-}
-
-/** 行首要留的水平空间：谱号 + 调号（按保守上限估个数）+ 拍号，按实际是否存在累加。 */
-function lineHeaderReserveOf(
-  key: StaffKeySignature | undefined,
-  time: StaffTimeSignature | undefined,
-): number {
-  const reserve = STAFF_METRICS.headerReserve;
-  const keyWidth = key === undefined
-    ? 0
-    : reserve.keySignatureWidthPerAccidental * reserve.keySignatureAccidentalReserve;
-  return reserve.clefWidth + keyWidth + (time === undefined ? 0 : reserve.timeSignatureWidth);
-}
-
 /** 小节首/末项若是小节线就把形态带上；缺席表示作者没写，**不代表「普通单线」**。 */
 function barlineFormAt(items: readonly RenderItem[], offset: number): StaffBarlineForm | undefined {
   const item = items[offset];
@@ -175,16 +139,10 @@ export function layoutStaff(voice: RenderVoice, ctx: StaffContext): StaffLayout 
   const clef = resolveClef(voice.voice, sink);
   const keySignature = staffKeySignature(ctx.score.key);
   const timeSignature = staffTimeSignature(ctx.score.meter);
-  const lineHeaderReserve = lineHeaderReserveOf(keySignature, timeSignature);
+  const lineHeaderReserve = staffLineHeaderReserveOf(keySignature, timeSignature);
 
   const measures = splitMeasures(voice.items);
-  const spacings = measures.map((measure) =>
-    widenForStaffGlyphs(
-      spaceItems(measure.items, measure.startIndex),
-      measure.items,
-      ctx.measurer,
-    ),
-  );
+  const spacings = measures.map((measure) => staffMeasureSpacing(measure, ctx.measurer));
 
   const geometry = {
     // 行首预留在**打包之前**就从可用宽度里扣掉：排完再补会让行首那一小节把整行挤超宽。

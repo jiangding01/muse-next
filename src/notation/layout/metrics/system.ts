@@ -28,6 +28,13 @@ export const SYSTEM_METRICS = {
   /** 行剩余宽小于该值时不拉伸（§Q4.5「剩余宽小于阈值」），只为吸收浮点噪声。 */
   minJustifySlack: 2,
   /**
+   * T4 operational geometry 的**数值稳定性量化网格**（用户裁决 I-a，2026-10-05）——**不是视觉 metric**。
+   * demand / 可用宽 / 预留 / packing / water-filling / 段分配 / x 累计全部在「1 tick = 本值」的整数网格上
+   * 进行：需求向上、可用宽向下取整到网格，于是 full 行 `Σ width === 可用内容宽` 在整数级严格成立（直接用
+   * number 按比例分配约 37% 的行会差 1 个 ulp 以上）。取 2⁻¹⁰：二进制精确、远小于任何可见差异。
+   */
+  geometryQuantum: 1 / 1024,
+  /**
    * 默认页面规格（F-8，形状 = `PageSpec`）。
    *
    * 数值以 A4 在 96dpi 下的数值尺度作为**产品初始标定来源**，但在 notation / page

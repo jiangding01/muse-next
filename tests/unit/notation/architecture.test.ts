@@ -586,10 +586,13 @@ describe('M2.5 架构守卫 —— system/ 依赖方向（§B.2 / §Q7.4）', ()
   }
 
   const layoutFiles = files.filter((file) => isInside(file, LAYOUT_DIR));
+  // T4 裁决 L-a：T0 遗留债务 ③ 的另一半——`model/**` 同样不得反向 import `system/**`。
+  const modelDirFiles = files.filter((file) => isInside(file, MODEL_DIR));
 
-  it('守卫 6：layout/** 不 import system/**', () => {
+  it('守卫 6：layout/** 与 model/** 不 import system/**', () => {
     expect(layoutFiles.length).toBeGreaterThan(0);
-    const bad = layoutFiles.flatMap((file) =>
+    expect(modelDirFiles.length).toBeGreaterThan(0);
+    const bad = [...layoutFiles, ...modelDirFiles].flatMap((file) =>
       layoutToSystemViolations(file, readFileSync(file, 'utf8')).map((spec) => `${rel(file)} → ${spec}`),
     );
     expect(bad).toEqual([]);
@@ -605,6 +608,10 @@ describe('M2.5 架构守卫 —— system/ 依赖方向（§B.2 / §Q7.4）', ()
     ]);
     expect(layoutToSystemViolations(probeFile, "import { eventTiming } from './eventTiming';")).toEqual([]);
     expect(layoutToSystemViolations(probeFile, "// import { x } from '../system/timeline';")).toEqual([]);
+    const modelProbe = join(MODEL_DIR, 'probe.ts');
+    expect(layoutToSystemViolations(modelProbe, "import type { SystemGroup } from '../system/contracts';")).toEqual([
+      '../system/contracts',
+    ]);
   });
 
   it('守卫 7：src/notation/** 里只有 layout/measureOnsets.ts 从 Domain 值导入 Rational `add`（唯一 literal onset 累计）', () => {
@@ -633,5 +640,76 @@ describe('M2.5 架构守卫 —— system/ 依赖方向（§B.2 / §Q7.4）', ()
     expect(importsRationalAdd("import { adder } from '../../domain';")).toBe(false);
     expect(importsRationalAdd("// import { add } from '../../domain';")).toBe(false);
     expect(importsRationalAdd("import { cmp } from '../../domain';")).toBe(false);
+  });
+
+  // ---------------------------------------------------------------------------
+  // T4（用户裁决 B / K，2026-10-05）：旧 positive guard 4（composeSystem import 三个 voice layout 与
+  // layoutChord）作废——T4 第一版只到几何，用不到它们，为让守卫变绿而 import 就是 unused import。改为：
+  // measureDemand 真正 import 并调用三个记谱需求出口；composeSystem 真正 import 并调用 measureDemand。
+  // 三个 layout 的 positive 检查归 T5，layoutChord 归 T6；在那之前 system/** 一律不得 import 它们。
+  // ---------------------------------------------------------------------------
+
+  const DEMAND_FILE = join(SYSTEM_DIR, 'measureDemand.ts');
+  const COMPOSE_FILE = join(SYSTEM_DIR, 'composeSystem.ts');
+
+  /** 从 `spec` 值导入（非 type-only）的名字。 */
+  function valueImportsFrom(source: string, spec: string): string[] {
+    const re = /^\s*import\s*\{([^}]*)\}\s*from\s*['"]([^'"]+)['"]/gm;
+    return [...stripComments(source).matchAll(re)]
+      .filter((m) => m[2] === spec)
+      .flatMap((m) => (m[1] ?? '').split(',').map((name) => name.trim()).filter((name) => name !== '' && !name.startsWith('type ')));
+  }
+
+  /** 去掉 import 语句与注释后，`name(` 的调用次数（只 import 不调用 = 0）。 */
+  function callCount(source: string, name: string): number {
+    const body = stripComments(source).replace(/^\s*import\b[^;]*;/gm, '');
+    return [...body.matchAll(new RegExp(`\\b${name}\\s*\\(`, 'g'))].length;
+  }
+
+  function usesAll(source: string, spec: string, names: readonly string[]): string[] {
+    const imported = valueImportsFrom(source, spec);
+    return names.filter((name) => !imported.includes(name) || callCount(source, name) === 0);
+  }
+
+  const DEMAND_EXPORTS: readonly (readonly [string, string])[] = [
+    ['../tab/tabBeams', 'tabMeasureSpacing'],
+    ['../jianpu/jianpuBeams', 'jianpuMeasureSpacing'],
+    ['../staff/staffSlotWidths', 'staffMeasureSpacing'],
+  ];
+
+  it('守卫 4（T4 修订）：measureDemand 真正 import 并调用三个记谱需求出口', () => {
+    const source = readFileSync(DEMAND_FILE, 'utf8');
+    for (const [spec, name] of DEMAND_EXPORTS) expect(usesAll(source, spec, [name])).toEqual([]);
+  });
+
+  it('守卫 4（T4 修订）：composeSystem 真正 import 并调用 measureDemand', () => {
+    const source = readFileSync(COMPOSE_FILE, 'utf8');
+    expect(usesAll(source, './measureDemand', ['createVoiceSpacings', 'groupMeasureDemands', 'lineStartReserveTicks'])).toEqual([]);
+  });
+
+  it('守卫 4 反例：只 import 不调用、type-only import、注释里的 import 都不算', () => {
+    expect(usesAll("import { tabMeasureSpacing } from '../tab/tabBeams';\nexport const x = 1;", '../tab/tabBeams', ['tabMeasureSpacing'])).toEqual(['tabMeasureSpacing']);
+    expect(usesAll("import type { tabMeasureSpacing } from '../tab/tabBeams';\ntabMeasureSpacing(a);", '../tab/tabBeams', ['tabMeasureSpacing'])).toEqual(['tabMeasureSpacing']);
+    expect(usesAll("// import { tabMeasureSpacing } from '../tab/tabBeams';\ntabMeasureSpacing(a);", '../tab/tabBeams', ['tabMeasureSpacing'])).toEqual(['tabMeasureSpacing']);
+    expect(usesAll("import { a, tabMeasureSpacing } from '../tab/tabBeams';\nconst s = tabMeasureSpacing(x);", '../tab/tabBeams', ['tabMeasureSpacing'])).toEqual([]);
+  });
+
+  const LAYOUT_ENTRIES = ['tab/layoutTab', 'jianpu/layoutJianpu', 'staff/layoutStaff', 'chord/layoutChord'].map((entry) => join(NOTATION_DIR, entry));
+  const systemFiles = files.filter((file) => isInside(file, SYSTEM_DIR));
+
+  function layoutEntryImports(file: string, source: string): string[] {
+    return collectSpecifiers(stripComments(source)).filter((spec) => {
+      const target = resolveSpec(file, spec);
+      return target !== undefined && LAYOUT_ENTRIES.includes(target);
+    });
+  }
+
+  it('T4：system/** 不 import 任何 voice layout 入口与 layoutChord（T5 / T6 再改为 positive）', () => {
+    expect(systemFiles.map(rel)).toContain('system/composeSystem.ts');
+    const bad = systemFiles.flatMap((file) => layoutEntryImports(file, readFileSync(file, 'utf8')).map((spec) => `${rel(file)} → ${spec}`));
+    expect(bad).toEqual([]);
+    expect(layoutEntryImports(COMPOSE_FILE, "import { layoutTab } from '../tab/layoutTab';")).toEqual(['../tab/layoutTab']);
+    expect(layoutEntryImports(COMPOSE_FILE, "import { layoutChord } from '../chord/layoutChord';")).toEqual(['../chord/layoutChord']);
+    expect(layoutEntryImports(COMPOSE_FILE, "import { tabMeasureSpacing } from '../tab/tabBeams';")).toEqual([]);
   });
 });
