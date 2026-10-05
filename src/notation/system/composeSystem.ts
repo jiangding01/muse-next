@@ -17,6 +17,9 @@
  *    `width = endX + tail'`（D/E-a）；零 timed shared 保留空 timeline（C-a）；tier 3 无 timeline。
  * 全部 x / 宽在整数 tick 上累计（`geometryTicks.ts`），产出时换回 unit；`systemIndex` 全文档按 group 文档
  * 顺序累加（N-a）。诊断只透传 `renderScore` + T1 + T2 + T3（顺序固定），T4 不新增码。纯函数，不改输入。
+ *
+ * M2.5 T6（用户裁决 C-b）：本次 compose 的 T1 / T2 / T3 结果以纯数据 `SystemAnalysis` 一并返回，供 T6 消费 T3 的
+ * `OverlayOnset`（唯一真源），一次最终 compose 内 T1 / T2 / T3 仍只各跑一次。
  */
 
 import type { TextMeasurer } from '../layout/textMeasurer';
@@ -24,13 +27,14 @@ import type { RenderDiagnostic, RenderScore } from '../model/types';
 import type { JustifyState, LayoutTarget, MeasureTimeline, PackingPolicy, SystemMeasureGeometry } from './contracts';
 import { floorTicks, unitsOf } from './geometryTicks';
 import { groupVoices } from './groupVoices';
+import type { VoiceGrouping } from './groupVoices';
 import { distributeMeasure, justifyLine } from './justify';
 import { createVoiceSpacings, groupMeasureDemands, lineStartReserveTicks, voicesOf } from './measureDemand';
 import type { MeasureDemand } from './measureDemand';
 import { alignMeasures } from './measureIdentity';
-import type { AlignedMeasure } from './measureIdentity';
+import type { AlignedMeasure, MeasureAlignment } from './measureIdentity';
 import { buildMeasureTimings } from './timeline';
-import type { SharedMeasureTiming } from './timeline';
+import type { MeasureTimings, SharedMeasureTiming } from './timeline';
 
 /** 一个 group 的一行（T4 阶段产物；T5+ 在其上组装 `ScoreSystemLayout`）。 */
 export interface SystemLineGeometry {
@@ -53,11 +57,19 @@ export interface SystemLineGeometry {
   readonly barsPerStaffHonored?: boolean;
 }
 
+/** 一次 compose 的 T1 / T2 / T3 结果（T6 裁决 C-b / 附加裁决 1）：只存数据，不挂函数 / cache。 */
+export interface SystemAnalysis {
+  readonly grouping: VoiceGrouping;
+  readonly alignment: MeasureAlignment;
+  readonly timings: MeasureTimings;
+}
+
 export interface ComposedSystemGeometry {
   readonly target: LayoutTarget;
   readonly lines: readonly SystemLineGeometry[];
-  /** `renderScore.diagnostics` + T1 + T2 + T3（顺序固定）；T4 不新增诊断码。 */
+  /** `renderScore.diagnostics` + T1 + T2 + T3（顺序固定）；T4 不新增诊断码。下游不得再从 `analysis` 重复合并。 */
   readonly diagnostics: readonly RenderDiagnostic[];
+  readonly analysis: SystemAnalysis;
 }
 
 interface PackedLine {
@@ -174,5 +186,5 @@ export function composeSystemGeometry(
     }
   }
   const diagnostics = [...renderScore.diagnostics, ...grouping.diagnostics, ...alignment.diagnostics, ...timings.diagnostics];
-  return { target: policy.kind, lines, diagnostics };
+  return { target: policy.kind, lines, diagnostics, analysis: { grouping, alignment, timings } };
 }

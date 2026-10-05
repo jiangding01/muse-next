@@ -704,13 +704,57 @@ describe('M2.5 架构守卫 —— system/ 依赖方向（§B.2 / §Q7.4）', ()
     });
   }
 
-  it('T4：system/** 不 import 任何 voice layout 入口与 layoutChord（T5 / T6 再改为 positive）', () => {
+  // T6（用户裁决 / 附加裁决 10）：`layoutChord` 只允许 `system/chordOverlay.ts` 引用；三个 voice layout 入口对 system/**
+  // 仍一律禁止（composer → voice layout 的正面边归 T8）。
+  const CHORD_OVERLAY_FILE = join(SYSTEM_DIR, 'chordOverlay.ts');
+  const LAYOUT_CHORD_ENTRY = join(NOTATION_DIR, 'chord/layoutChord');
+
+  it('T4 / T6：system/** 不 import voice layout 入口；layoutChord 只允许 chordOverlay.ts 引用（T8 再立 voice layout 正面边）', () => {
     expect(systemFiles.map(rel)).toContain('system/composeSystem.ts');
-    const bad = systemFiles.flatMap((file) => layoutEntryImports(file, readFileSync(file, 'utf8')).map((spec) => `${rel(file)} → ${spec}`));
+    const bad = systemFiles.flatMap((file) => layoutEntryImports(file, readFileSync(file, 'utf8'))
+      .filter((spec) => !(file === CHORD_OVERLAY_FILE && resolveSpec(file, spec) === LAYOUT_CHORD_ENTRY))
+      .map((spec) => `${rel(file)} → ${spec}`));
     expect(bad).toEqual([]);
     expect(layoutEntryImports(COMPOSE_FILE, "import { layoutTab } from '../tab/layoutTab';")).toEqual(['../tab/layoutTab']);
     expect(layoutEntryImports(COMPOSE_FILE, "import { layoutChord } from '../chord/layoutChord';")).toEqual(['../chord/layoutChord']);
     expect(layoutEntryImports(COMPOSE_FILE, "import { tabMeasureSpacing } from '../tab/tabBeams';")).toEqual([]);
+    expect(layoutEntryImports(CHORD_OVERLAY_FILE, "import { layoutTab } from '../tab/layoutTab';")).toEqual(['../tab/layoutTab']);
+  });
+
+  it('T6 正面守卫：chordOverlay.ts 真正值导入并调用 layoutChord，且消费 T4 的 analysis（不重跑 T1 / T2 / T3）', () => {
+    const source = readFileSync(CHORD_OVERLAY_FILE, 'utf8');
+    expect(usesAll(source, '../chord/layoutChord', ['layoutChord'])).toEqual([]);
+    expect(usesAll(source, '../layout/chordSymbolDisplay', ['chordSymbolDisplayText'])).toEqual([]);
+    for (const rerun of ['groupVoices', 'alignMeasures', 'buildMeasureTimings']) expect(callCount(source, rerun)).toBe(0);
+    expect(/\.analysis\b/.test(stripComments(source))).toBe(true);
+  });
+
+  // T6 职责拆分（用户裁决）：来源选择 / 语义去重住在 chordOverlaySources.ts，不认识几何、不查表、不调 layoutChord。
+  const CHORD_SOURCES_FILE = join(SYSTEM_DIR, 'chordOverlaySources.ts');
+
+  function sourcesViolations(source: string): string[] {
+    const forbidden = ['../chord/layoutChord', '../layout/measurePlacement', '../layout/metrics', './chordOverlay', './composeSystem'];
+    const specs = collectSpecifiers(stripComments(source)).filter((spec) => forbidden.includes(spec));
+    const words = [...stripComments(source).matchAll(/\b(?:layoutChord|chordShapes|placeExternalMeasure)\b/g)].map((m) => m[0]);
+    return [...specs, ...words];
+  }
+
+  it('T6：chordOverlaySources.ts 只做来源选择——不 import 几何 / layoutChord / 查表；chordOverlay.ts 真正调用它', () => {
+    expect(existsSync(CHORD_SOURCES_FILE)).toBe(true);
+    expect(sourcesViolations(readFileSync(CHORD_SOURCES_FILE, 'utf8'))).toEqual([]);
+    const probe = sourcesViolations("import { layoutChord } from '../chord/layoutChord';\nlayoutChord(x);");
+    expect(probe).toContain('../chord/layoutChord');
+    expect(probe).toContain('layoutChord');
+    expect(sourcesViolations('const hits = score.chordShapes;')).toEqual(['chordShapes']);
+    expect(usesAll(readFileSync(CHORD_OVERLAY_FILE, 'utf8'), './chordOverlaySources', ['resolveChordSources'])).toEqual([]);
+  });
+
+  it('T6：chord/** 不反向 import system/chordOverlay（守卫 2 的定点反例）', () => {
+    const probe = join(NOTATION_DIR, 'chord', 'probe.ts');
+    expect(systemImportViolations(probe, "import { planChordOverlays } from '../system/chordOverlay';")).toEqual(['../system/chordOverlay']);
+    const chordFiles = files.filter((file) => rel(file).startsWith('chord/'));
+    expect(chordFiles.length).toBeGreaterThan(0);
+    expect(chordFiles.flatMap((file) => systemImportViolations(file, readFileSync(file, 'utf8')))).toEqual([]);
   });
 
   // ---------------------------------------------------------------------------

@@ -21,6 +21,12 @@ export const SYSTEM_METRICS = {
   /** 和弦图 overlay 带与最上面一个 voice 层之间的间距（§Q5.3）；无和弦的 system 不留带。 */
   chordBandGap: 6,
   /**
+   * 谱上和弦小图的整体宽度（M2.5 T6，用户裁决 N，产品决定）：传给 `layoutChord({ width })`。`layoutChord` 并非等比
+   * 缩放（left / top / 圆点半径 / 字号是固定 metric），108 是当前几何下弦间距仍大于按弦点直径（74 / 5 = 14.8 >
+   * 2 × 7）的小图安全下界附近；更小会让相邻弦的按弦点重叠。
+   */
+  chordDiagramWidth: 108,
+  /**
    * 两端对齐时单个 measure 最多放大到 `demandWidth × maxJustifyRatio`（§Q4.5 的
    * water-filling 上限 R）。全部触顶仍有剩余宽 → 右侧留白，`justified = 'partial'`。
    */
