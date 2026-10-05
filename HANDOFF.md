@@ -2,7 +2,7 @@
 
 > 面向后续实现 Agent 的项目交接文档  
 > 项目代号：`muse-next`  
-> 当前阶段：**M0–M1.8 已封板；M2 Notation Rendering T0–T9 已全部完成（Chord / Jianpu / TAB / Staff 四种记谱可渲染 + T8 render matrix 契约测试 + T9 文档封板），✅ 2026-09-22 封板（原始 seal CI run 35700198783；T8.1 post-seal 契约收紧 run 35702615344；当前 HEAD run 35702885112 三平台全绿）；UI 设计 Brief 已完成（`docs/UI_DESIGN_BRIEF.md` v1.3.4）；M2.5 Score System Layout 方案冻结为 v1.0，**T0 已完成（2026-10-04，`6e5a532` + 命名修订 `3f5b48c`），T1 声部视觉分组已完成（`2b9882c`），T2 跨声部 measure identity 已完成（`218d143`），T2.1 小节错位锁存已完成（`9037351`），T3 共享小节时间轴已完成（`7ee1e27`），T3.5 TAB / 简谱节奏刻印已完成（`d2486aa`），T4 公共几何编排已完成（2026-10-05，`9661810`），T5 三个 voice layout 的外部几何适配已完成（2026-10-05，`ed4ea88`），均三平台 CI 全绿；下一步（T5.S / T6 / T8）待用户明确指令**；M3 排在 M2.5 之后**（详见 §30 里程碑表、§30.1「M2 进行中状态」与「M2.5 T0 实际状态」、§69「当前明确的下一任务」）  
+> 当前阶段：**M0–M1.8 已封板；M2 Notation Rendering T0–T9 已全部完成（Chord / Jianpu / TAB / Staff 四种记谱可渲染 + T8 render matrix 契约测试 + T9 文档封板），✅ 2026-09-22 封板（原始 seal CI run 35700198783；T8.1 post-seal 契约收紧 run 35702615344；当前 HEAD run 35702885112 三平台全绿）；UI 设计 Brief 已完成（`docs/UI_DESIGN_BRIEF.md` v1.3.4）；M2.5 Score System Layout 方案冻结为 v1.0，**T0 已完成（2026-10-04，`6e5a532` + 命名修订 `3f5b48c`），T1 声部视觉分组已完成（`2b9882c`），T2 跨声部 measure identity 已完成（`218d143`），T2.1 小节错位锁存已完成（`9037351`），T3 共享小节时间轴已完成（`7ee1e27`），T3.5 TAB / 简谱节奏刻印已完成（`d2486aa`），T4 公共几何编排已完成（2026-10-05，`9661810`），T5 三个 voice layout 的外部几何适配已完成（2026-10-05，`ed4ea88`），均三平台 CI 全绿；T5.S VexFlow shared timing spike 已完成（2026-10-05，结论 `feasible-with-cost` / no adapter merged，M2.5 只承诺 Staff tier 1）；下一任务 T6（chord overlay）待用户明确指令**；M3 排在 M2.5 之后**（详见 §30 里程碑表、§30.1「M2 进行中状态」与「M2.5 T0 实际状态」、§69「当前明确的下一任务」）  
 > 核心目标：以现代 TypeScript 技术栈重建已停止维护的 **Muse Pro 2.70** 的核心能力，并优先恢复其 `.jcx` 乐谱格式、谱面渲染、编辑与播放能力。
 
 ---
@@ -1793,7 +1793,8 @@ T2.1 ✅ 2026-10-04（`9037351`，CI run 37181088740 三平台全绿，小节错
 T3 ✅ 2026-10-04（`7ee1e27`，CI run 37189546271 三平台全绿，共享小节时间轴）；
 T3.5 ✅ 2026-10-04（`d2486aa`，CI run 37212689335 三平台全绿，TAB / 简谱节奏刻印）；
 T4 ✅ 2026-10-05（`9661810`，CI run 37271250936 三平台全绿，公共几何编排）；
-T5 ✅ 2026-10-05（`ed4ea88`，CI run 37284116914 三平台全绿，外部几何适配），T5.S / T6 / T8 待用户指令）
+T5 ✅ 2026-10-05（`ed4ea88`，CI run 37284116914 三平台全绿，外部几何适配）；
+T5.S ✅ 2026-10-05（VexFlow shared timing spike，`feasible-with-cost` / no adapter merged，Staff 保持 tier 1），下一任务 T6 待用户指令）
 
 → M3
 Editor Core
@@ -2648,6 +2649,7 @@ visual debt、T7 第 6 条），按 视觉 / 架构 / 测试 分类，每行注�
 | 视觉 | TAB 休止画 `z`/`Z`/`@` 原字符，不用休止符号 | T6 |
 | 视觉 | 简谱附点画在数字右侧、延音线之前（`X . _ _ _`），简谱习惯长音附点在延音线之后；未核实，用户 2026-09-17 已裁决记为 debt | T5.2 |
 | 视觉 | 头部字号 CSS 与 `layout/metrics` 双来源，未统一 | T5 |
+| 视觉 | **Staff header demand calibration**：行首预留按每个升降号 8 估算（`STAFF_METRICS.headerReserve`），VexFlow 5 实测约 11 / 个，≥ 2 个升降号的调号（D、B♭ 起）行首预留不足（C♯ 大调缺 59.4），tier 1 下行首小节内容被挤窄；另 Staff demand 不含 VexFlow stave 内部缩进（非行首 ≥ 17）——这是 Staff tier 2 的前置之一 | M2.5 T5.S |
 | 视觉 | 歌词按列左对齐，居中留作视觉 polish | T5.2 |
 | 视觉 | `STAFF_METRICS.lineGap` 8u 与 VexFlow 实际谱线距 10px 不一致（仅影响自绘 tuplet bracket / 热区偏移，不影响 VexFlow 自己画的谱线） | T7 |
 | 视觉 | `keySignatureAccidentalReserve` 固定按 7 个升降号预留，偏保守（多数调号用不到这么宽） | T7 |
@@ -2678,6 +2680,7 @@ visual debt、T7 第 6 条），按 视觉 / 架构 / 测试 分类，每行注�
 - **T3.5 ✅（2026-10-04，`d2486aa`，CI run 37212689335 三平台全绿；见下方「M2.5 T3.5 实际状态」）**。
 - **T4 ✅（2026-10-05，`9661810`，CI run 37271250936 三平台全绿；见下方「M2.5 T4 实际状态」）**。
 - **T5 ✅（2026-10-05，`ed4ea88`，CI run 37284116914 三平台全绿；见下方「M2.5 T5 实际状态」）**。
+- **T5.S ✅（2026-10-05，spike，结论 `feasible-with-cost` / no adapter merged；见下方「M2.5 T5.S 结论」与 `docs/M2.5_T5S_VEXFLOW_SHARED_TIMING_SPIKE.md`）**。
 - 前置条件（M2.5 之前、独立 formats 小任务）：~~`strokePrefix → TabGroupEvent.stroke` 回填~~ **已完成（2026-09-22，M2.5 formats preflight）**：`scan.ts` 顶层循环把紧邻 `tabGroup` 的 `strokePrefix` 绑进 `TabGroupEvent.stroke`，不改 Domain 类型/serializer 代码，dangling-stroke 诊断未对绑定成功的 group stroke 误报（真悬空的仍照常发 info）。U06（body `L:` 按声部作用域）已于 `8a74e8e` 结案。
 - 架构：`src/notation/system/**`（contracts 叶子层 → groupVoices / measureIdentity / timeline / composeSystem / justify / chordOverlay / pageModel）；System = overlay layers（chord diagrams，`layoutChord` 保持 document 级）+ ordered voice layers（jianpu/tab/staff 接受外部 system/measure 几何）+ attached layers（lyrics）；voice layout 不得反向 import composer。
 - 关键裁决：`MeasureTimeline` 只含 timed onset（绝对 Rational 累计 offset）+ `chordSymbol` zero-time overlay，barline 固定 `endX`，decoration/grace/unknown 走 voice-local slot；跨 voice measure identity = ordinal candidate + 结构兼容性校验（时值总量逐 measure 绝对相等，不预设相等，不等进 tier 3；缺 measure 留空保留公共宽度；冲突 fallback + 诊断，不重写事件）；公共 measure width = 各 voice demand 取 max → packing → water-filling justify（`justified: full|partial|none`，末行不拉）；D11 精确名匹配（0 只画名 / 1 名+图 / >1 只画名 + ambiguity 诊断）；`ComposedSystemLayout {target:'screen'|'page'}`，PageModel 只收 page 产物，单 system 不跨页；Staff 验收 = tier 1（共享 measure 边界/宽度），T5.S 为非阻塞 spike。
@@ -2757,7 +2760,7 @@ visual debt、T7 第 6 条），按 视觉 / 架构 / 测试 分类，每行注�
 - **真实语料（compose 实测）**：shared 725 / tier 3 54（not-compatible 46 + degraded 8）/ 零 timed shared 0；行数：宽 100000 → 19（每 group 一行，全 `none`）、宽 960 → 84（full 61 / partial 0 / none 23，none 含 9 个全零 fallback group，全在 corpus#08）、宽 16 → 471（全 `none`）；行首预留只在 corpus#05 的 Staff group 触发；不变量（`width ≥ demand ≥` 各 raw voice / segment demand、full 时整数级严格相等、partial 时全部触顶）零违例；112 个 shared measure 有非零 lead、215 个 shared measure 的 `lead + Σseg + tail` 严格大于各声部整小节最大值（最多 89.7）。T3 基线 19 / 725 / 8 / 46 与 T3.5 基线 937 / 456 不变。
 - 已知限制（不在 T4 处理）：`composeSystemGeometry` 尚未接任何调用方（~~T5 接 voice layout~~ 生产编排归 T8，T5 只在测试侧把它整理成 external 输入；T9b 接 renderer）；可用宽为 `Infinity` 时按 0 处理（每 measure 一行，调用方从不传无限宽）。
 
-**M2.5 T5 实际状态（2026-10-05，`ed4ea88`，CI run 37284116914 三平台全绿；T5.S / T6 / T8 未启动，需用户明确指令）**：
+**M2.5 T5 实际状态（2026-10-05，`ed4ea88`，CI run 37284116914 三平台全绿；以下为 T5 当时快照，T5.S 已完成，见下一节）**：
 - 范围：**只做三个 voice layout（Jianpu / TAB / Staff）的 external geometry adapter**；renderer、`system/**`、Domain / parser / serializer 零改动（`git diff 25c3015` 对这些目录为空）。按用户裁决分 5 个内部阶段（T5-0 helper + 默认路径 golden → T5-1 Jianpu → T5-2 TAB → T5-3 Staff → T5-4 集成 + 守卫），一个代码提交（18 文件：7 改 + 11 新）。
 - **用户裁决 A–P + 额外裁决 1–9（2026-10-05，冻结方案的 post-freeze amendment，方案顶部修订记录与 §B.4 / §Q3.1b / §Q3.3 / §Q3.5 / §Q7.4 / §D 已同步）**。
 - **API（A1 / A2 / A3）**：三个 Context 新增可选 `external?: { measures: readonly SystemMeasureGeometry[]; systems: readonly System[] }`（原子成对、内联、不进 contracts）。缺席 → 走默认路径，**与 `25c3015` 逐字段一致**；存在 → 不换行、不 restack，`availableWidth` 不使用。external 输入的任何 mapping / system / timeline / 数值不变量失败一律 `RangeError`，**绝不回退**默认路径或 tier 3。
@@ -2776,6 +2779,15 @@ visual debt、T7 第 6 条），按 视觉 / 架构 / 测试 分类，每行注�
 - **真实语料**：T3 基线 19 / 725 / 8 / 46、T3.5 基线 937 / 456、T4 @960 shared 725 / tier 3 54 / full 61 / none 23 / partial 0 全部不变；真实语料中「记谱声部的全局 systemIndex 非 0」零样本（只有 corpus#08 的 fallback 声部），由合成多 group 用例覆盖。
 - **已知限制（阶段性债务，T8 清理）**：① external 模式不 restack，Jianpu 歌词带与 TAB 深时值刻印可能暂时超出外部 `System.box.height`；② external shared 以公共 timeline 为最高优先级，T3.5「同时值 beam 组等距」在 external 路径**不再保证**（默认路径不受影响）。另：golden 生成脚本不在 `tsconfig` include 内（与 T3.5 生成脚本同模式，非生产路径）。
 - **流程教训**：首次同步 mutation worktree 时，zsh 不对字符串文件列表分词、`set -e` 亦未中止，拷贝静默失败，被最后的条数检查拦下；此后 harness 一律写成 bash 脚本、用数组、每项检查显式 `|| exit 1`。
+
+**M2.5 T5.S 结论（2026-10-05，VexFlow shared timing spike，用户裁决 A；结论文档 `docs/M2.5_T5S_VEXFLOW_SHARED_TIMING_SPIKE.md`）**：
+- **结论 `feasible-with-cost`，no adapter merged**。M2.5 **继续只承诺 Staff tier 1**（stave x / width = 公共 measure 几何）；Staff tier 2（stave 内音符 x 与 Jianpu / TAB 逐音对齐）移为 **post-M2.5 enhancement**。spike 期间仓库零改动（生产代码、`system/**`、三个 voice layout、Domain / parser / serializer、renderer 均未动），恢复点仍是 `2678563` 之上的本文档提交。
+- **依据**：VexFlow 官方 `5.0.0` 标签源码（提交 `8879d09`，与项目锁定版本一致）+ Chromium 实测（VexFlow 5 的字形宽度全靠 canvas `measureText` + Bravura 字体，Node 下为 0，故在浏览器中实验）。
+- **布局链**：音符绝对 x = `tickContext.x + stave.getNoteStartX() + Stave.padding(12)`；Formatter 只在 `preFormat` 写 x；draw 不重算 x；Beam 斜率在 `postFormat` 时按当时符干 x 计算；Tie 端点基于最终 `getAbsoluteX`。
+- **Route A**（Formatter 后覆写 `TickContext.x`，`tc.x = stave.x + target − noteStartX − Stave.padding`）成立：均匀 / 非均匀目标、stave.x ≠ 0、和弦 / 错位符头 / 休止 / 附点 / 升降号 / `TextNote` 占位，draw 后绝对 x 逐位命中；tie 跟随；beam 跟随（覆写须早于 beam postFormat）。**Route B**（手动 context）同样成立且修饰偏移与 A 完全相同，但维护成本更高；**Route C** 对「x 是否可控」不必要。外部 x 过窄时 VexFlow **不抛错、不挪动，静默重叠**。
+- **关键约束（真实语料 probe）**：相邻锚点间距在 corpus#05（47 对）与 fixture（42 对）中**全部宽于** VexFlow 最小间距、小节尾全部放得下；冲突**只在非行首小节的首个 onset**——T4 让首个 onset 贴 measure 左边界，VexFlow 要求 ≥ 17（`noteStartX` 的 5 + padding 12）+ 首音左侧修饰：corpus#05 @960 有 **11 / 16** 小节过窄（最大缺口 **24.21**），fixture @960 有 6 / 14（最大 17）；行首小节在真实语料中全部放得下，但 T4 行首预留（104）对 ≥ 2 个升降号的调号即不足（VexFlow 每个升降号约 11，T4 按 8；见 §30.1 债务表「Staff header demand calibration」）。
+- **tier 2 的三个 prerequisite（post-M2.5，单独立项）**：① Staff demand calibration（T4 范围：lead 计入 VexFlow 内部缩进与首音左侧修饰，行首预留按实际升降号宽度或 renderer 注入的测量接口；notation 层不得 import vexflow）；② Staff 契约扩展（标记哪些 stave 是 shared，或由 T8 / T9b 把公共几何交给 renderer；`StaffEventNode.slot` 不含 x）；③ renderer adapter（约 40–60 行，限 `renderer/integrations/vexflow/**`，只对 shared 小节覆写，tier 3 仍交 Formatter）。
+- **硬约束**：**T6 / T8 期间不得顺手实现 Staff tier 2**（含 adapter、Staff demand 调整、契约标记）；下一任务为 **T6（chord overlay）**，待用户明确指令。
 
 **M2 seal 与 M3 前置（T9 之后，恢复时从这里继续）**：**2026-09-22 追加裁决：M2 与 UI 目标版式确认之后、M3 之前先做 M2.5 Score System Layout（见 §30 路线表与 `docs/UI_DESIGN_BRIEF.md` §2.7.6、§10.17/10.18）；M2.5 的 System 模型 = overlay layers（chord diagrams）+ ordered voice layers（TAB/Jianpu/Staff 接受外部 system/measure 几何）+ attached layers（lyrics），chord 不是第四种声部 layout，system 高度由内容决定、分页只在 system 边界，`bracket` 只证明视觉分组、需定义 cross-voice measure mismatch policy。**原文：T0–T9 已全部完成并推送，
 下一步不是继续写渲染代码，而是：
@@ -4315,7 +4327,8 @@ Chord / Jianpu / TAB / Staff 四种记谱可渲染（T0–T7，T7 Staff + VexFlo
    **M2.5 T3.5 已完成**（`d2486aa`，三平台 CI 全绿，TAB / 简谱节奏刻印，见 §30.1「M2.5 T3.5 实际状态」），
    **M2.5 T4 已完成**（`9661810`，三平台 CI 全绿，公共几何编排，见 §30.1「M2.5 T4 实际状态」），
    **M2.5 T5 已完成**（`ed4ea88`，三平台 CI 全绿，三个 voice layout 的外部几何适配，见 §30.1「M2.5 T5 实际状态」），
-   **当前主动暂停，下一步（T5.S Staff tier-2 spike / T6 chord overlay / T8 纵向 system 组装）启动需用户明确指令**；启动时仍先给
+   **M2.5 T5.S 已完成**（VexFlow shared timing spike，`feasible-with-cost` / no adapter merged，M2.5 只承诺 Staff tier 1，见 §30.1「M2.5 T5.S 结论」），
+   **当前主动暂停，下一任务 T6（chord overlay）启动需用户明确指令**（T6 / T8 期间**不得**顺手实现 Staff tier 2）；启动时仍先给
    实现方案 + 测试矩阵再编码；
 4. M2.5 封板后再规划 M3A（source/save/history）→ M3B（selection + 三向同步）→ M3C（可视化编辑）。
 ```

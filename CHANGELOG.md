@@ -20,7 +20,7 @@ M1.8「Round-trip Guardrails」已封板。**M2 — Notation Rendering T0–T9 �
 T5.2 real-world hardening、TAB 六线谱、Staff + VexFlow adapter、T8 render
 matrix（C1/C2/C3 三条契约对四种记谱的用例矩阵）、T9 文档封板均已完成，**M2 已于 2026-09-22 封板**（seal 前 push 的 CI run
 35700198783 三平台全绿）。M3 之前插入 **M2.5 Score System Layout**（方案冻结 v1.0），
-T0、T1（声部视觉分组）、T2 / T2.1（跨声部小节对齐与错位锁存）、T3（共享小节时间轴）、T3.5（TAB / 简谱节奏刻印）已于 2026-10-04 完成，T4（公共几何编排）、T5（三个 voice layout 的外部几何适配）已于 2026-10-05 完成，T5.S / T6 / T8 待启动。四种记谱（Chord / Jianpu
+T0、T1（声部视觉分组）、T2 / T2.1（跨声部小节对齐与错位锁存）、T3（共享小节时间轴）、T3.5（TAB / 简谱节奏刻印）已于 2026-10-04 完成，T4（公共几何编排）、T5（三个 voice layout 的外部几何适配）已于 2026-10-05 完成，T5.S（VexFlow 共享时间轴可行性研究，结论：可行但有前置成本，暂不实施，五线谱继续只对齐小节框）同日完成，T6 待启动。四种记谱（Chord / Jianpu
 / TAB / Staff）均可渲染，支持缩放与诊断面板。现状、遗留债务与恢复位置见
 `HANDOFF.md` §30.1「M2 进行中状态」。
 
