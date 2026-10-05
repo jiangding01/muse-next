@@ -115,7 +115,7 @@ export interface ChordDiagramOverlay {
   readonly shapeIndex?: number;
   /** system box 内的绝对 x（对齐到所属 offset）。 */
   readonly x: number;
-  /** overlay 带内的基线。 */
+  /** 块顶 y（system box 内；块底对齐和弦带底，M2.5 T8 裁决 E）。 */
   readonly y: number;
   readonly systemIndex: number;
 }

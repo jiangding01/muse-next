@@ -704,17 +704,29 @@ describe('M2.5 架构守卫 —— system/ 依赖方向（§B.2 / §Q7.4）', ()
     });
   }
 
-  // T6（用户裁决 / 附加裁决 10）：`layoutChord` 只允许 `system/chordOverlay.ts` 引用；三个 voice layout 入口对 system/**
-  // 仍一律禁止（composer → voice layout 的正面边归 T8）。
+  // T6（用户裁决 / 附加裁决 10）：`layoutChord` 只允许 `system/chordOverlay.ts` 引用。
+  // T8（用户裁决 J）：三个 voice layout 入口只允许 `system/composeLayout.ts` 引用（正面边见下方 T8 守卫）。
   const CHORD_OVERLAY_FILE = join(SYSTEM_DIR, 'chordOverlay.ts');
   const LAYOUT_CHORD_ENTRY = join(NOTATION_DIR, 'chord/layoutChord');
+  const COMPOSE_LAYOUT_FILE = join(SYSTEM_DIR, 'composeLayout.ts');
+  const VOICE_LAYOUT_ENTRIES = LAYOUT_ENTRIES.filter((entry) => entry !== LAYOUT_CHORD_ENTRY);
 
-  it('T4 / T6：system/** 不 import voice layout 入口；layoutChord 只允许 chordOverlay.ts 引用（T8 再立 voice layout 正面边）', () => {
+  function allowedEntryEdge(file: string, spec: string): boolean {
+    const target = resolveSpec(file, spec);
+    if (file === CHORD_OVERLAY_FILE) return target === LAYOUT_CHORD_ENTRY;
+    return file === COMPOSE_LAYOUT_FILE && target !== undefined && VOICE_LAYOUT_ENTRIES.includes(target);
+  }
+
+  it('T4 / T6 / T8：voice layout 入口只允许 composeLayout.ts 引用，layoutChord 只允许 chordOverlay.ts 引用', () => {
     expect(systemFiles.map(rel)).toContain('system/composeSystem.ts');
     const bad = systemFiles.flatMap((file) => layoutEntryImports(file, readFileSync(file, 'utf8'))
-      .filter((spec) => !(file === CHORD_OVERLAY_FILE && resolveSpec(file, spec) === LAYOUT_CHORD_ENTRY))
+      .filter((spec) => !allowedEntryEdge(file, spec))
       .map((spec) => `${rel(file)} → ${spec}`));
     expect(bad).toEqual([]);
+    expect(allowedEntryEdge(COMPOSE_LAYOUT_FILE, '../chord/layoutChord')).toBe(false);
+    expect(allowedEntryEdge(COMPOSE_LAYOUT_FILE, '../staff/layoutStaff')).toBe(true);
+    expect(allowedEntryEdge(join(SYSTEM_DIR, 'verticalLayout.ts'), '../tab/layoutTab')).toBe(false);
+    expect(allowedEntryEdge(CHORD_OVERLAY_FILE, '../jianpu/layoutJianpu')).toBe(false);
     expect(layoutEntryImports(COMPOSE_FILE, "import { layoutTab } from '../tab/layoutTab';")).toEqual(['../tab/layoutTab']);
     expect(layoutEntryImports(COMPOSE_FILE, "import { layoutChord } from '../chord/layoutChord';")).toEqual(['../chord/layoutChord']);
     expect(layoutEntryImports(COMPOSE_FILE, "import { tabMeasureSpacing } from '../tab/tabBeams';")).toEqual([]);
@@ -755,6 +767,64 @@ describe('M2.5 架构守卫 —— system/ 依赖方向（§B.2 / §Q7.4）', ()
     const chordFiles = files.filter((file) => rel(file).startsWith('chord/'));
     expect(chordFiles.length).toBeGreaterThan(0);
     expect(chordFiles.flatMap((file) => systemImportViolations(file, readFileSync(file, 'utf8')))).toEqual([]);
+  });
+
+  // T8（用户裁决 A / J）：composeLayout 是唯一编排者，真正调用三个 voice layout 与前序阶段；vertical 两个文件是纯数据 /
+  // 纯 prepass——verticalLayout 不认识任何记谱目录，verticalDemand 只经记谱侧 vertical helper 取层高。
+  const VERTICAL_LAYOUT_FILE = join(SYSTEM_DIR, 'verticalLayout.ts');
+  const VERTICAL_DEMAND_FILE = join(SYSTEM_DIR, 'verticalDemand.ts');
+
+  function voiceDirImports(file: string, source: string): string[] {
+    return collectSpecifiers(stripComments(source)).filter((spec) => {
+      const target = resolveSpec(file, spec);
+      return target !== undefined && SIBLINGS.some((name) => isInside(target, join(NOTATION_DIR, name)));
+    });
+  }
+
+  it('T8 正面守卫：composeLayout.ts 真正值导入并调用三个 voice layout、T4 / T6 / vertical，且不重跑 T1 / T2 / T3', () => {
+    const source = readFileSync(COMPOSE_LAYOUT_FILE, 'utf8');
+    expect(usesAll(source, '../jianpu/layoutJianpu', ['layoutJianpu'])).toEqual([]);
+    expect(usesAll(source, '../tab/layoutTab', ['layoutTab'])).toEqual([]);
+    expect(usesAll(source, '../staff/layoutStaff', ['layoutStaff'])).toEqual([]);
+    // 裁决 A / LOW 5：每个 voice layout 入口在编排里**恰好一处**调用——防止以后在测量趟里再调一次、重开双布局循环。
+    for (const entry of ['layoutJianpu', 'layoutTab', 'layoutStaff']) expect(callCount(source, entry)).toBe(1);
+    expect(usesAll(source, './composeSystem', ['composeSystemGeometry'])).toEqual([]);
+    expect(usesAll(source, './chordOverlay', ['planChordOverlays'])).toEqual([]);
+    expect(usesAll(source, './verticalDemand', ['planVoiceLayers', 'systemDemands'])).toEqual([]);
+    expect(usesAll(source, './verticalLayout', ['stackSystems', 'overlayTop'])).toEqual([]);
+    for (const rerun of ['groupVoices', 'alignMeasures', 'buildMeasureTimings', 'layoutChord']) expect(callCount(source, rerun)).toBe(0);
+  });
+
+  it('T8：verticalLayout.ts 不 import 任何记谱目录；verticalDemand.ts 只 import 记谱侧 vertical helper（含反例）', () => {
+    expect(voiceDirImports(VERTICAL_LAYOUT_FILE, readFileSync(VERTICAL_LAYOUT_FILE, 'utf8'))).toEqual([]);
+    const demand = readFileSync(VERTICAL_DEMAND_FILE, 'utf8');
+    expect(voiceDirImports(VERTICAL_DEMAND_FILE, demand).sort()).toEqual(['../jianpu/jianpuVerticalDemand', '../tab/tabVerticalDemand']);
+    expect(usesAll(demand, '../jianpu/jianpuVerticalDemand', ['jianpuLayerHeights'])).toEqual([]);
+    expect(usesAll(demand, '../tab/tabVerticalDemand', ['tabLayerHeights'])).toEqual([]);
+    expect(voiceDirImports(VERTICAL_LAYOUT_FILE, "import { lyricBandHeight } from '../jianpu/jianpuVerticalDemand';")).toEqual(['../jianpu/jianpuVerticalDemand']);
+    expect(voiceDirImports(VERTICAL_LAYOUT_FILE, "import { SYSTEM_METRICS } from '../layout/metrics';")).toEqual([]);
+  });
+
+  it('T8：记谱侧 vertical helper 不 import 任何 layout 入口（prepass 不得经 helper 绕回 layout，也不与入口成环）', () => {
+    const helpers = ['jianpu/jianpuVerticalDemand.ts', 'tab/tabVerticalDemand.ts'].map((file) => join(NOTATION_DIR, file));
+    for (const file of [...helpers, VERTICAL_LAYOUT_FILE, VERTICAL_DEMAND_FILE]) {
+      expect(existsSync(file)).toBe(true);
+      expect(layoutEntryImports(file, readFileSync(file, 'utf8'))).toEqual([]);
+    }
+    const [jianpuHelper, tabHelper] = helpers;
+    if (jianpuHelper === undefined || tabHelper === undefined) throw new Error('helpers');
+    expect(layoutEntryImports(jianpuHelper, "import { layoutJianpu } from './layoutJianpu';")).toEqual(['./layoutJianpu']);
+    expect(layoutEntryImports(tabHelper, "import type { TabLayout } from './layoutTab';")).toEqual(['./layoutTab']);
+    expect(layoutEntryImports(tabHelper, "import { durationOf } from './tabSlotWidths';")).toEqual([]);
+    expect(callCount("import { layoutTab } from '../tab/layoutTab';\nlayoutTab(a);\nlayoutTab(b);", 'layoutTab')).toBe(2);
+  });
+
+  it('T8：默认路径与 prepass 共用同一份纵向规则（layoutTab / layoutJianpu 真正调用 vertical helper）', () => {
+    expect(usesAll(readFileSync(join(NOTATION_DIR, 'tab/layoutTab.ts'), 'utf8'), './tabVerticalDemand', ['extraSystemHeight'])).toEqual([]);
+    // 默认路径以 `rows.map(lyricBandHeight)` 传函数引用（不是 `name(` 调用）：按「值导入 + 标识符实际出现」判。
+    const jianpu = readFileSync(join(NOTATION_DIR, 'jianpu/layoutJianpu.ts'), 'utf8');
+    expect(valueImportsFrom(jianpu, './jianpuVerticalDemand')).toEqual(['lyricBandHeight']);
+    expect(usageCount(jianpu, 'lyricBandHeight')).toBeGreaterThan(0);
   });
 
   // ---------------------------------------------------------------------------

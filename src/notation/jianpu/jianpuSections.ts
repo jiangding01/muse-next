@@ -20,7 +20,7 @@
  * 尺寸一律取自 `layout/metrics.ts` 的 `JIANPU_METRICS`（尺寸常量唯一来源）。
  */
 
-import type { DomainIndex, KeySignature, LyricSyllable, Meter, VoiceId } from '../../domain';
+import type { DomainIndex, EventId, KeySignature, LyricSyllable, Meter, VoiceId } from '../../domain';
 import { JIANPU_METRICS } from '../layout/metrics';
 import type { System } from '../layout/primitives';
 import type { TextMeasurer } from '../layout/textMeasurer';
@@ -236,6 +236,9 @@ export function lyricRowsBySystem(
  * 基线上 x 单调递增、互不重叠，也不会把后面几行谱的音节倒灌到第一行谱去。
  * 它**不会被钉在 x = 0**——把一串无目标音节全堆在原点，视觉上等同于「丢了」。
  * `aligned: false` 如实标出，并发一条诊断（每声部首次）。
+ *
+ * `centerOf`（M2.5 T8 裁决 D，只由 external 路径传入）：有目标的音节改为以目标字形中心居中（left = 中心 − 音节宽 / 2）；
+ * 缺席 = 默认路径，仍左对齐列 x（逐字段不变）。无目标音节不受影响。
  */
 export function buildLyricNodes(
   lines: readonly (readonly LyricAssignment[])[],
@@ -243,6 +246,7 @@ export function buildLyricNodes(
   baselineOf: (systemIndex: number, verseIndex: number) => number,
   measurer: TextMeasurer,
   sink: DraftSink,
+  centerOf?: (eventId: EventId) => number | undefined,
 ): readonly JianpuLyricNode[] {
   const lyrics: JianpuLyricNode[] = [];
   const anchor: Anchor = { kind: 'voice', voiceId };
@@ -259,7 +263,8 @@ export function buildLyricNodes(
       const { syllable, systemIndex, verseIndex, alignedX } = assignment;
       const row = `${String(systemIndex)}/${String(verseIndex)}`;
       const width = measurer.measure(syllable.text, { fontSize: size }).width;
-      const x = alignedX ?? tailX.get(row) ?? 0;
+      const center = alignedX === undefined || syllable.target === undefined ? undefined : centerOf?.(syllable.target.eventId);
+      const x = center === undefined ? alignedX ?? tailX.get(row) ?? 0 : center - width / 2;
       tailX.set(row, x + width + JIANPU_METRICS.lyricSyllableGap);
 
       if (alignedX === undefined && !missingReported) {

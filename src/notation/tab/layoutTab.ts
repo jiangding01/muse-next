@@ -17,7 +17,7 @@
  * **两趟布局**（T6.2 追加，写法照搬 `jianpu/layoutJianpu.ts` 按歌词行数回填行高的
  * 手法）：`layoutSystems` 先只做横向打包（哪个 measure 落在第几行谱、行内 x 多少）
  * ——这一步只取决于 measure 宽度与容器宽度，与行高无关；据此按每行谱里实际出现的
- * 最深时值装饰（`tabDurationGlyphs.ts` 的 `requiredSystemDepth`，是一个只取决于
+ * 最深时值装饰（`tabVerticalDemand.ts` 的 `extraSystemHeight` → `requiredSystemDepth`，是一个只取决于
  * `duration` 本身、与绝对 y 无关的纯函数）算出每行谱需要的额外高度，再用
  * `restackSystems` 回填。`TAB_METRICS.systemHeight` 只覆盖到十六分音符
  * （`beams ≤ 2`）；更细的时值（`decomposeDuration` 允许 `beams` 到 8）不再靠加大
@@ -47,7 +47,6 @@ import { collectRenderDiagnostics } from '../model/diagnostics';
 import type { RenderDiagnosticDraft } from '../model/diagnostics';
 import type { RenderDiagnostic, RenderItem, RenderVoice } from '../model/types';
 import type { SystemMeasureGeometry } from '../system/contracts';
-import { requiredSystemDepth } from './tabDurationGlyphs';
 import { engraveTabBeams, planTabBeams, tabMeasureSpacing } from './tabBeams';
 import type { TabBeamGroup } from './tabBeams';
 import { buildStaffLines } from './tabGlyphs';
@@ -56,9 +55,9 @@ import { buildTabNode } from './tabEventNodes';
 import type { Cursor } from './tabEventNodes';
 import { buildTabRelations } from './tabRelations';
 import type { TabRelationLine } from './tabRelations';
-import { durationOf } from './tabSlotWidths';
 import { buildTabStrokes } from './tabStrokes';
 import type { TabStrokeMark } from './tabStrokes';
+import { extraSystemHeight } from './tabVerticalDemand';
 
 /**
  * 布局输入。`measurer` **显式注入**：无模块级单例、无全局兜底（§2.8）。
@@ -105,21 +104,6 @@ export interface TabLayout {
   readonly width: number;
   readonly height: number;
   readonly diagnostics: readonly RenderDiagnostic[];
-}
-
-/**
- * 一行谱内出现过的最深时值装饰，转换成该行谱需要的**额外**高度
- * （`TAB_METRICS.systemHeight` 之外还差多少）；不够深（含没有任何计时事件）时为 0
- * ——`restackSystems` 对 `extra === 0` 不产生任何效果，行高原样等于 `systemHeight`。
- */
-function extraSystemHeight(measureItems: readonly (readonly RenderItem[])[]): number {
-  let deepest = 0;
-  for (const items of measureItems) {
-    for (const item of items) {
-      deepest = Math.max(deepest, requiredSystemDepth(durationOf(item)));
-    }
-  }
-  return Math.max(0, deepest - TAB_METRICS.systemHeight);
 }
 
 /** 一个 measure 的横向归属：行谱、左缘、逐项 slot（默认路径 = 本声部 spacing；external = 最终分配）。 */

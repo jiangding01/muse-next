@@ -57,6 +57,7 @@ import {
   relationLayout,
 } from './jianpuSections';
 import type { LyricAssignment, LyricColumn } from './jianpuSections';
+import { lyricBandHeight } from './jianpuVerticalDemand';
 import { pitchToNumber } from './pitchToNumber';
 
 /** 布局输入。`measurer` **显式注入**：无模块级单例、无全局兜底（§2.8）。 */
@@ -72,7 +73,8 @@ export interface JianpuContext {
    * M2.5 T5 external 几何（用户裁决 A1）：两项原子成对。缺席 = 走 M2 默认路径（逐字段不变）；存在 = 不换行、
    * 不 restack，measure 的 system / x / width 与 shared onset 的 x 全取自公共几何（`layout/measurePlacement.ts`）。
    * `measures` 是本声部所在 group 的公共 measure（按 participation 取本声部），`systems` 是本层所在的全部
-   * 公共行谱（全局 systemIndex 原样保留）。任何不变量失败抛 `RangeError`，绝不回退。
+   * 公共行谱（全局 systemIndex 原样保留）。任何不变量失败抛 `RangeError`，绝不回退。有目标的歌词音节以目标
+   * 字形中心居中（M2.5 T8 裁决 D），默认路径仍左对齐列 x。
    */
   readonly external?: {
     readonly measures: readonly SystemMeasureGeometry[];
@@ -96,14 +98,6 @@ export interface JianpuLayout {
   readonly width: number;
   readonly height: number;
   readonly diagnostics: readonly RenderDiagnostic[];
-}
-
-/**
- * 一行谱为 `rows` 行歌词预留的额外高度。`rows === 0` 时不留任何余量——「这一行没有
- * 歌词」和「有歌词但空着」是两件事。
- */
-function lyricBandHeight(rows: number): number {
-  return rows === 0 ? 0 : JIANPU_METRICS.lyricFirstOffset + rows * JIANPU_METRICS.lyricLineGap;
 }
 
 /** 第一趟的产物：每项的横向位置、行谱、歌词归属（默认路径按歌词回填行高，external 路径原样采用外部行谱）。 */
@@ -228,6 +222,11 @@ export function layoutJianpu(voice: RenderVoice, ctx: JianpuContext): JianpuLayo
     },
     ctx.measurer,
     sink,
+    // T8 裁决 D：只有 external（systemized）路径以目标字形中心居中；默认路径不传，逐字段不变。
+    ctx.external === undefined ? undefined : (eventId) => {
+      const node = nodeByEvent.get(eventId);
+      return node === undefined ? undefined : node.x + node.glyphWidth / 2;
+    },
   );
   const labels = buildHeaderLabels(ctx.score.key, ctx.score.meter, ctx.measurer, sink);
 
