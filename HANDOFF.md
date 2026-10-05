@@ -2,7 +2,7 @@
 
 > 面向后续实现 Agent 的项目交接文档  
 > 项目代号：`muse-next`  
-> 当前阶段：**M0–M1.8 已封板；M2 Notation Rendering T0–T9 已全部完成（Chord / Jianpu / TAB / Staff 四种记谱可渲染 + T8 render matrix 契约测试 + T9 文档封板），✅ 2026-09-22 封板（原始 seal CI run 35700198783；T8.1 post-seal 契约收紧 run 35702615344；当前 HEAD run 35702885112 三平台全绿）；UI 设计 Brief 已完成（`docs/UI_DESIGN_BRIEF.md` v1.3.4）；M2.5 Score System Layout 方案冻结为 v1.0，**T0 已完成（2026-10-04，`6e5a532` + 命名修订 `3f5b48c`），T1 声部视觉分组已完成（`2b9882c`），T2 跨声部 measure identity 已完成（`218d143`），T2.1 小节错位锁存已完成（`9037351`），T3 共享小节时间轴已完成（`7ee1e27`），T3.5 TAB / 简谱节奏刻印已完成（`d2486aa`），T4 公共几何编排已完成（2026-10-05，`9661810`），均三平台 CI 全绿；T5 待用户明确指令**；M3 排在 M2.5 之后**（详见 §30 里程碑表、§30.1「M2 进行中状态」与「M2.5 T0 实际状态」、§69「当前明确的下一任务」）  
+> 当前阶段：**M0–M1.8 已封板；M2 Notation Rendering T0–T9 已全部完成（Chord / Jianpu / TAB / Staff 四种记谱可渲染 + T8 render matrix 契约测试 + T9 文档封板），✅ 2026-09-22 封板（原始 seal CI run 35700198783；T8.1 post-seal 契约收紧 run 35702615344；当前 HEAD run 35702885112 三平台全绿）；UI 设计 Brief 已完成（`docs/UI_DESIGN_BRIEF.md` v1.3.4）；M2.5 Score System Layout 方案冻结为 v1.0，**T0 已完成（2026-10-04，`6e5a532` + 命名修订 `3f5b48c`），T1 声部视觉分组已完成（`2b9882c`），T2 跨声部 measure identity 已完成（`218d143`），T2.1 小节错位锁存已完成（`9037351`），T3 共享小节时间轴已完成（`7ee1e27`），T3.5 TAB / 简谱节奏刻印已完成（`d2486aa`），T4 公共几何编排已完成（2026-10-05，`9661810`），T5 三个 voice layout 的外部几何适配已完成（2026-10-05，`ed4ea88`），均三平台 CI 全绿；下一步（T5.S / T6 / T8）待用户明确指令**；M3 排在 M2.5 之后**（详见 §30 里程碑表、§30.1「M2 进行中状态」与「M2.5 T0 实际状态」、§69「当前明确的下一任务」）  
 > 核心目标：以现代 TypeScript 技术栈重建已停止维护的 **Muse Pro 2.70** 的核心能力，并优先恢复其 `.jcx` 乐谱格式、谱面渲染、编辑与播放能力。
 
 ---
@@ -1792,7 +1792,8 @@ T2 ✅ 2026-10-04（`218d143`，CI run 37177350122 三平台全绿）；
 T2.1 ✅ 2026-10-04（`9037351`，CI run 37181088740 三平台全绿，小节错位锁存）；
 T3 ✅ 2026-10-04（`7ee1e27`，CI run 37189546271 三平台全绿，共享小节时间轴）；
 T3.5 ✅ 2026-10-04（`d2486aa`，CI run 37212689335 三平台全绿，TAB / 简谱节奏刻印）；
-T4 ✅ 2026-10-05（`9661810`，CI run 37271250936 三平台全绿，公共几何编排），T5 待用户指令）
+T4 ✅ 2026-10-05（`9661810`，CI run 37271250936 三平台全绿，公共几何编排）；
+T5 ✅ 2026-10-05（`ed4ea88`，CI run 37284116914 三平台全绿，外部几何适配），T5.S / T6 / T8 待用户指令）
 
 → M3
 Editor Core
@@ -2676,11 +2677,12 @@ visual debt、T7 第 6 条），按 视觉 / 架构 / 测试 分类，每行注�
 - **T3 ✅（2026-10-04，`7ee1e27`，CI run 37189546271 三平台全绿；见下方「M2.5 T3 实际状态」）**。
 - **T3.5 ✅（2026-10-04，`d2486aa`，CI run 37212689335 三平台全绿；见下方「M2.5 T3.5 实际状态」）**。
 - **T4 ✅（2026-10-05，`9661810`，CI run 37271250936 三平台全绿；见下方「M2.5 T4 实际状态」）**。
+- **T5 ✅（2026-10-05，`ed4ea88`，CI run 37284116914 三平台全绿；见下方「M2.5 T5 实际状态」）**。
 - 前置条件（M2.5 之前、独立 formats 小任务）：~~`strokePrefix → TabGroupEvent.stroke` 回填~~ **已完成（2026-09-22，M2.5 formats preflight）**：`scan.ts` 顶层循环把紧邻 `tabGroup` 的 `strokePrefix` 绑进 `TabGroupEvent.stroke`，不改 Domain 类型/serializer 代码，dangling-stroke 诊断未对绑定成功的 group stroke 误报（真悬空的仍照常发 info）。U06（body `L:` 按声部作用域）已于 `8a74e8e` 结案。
 - 架构：`src/notation/system/**`（contracts 叶子层 → groupVoices / measureIdentity / timeline / composeSystem / justify / chordOverlay / pageModel）；System = overlay layers（chord diagrams，`layoutChord` 保持 document 级）+ ordered voice layers（jianpu/tab/staff 接受外部 system/measure 几何）+ attached layers（lyrics）；voice layout 不得反向 import composer。
 - 关键裁决：`MeasureTimeline` 只含 timed onset（绝对 Rational 累计 offset）+ `chordSymbol` zero-time overlay，barline 固定 `endX`，decoration/grace/unknown 走 voice-local slot；跨 voice measure identity = ordinal candidate + 结构兼容性校验（时值总量逐 measure 绝对相等，不预设相等，不等进 tier 3；缺 measure 留空保留公共宽度；冲突 fallback + 诊断，不重写事件）；公共 measure width = 各 voice demand 取 max → packing → water-filling justify（`justified: full|partial|none`，末行不拉）；D11 精确名匹配（0 只画名 / 1 名+图 / >1 只画名 + ambiguity 诊断）；`ComposedSystemLayout {target:'screen'|'page'}`，PageModel 只收 page 产物，单 system 不跨页；Staff 验收 = tier 1（共享 measure 边界/宽度），T5.S 为非阻塞 spike。
 - 刻印（T3.5，先于 T4 demand solver）：TAB/简谱 beam 按拍分组（x/4 四分一拍、6/8 等附点四分一拍、5/8·7/8 与 `M:` raw 不分组；用 voice 自身 offset，不依赖 shared timeline）；**P1-3 窄化为新裁决**：Meter 不得直接决定 spacing，可用于 engraving grouping，glyph demand 反向约束最小宽度；扫弦 `V/U` → ↓/↑；纵向次序 和弦名 → 和弦图 → 箭头 → 第 1 弦。
-- 任务链：T0 contracts + negative guards → T1 group → T2 measure identity → T3 timeline → T3.5 beam/demand → T4 packing/justify（+ positive guard）→ T5 voice external geometry → T5.S staff spike → T6 chord overlay → T8 system matrix → T9a PageModel → T9b renderer system 化 → T9c smoke/docs/seal。每步 ≤350 行、无 class/as/any、诊断码只追加、只用现有四种 Anchor。
+- 任务链：T0 contracts + negative guards → T1 group → T2 measure identity → T3 timeline → T3.5 beam/demand → T4 packing/justify（+ positive guard）→ T5 voice external geometry（只做三个 layout 的 adapter）→ T5.S staff spike → T6 chord overlay → T8 system matrix + **纵向 system 组装**（composer 调用三个 external layout、层 top / height、歌词 / TAB 深时值补高、和弦带、`ScoreSystemLayout` / `ComposedSystemLayout`，T5 用户裁决 N-a）→ T9a PageModel → T9b renderer system 化 → T9c smoke/docs/seal。每步 ≤350 行、无 class/as/any、诊断码只追加、只用现有四种 Anchor。
 
 **M2.5 T0 实际状态（2026-10-04，`6e5a532` CI run 37137587990 + 命名修订 `3f5b48c` CI run 37137776164，均三平台全绿）**：
 - 范围：只做 contracts / system metrics / 诊断码 / negative guards；renderer、三个 voice layout、Domain / parse / serializer 零改动。
@@ -2740,10 +2742,10 @@ visual debt、T7 第 6 条），按 视觉 / 架构 / 测试 分类，每行注�
 - **真实语料**：TAB 937 组 / 简谱 456 组；tuplet 整小节不分组 TAB 4 / 简谱 4（corpus#09）；D1 / 溢出 0；节点 / 列宽 / 行高相对不分组零漂移；扫弦 V/U 499 个（全在 corpus#03）画成箭头、`B` 5 个原样；真实语料无 raw / 缺席拍号（review 另做 102 条 raw / 缺席 normalized 比对零漂移）；T3 基线 19 groups / shared 725 / degraded 8 / not-compatible 46 不变。
 - 已知限制（不在 T3.5 处理）：TAB 扫弦记号与 voice-local 和弦符号同在第 1 弦上方 −6 基线，corpus 有 54 处同 x 重叠（归 T6 integration）；简谱未入组单音的减时线仍是旧画法 `[x, x+12]`（raw / 缺席回归门要求不变）；`tabGroupStrokeNotModeled` 码保留未发。
 
-**M2.5 T4 实际状态（2026-10-05，`9661810`，CI run 37271250936 三平台全绿；T5 未启动，需用户明确指令）**：
+**M2.5 T4 实际状态（2026-10-05，`9661810`，CI run 37271250936 三平台全绿；以下为 T4 当时快照，层纵向几何与 composer → layout 的归属已由 T5 裁决 N-a 改归 T8，见下一节）**：
 - 范围：公共 demand solver + 逐 group packing + water-filling justify + shared measure 段几何，**第一版只到几何**；renderer / 三个 voice layout 默认路径 / Domain / parser / serializer 零改动，不新增诊断码。按用户裁决 O 分 3 个内部阶段（T4-0 demand → T4-1 justify → T4-2 compose），一个代码提交（14 文件：6 改 + 8 新）。
 - **用户裁决 A–O + a / b / c（2026-10-05，冻结方案的 post-freeze amendment，方案顶部修订记录与 §Q3.6 / §Q4.1 / §Q7.4 / §D 已同步）**。
-- **阶段产物（A）**：`system/composeSystem.ts` 导出 `composeSystemGeometry(renderScore, measurer, policy): ComposedSystemGeometry { target, lines: SystemLineGeometry[], diagnostics }`；`SystemLineGeometry { systemIndex, groupIndex, lineIndex, lineStartReserve, width, justified, measures: SystemMeasureGeometry[], barsPerStaffHonored? }`。**T4 不构造 `ScoreSystemLayout`**（layer 纵向几何归 T5、和弦 overlay 归 T6、行高归 T8，不塞占位值）；T5+ 在其上组装。`systemIndex` 全文档按 group 文档顺序累加（N）。一次 compose 内 T1 / T2 / T3 各只跑一次；`diagnostics` = `renderScore.diagnostics` + T1 + T2 + T3（顺序固定）。
+- **阶段产物（A）**：`system/composeSystem.ts` 导出 `composeSystemGeometry(renderScore, measurer, policy): ComposedSystemGeometry { target, lines: SystemLineGeometry[], diagnostics }`；`SystemLineGeometry { systemIndex, groupIndex, lineIndex, lineStartReserve, width, justified, measures: SystemMeasureGeometry[], barsPerStaffHonored? }`。**T4 不构造 `ScoreSystemLayout`**（~~layer 纵向几何归 T5~~ 已由 T5 裁决 N-a 改归 T8、和弦 overlay 归 T6、行高归 T8，不塞占位值）；T8 在其上组装。`systemIndex` 全文档按 group 文档顺序累加（N）。一次 compose 内 T1 / T2 / T3 各只跑一次；`diagnostics` = `renderScore.diagnostics` + T1 + T2 + T3（顺序固定）。
 - **contracts 变更（G / D / E）**：`SystemMeasureGeometry.contentOffsetX` 新增——普通 measure 为 0，每行首 measure = 本行 `lineStartReserve`；shared timeline 的 x 已含它，**T5 不得重复叠加**。`demandWidth` = 量化后的内容最小宽（不含预留）。`MeasureTimeline` 新语义：`xByOffsetIndex[0] = contentOffsetX + lead'`、逐段累加；`endX` = 收尾 barline 的 measure-relative x（无收尾 barline 时为逻辑内容末端），**不再等于 measure 宽**；`geometry.width = endX + tail'`。零 timed 的 shared measure 保留空 timeline（C）；tier 3 无 timeline。
 - **demand（J / M）**：新 `system/measureDemand.ts`（172 行）。每声部每 measure 的需求只有一个来源：TAB `planTabBeams` + `tabMeasureSpacing`、简谱 `planJianpuBeams` + `jianpuMeasureSpacing`、Staff `staffMeasureSpacing`，fallback 声部 0；按 `RenderVoice` 缓存，不再调 `spaceItems` / `widenFor*`。shared measure：按 T3 的 onset 映射把每列归到 lead（首 onset 前）/ 段 / tail（收尾 barline），各分量跨声部取 max，`demandWidth = lead + Σsegment + tail`（再与各声部整小节需求 max 取大，差额补进 tail）；tier 3 = 各在场声部整小节需求的 max。行首预留 = 各层行首预留的 max（当前只有 Staff 非 0；TAB 0，F）。
 - **fixed-point（I）**：新 `system/geometryTicks.ts`（55 行），`SYSTEM_METRICS.geometryQuantum = 1/1024`（数值稳定性量化网格，非视觉 metric）。demand / 预留向上、可用宽向下取整到 tick；packing / water-filling / 段分配 / x 累计全链路整数 tick，产出时换回 unit（二进制精确）。`distributeTicks` 用 BigInt 求下取整份额，余数按下标顺序只补给有小数部分的项（每项 ≤ 精确份额上取整）。
@@ -2753,7 +2755,27 @@ visual debt、T7 第 6 条），按 视觉 / 架构 / 测试 分类，每行注�
 - **守卫（B / K / L）**：§Q7.4 旧 positive guard 4（`composeSystem.ts` import 三个 voice layout 与 `layoutChord`）**作废重写**为：`measureDemand.ts` 真正值导入并调用三个 `*MeasureSpacing`、`composeSystem.ts` 真正值导入并调用 `measureDemand` 出口（禁止 unused import）；新增 negative guard：`system/**` 不 import 任何 voice layout 入口与 `layoutChord`（voice layout 正面边留给 T5、`layoutChord` 留给 T6）；`model/** → system/**` 并入既有方向守卫。`system.contracts.test.ts` 的 metrics 整表断言纳入 `geometryQuantum`。
 - 测试：新增 `system.demand.test.ts` / `system.justify.test.ts` / `system.compose.test.ts`；全仓 Vitest **85 files / 6382 pass**（相对 T3.5 的 6276 净增 106）；fixture-report 105/105、corpus-test 11/11。独立只读 review 一轮（无 HIGH；2 MEDIUM：行首预留先扣的测试实为空转、诊断聚合有两段为空；6 LOW：water-filling 第二轮触顶、容差过松 1024 倍、tail 补差分支未覆盖、barsPerStaff 边界与混排、行首零 timed measure 被拉伸、不变量测试自比；均已补测），其中 barsPerStaff 的语义由用户裁决 a / b / c 定稿。独立 worktree 变异 **63 个，杀死 62 个**；唯一存活 `05-jianpu-pre-T35-spacing`（简谱 demand 不传分组计划）记为**当前可达状态下不可观测的等价变异**——简谱同时值组列宽在当前可达状态下天然相等，与 T3.5 已认可的 `J-no-equalize` 同因；主工作区 hash 零漂移。
 - **真实语料（compose 实测）**：shared 725 / tier 3 54（not-compatible 46 + degraded 8）/ 零 timed shared 0；行数：宽 100000 → 19（每 group 一行，全 `none`）、宽 960 → 84（full 61 / partial 0 / none 23，none 含 9 个全零 fallback group，全在 corpus#08）、宽 16 → 471（全 `none`）；行首预留只在 corpus#05 的 Staff group 触发；不变量（`width ≥ demand ≥` 各 raw voice / segment demand、full 时整数级严格相等、partial 时全部触顶）零违例；112 个 shared measure 有非零 lead、215 个 shared measure 的 `lead + Σseg + tail` 严格大于各声部整小节最大值（最多 89.7）。T3 基线 19 / 725 / 8 / 46 与 T3.5 基线 937 / 456 不变。
-- 已知限制（不在 T4 处理）：`composeSystemGeometry` 尚未接任何调用方（T5 接 voice layout、T9b 接 renderer）；可用宽为 `Infinity` 时按 0 处理（每 measure 一行，调用方从不传无限宽）。
+- 已知限制（不在 T4 处理）：`composeSystemGeometry` 尚未接任何调用方（~~T5 接 voice layout~~ 生产编排归 T8，T5 只在测试侧把它整理成 external 输入；T9b 接 renderer）；可用宽为 `Infinity` 时按 0 处理（每 measure 一行，调用方从不传无限宽）。
+
+**M2.5 T5 实际状态（2026-10-05，`ed4ea88`，CI run 37284116914 三平台全绿；T5.S / T6 / T8 未启动，需用户明确指令）**：
+- 范围：**只做三个 voice layout（Jianpu / TAB / Staff）的 external geometry adapter**；renderer、`system/**`、Domain / parser / serializer 零改动（`git diff 25c3015` 对这些目录为空）。按用户裁决分 5 个内部阶段（T5-0 helper + 默认路径 golden → T5-1 Jianpu → T5-2 TAB → T5-3 Staff → T5-4 集成 + 守卫），一个代码提交（18 文件：7 改 + 11 新）。
+- **用户裁决 A–P + 额外裁决 1–9（2026-10-05，冻结方案的 post-freeze amendment，方案顶部修订记录与 §B.4 / §Q3.1b / §Q3.3 / §Q3.5 / §Q7.4 / §D 已同步）**。
+- **API（A1 / A2 / A3）**：三个 Context 新增可选 `external?: { measures: readonly SystemMeasureGeometry[]; systems: readonly System[] }`（原子成对、内联、不进 contracts）。缺席 → 走默认路径，**与 `25c3015` 逐字段一致**；存在 → 不换行、不 restack，`availableWidth` 不使用。external 输入的任何 mapping / system / timeline / 数值不变量失败一律 `RangeError`，**绝不回退**默认路径或 tier 3。
+- **映射（B）**：measure 只按 `voiceId + participation.localMeasureIndex` 取公共框，**不是** `measureOrdinal`、也不是数组位置；本声部 local measure 的键集合必须恰为 `0..n−1`。absent 不造 measure / 节点 / slot / 诊断。
+- **systemIndex（C）**：T4 的全文档全局 systemIndex 原样保留，**不得**作为 `systems[]` 下标、不重新编号；三个 layout 与 `tabRelations` 一律按 `System.index` 查找（默认路径 index 恒等于位置，结果不变）；`jianpuArcs` 跨行弧只遍历实际存在的行谱、两端缺失仍抛错；`assignLyricSyllables` 的兜底行谱参数化（external 取本声部最小 index）。
+- **共享 helper（L）**：新 `layout/measurePlacement.ts`（212 行），结构类型、不 import `system/**` 与任何记谱目录：`mapExternalMeasures` / `placeExternalMeasure` / `externalExtent`。onset 映射（D）在 layout 内复用 `voiceMeasureOnsets` + Domain `equals` 与 `timeline.offsets` 精确匹配，不扩 contracts。
+- **shared placement（E-c / J）**：每个不同 offset 的首个 timed 项是锚点，x 恒为 `geometry.x + xByOffsetIndex[k]`（Jianpu / TAB / 公共 timeline 三方逐位相等）；同 onset 的后续零时值 timed 项从锚点起保原宽向右排（左簇）；decoration / grace / unknown 等其余 untimed 项保原宽、整串**右贴下一锚点**（lead 段区间 `[contentOffsetX, 首锚点]`，末段贴 `endX`）；零宽 chordSymbol 位于段尾时逐位落在下一锚点；收尾 barline 在 `endX`、宽 `width − endX`。零 timed shared 跟随同一规则。左右簇相交即 `RangeError`——段内原宽按与 T4 `measureDemand` **同序同源**的累加与公共区间（tick 网格上两 x 之差）精确比较。
+- **tier 3 placement（F-d）**：非尾 barline 内容按**本声部**比例拉满 `contentOffsetX → width − 尾宽`，尾 barline 保留原始 slot 宽并钉右；`bodyRaw = 0` 不除零；scale < 1（本声部整小节原宽 > 公共内容宽）为契约违例。
+- **slot / node（P / 额外裁决 7）**：external slot 一律 clone，`x` 为 measure 内最终相对 x、`width` 为最终分配列宽；`node.width` 取最终宽；原 spacing 不被修改。节点 x = `system.origin.x + geometry.x + slot.x`。
+- **external Jianpu / TAB（H-a / G / G-2a / I）**：**不 restack**，外部 System 的 y / height 为真值；`layout.systems` = 外部 systems 按 index 升序（对象原样、全局 index 原样，本声部没有 measure 的公共行谱也保留）；宽高取全部 system 的最大外沿（不依赖数组顺序）；TAB 弦线只覆盖本声部在该行谱上真实 measure 的范围，无 measure 的行谱不画。
+- **external Staff（K-b，tier 1）**：`stave.x / width` = 公共 measure 的 `x / width`（行首 `width` 已含预留），行首 header 判据为 `contentOffsetX > 0`，**不重复叠加** `staffLineHeaderReserve`；不做 VexFlow 音符 x 对齐（tier 2 归 T5.S）。
+- **T8 归属（N-a / 额外裁决 1，架构修改）**：T5 只提供三个 voice layout 的 external adapters；**T8 负责真正的纵向 system 组装**——调用三个 external layout、`VoiceLayerLayout.top / height`、Jianpu 歌词带补高、TAB 最深时值补高、T6 和弦 overlay 带、`system.box.height`、最终 `ScoreSystemLayout` / `ComposedSystemLayout`。§Q7.4 的「system → voice layout 正面边」改归 T8；T5.S / T6 期间**不得**提前组装半成品 composer 或固定层高。
+- **默认路径回归门（M）**：`tests/fixtures/golden/t5-default-layout.sha256.json` **945 项**（全部 fixture × jianpu / tab / staff 强制记谱 × 宽 100000 / 960 / 16），基线 `25c3015`，**严格序列化**（区分 `-0` / `NaN` / `±Infinity` / `undefined` 键 / `Map`），由独立 `25c3015` worktree 运行 `scripts/notation/t5-default-golden.ts` 生成；`t5.defaultRegression.test.ts` 只读、不自动更新。会话内另对 11 份真实语料补比 99 项（3 宽度 × 3 记谱），漂移 0。
+- 守卫：三个 voice layout **type-only** import `system/contracts` 的 `SystemMeasureGeometry` 并实际使用（含反例）；三个 layout 真正调用 `measurePlacement` 的三个出口；`measurePlacement.ts` 不 import `system/**` 与记谱目录；**T9b 前** `renderer/**` 不出现 `external`（可能过严误报，T9b 接 renderer 时删除 / 改写）；T4 的「`system/**` 不 import voice layout 入口」保持。
+- 测试：新增 `layout.measurePlacement` / `jianpu.external` / `tab.external` / `staff.external` / `system.external.integration` / `t5.defaultRegression` 及两个 helper；全仓 Vitest **91 files / 6471 pass**；fixture-report 105/105、corpus-test 11/11。集成测试对全部 fixture × 宽 960 / 16 用真实 T4 输出逐声部跑 external（0 抛错，C1、shared timed x、Staff stave 边界全对）。独立只读 review 无 HIGH（1 MEDIUM：测试 `origin.x` 恒 0；4 LOW：Staff slot 断言空转、golden 序列化抹平 `-0` / `NaN`、system box 与 offsets 严格递增未校验、弧线端点缺失抛错无测试——均已补测 / 补校验）。独立 worktree 变异 **58 个全部杀死**（首轮 47 杀 46，存活的「宽高取最后一项」因单测构造巧合，已补反例）。主工作区 hash 零漂移。
+- **真实语料**：T3 基线 19 / 725 / 8 / 46、T3.5 基线 937 / 456、T4 @960 shared 725 / tier 3 54 / full 61 / none 23 / partial 0 全部不变；真实语料中「记谱声部的全局 systemIndex 非 0」零样本（只有 corpus#08 的 fallback 声部），由合成多 group 用例覆盖。
+- **已知限制（阶段性债务，T8 清理）**：① external 模式不 restack，Jianpu 歌词带与 TAB 深时值刻印可能暂时超出外部 `System.box.height`；② external shared 以公共 timeline 为最高优先级，T3.5「同时值 beam 组等距」在 external 路径**不再保证**（默认路径不受影响）。另：golden 生成脚本不在 `tsconfig` include 内（与 T3.5 生成脚本同模式，非生产路径）。
+- **流程教训**：首次同步 mutation worktree 时，zsh 不对字符串文件列表分词、`set -e` 亦未中止，拷贝静默失败，被最后的条数检查拦下；此后 harness 一律写成 bash 脚本、用数组、每项检查显式 `|| exit 1`。
 
 **M2 seal 与 M3 前置（T9 之后，恢复时从这里继续）**：**2026-09-22 追加裁决：M2 与 UI 目标版式确认之后、M3 之前先做 M2.5 Score System Layout（见 §30 路线表与 `docs/UI_DESIGN_BRIEF.md` §2.7.6、§10.17/10.18）；M2.5 的 System 模型 = overlay layers（chord diagrams）+ ordered voice layers（TAB/Jianpu/Staff 接受外部 system/measure 几何）+ attached layers（lyrics），chord 不是第四种声部 layout，system 高度由内容决定、分页只在 system 边界，`bracket` 只证明视觉分组、需定义 cross-voice measure mismatch policy。**原文：T0–T9 已全部完成并推送，
 下一步不是继续写渲染代码，而是：
@@ -4292,7 +4314,8 @@ Chord / Jianpu / TAB / Staff 四种记谱可渲染（T0–T7，T7 Staff + VexFlo
    **M2.5 T3 已完成**（`7ee1e27`，三平台 CI 全绿，共享小节时间轴，见 §30.1「M2.5 T3 实际状态」），
    **M2.5 T3.5 已完成**（`d2486aa`，三平台 CI 全绿，TAB / 简谱节奏刻印，见 §30.1「M2.5 T3.5 实际状态」），
    **M2.5 T4 已完成**（`9661810`，三平台 CI 全绿，公共几何编排，见 §30.1「M2.5 T4 实际状态」），
-   **当前主动暂停，T5（三个 voice layout 接受 external geometry，不接 renderer）启动需用户明确指令**；启动时仍先给
+   **M2.5 T5 已完成**（`ed4ea88`，三平台 CI 全绿，三个 voice layout 的外部几何适配，见 §30.1「M2.5 T5 实际状态」），
+   **当前主动暂停，下一步（T5.S Staff tier-2 spike / T6 chord overlay / T8 纵向 system 组装）启动需用户明确指令**；启动时仍先给
    实现方案 + 测试矩阵再编码；
 4. M2.5 封板后再规划 M3A（source/save/history）→ M3B（selection + 三向同步）→ M3C（可视化编辑）。
 ```
