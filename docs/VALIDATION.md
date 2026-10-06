@@ -13,8 +13,10 @@
 
 ## 2026-10-06 — M2.5 T9c final validation（Stage A）
 
-> 本记录是 Stage A 的本地 final validation 证据。Stage A 的 seal 验证（包含本记录的文档同步提交在 GitHub CI 上的结果）
-> 待确认，由 Stage B seal commit 记录；M2.5 尚未封板。
+> 本记录是 Stage A 的本地 final validation 证据（validation base `42fb4df`）。**Stage A seal verification 已完成**：包含本记录的文档同步提交
+> docs `9a1fd5d7407b399e92946ce533f709fb9d804345` 的 GitHub CI run 37452773013 attempt 1 completed / success，macOS / Windows / Ubuntu
+> 三个 job 均 success（`npm ci` / `npm run typecheck` / `npm test` / `npm run jcx:fixture-report` 均实际执行）。以上是 Stage A 的证据；
+> Stage B final seal 提交自身的 CI 不在本文件中记录。
 
 在 `42fb4df`（T9c.P code `1e7fb1c` + docs `42fb4df` 之后的 HEAD，工作区干净）上重新实际运行，**不沿用** T9c.P
 之前或 T9c.P 自身报告中的数字；被 T9c.P 打断的那次 Stage A 不作为本次证据。

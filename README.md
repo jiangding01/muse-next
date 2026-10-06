@@ -19,8 +19,8 @@ Electron / React 技术栈重建其核心能力，优先顺序是：
 （preserve / canonical 两种模式）与 round-trip 兼容性护栏均已完成并通过三平台 CI
 （M0–M1.8）；谱面渲染 **M2 已封板**（2026-09-22），和弦图（Chord）、简谱（Jianpu）、
 吉他 TAB、五线谱（Staff，经 VexFlow adapter）四种记谱均可渲染。**M2.5 Score System
-Layout 的实现已全部完成**，T9c final validation 已于 2026-10-06 在本地完成，Stage A 的 seal 验证（文档同步提交的
-CI）待确认，之后**等待独立的 Stage B final seal**（M2.5 尚未封板；M3 尚未开始）。详见 §5「路线图」。
+Layout 的实现已全部完成**，**T9c Stage A ✅ COMPLETE**（2026-10-06：Stage A docs `9a1fd5d`，CI run 37452773013 三平台
+success）。M2.5 已进入 Stage B final seal：本 seal 提交的三平台 CI success 后 M2.5 正式 SEALED。M3 NOT STARTED。详见 §5「路线图」。
 
 ## 2. 核心发现与设计原则
 
@@ -187,7 +187,7 @@ projectionEquals(before, after); // true 表示语义往返无损
   测试矩阵（详见 `HANDOFF.md` §30.1「M2 进行中状态」），已于 2026-09-22 经三平台 CI 全绿封板。
   （封板时的测试规模是 74 个测试文件 / 5642 个用例，属当时快照；当前数字见 `docs/VALIDATION.md`。）
 
-实现已完成、等待 Stage B final seal（2026-10-06 本地完成 T9c final validation，Stage A seal 验证待 CI）：
+实现已完成，T9c Stage A ✅（docs `9a1fd5d`，CI run 37452773013 success）；Stage B final seal 提交的三平台 CI success 后正式 SEALED：
 
 - **M2.5 — Score System Layout**：把各声部从「各画各的」组装成成品谱 system——
   - **System 模型**：`bracket=N` 视觉分组 → 同一 group 的声部进入同一 system；

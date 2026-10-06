@@ -101,7 +101,7 @@ macOS 与 Windows 桌面（Electron 44，React 19）。Linux 有打包器配置�
 ```text
 M2 Notation Rendering            ✅ 已封板（四种记谱可渲染；封板时按声部堆叠）
 UI 目标版式                       ✅ 本文档（§2.7 Guitar Arrangement System Profile）
-M2.5 System Layout               实现完成；T9c final validation 已完成（本地）；Stage A seal verification 待 docs commit CI；之后进入 Stage B final seal（系统交错版式，§2.7.6）
+M2.5 System Layout               实现完成；T9c Stage A ✅（docs 9a1fd5d / CI 37452773013 success）；Stage B final seal 提交 CI success 后 SEALED（系统交错版式，§2.7.6）
 M3A source / save / history      → 源码编辑、保存、撤销重做
 M3B selection + 三向同步          → 依赖 M2.5 的 systemIndex / measure 几何 / x,y / voice grouping
 M3C visual editing               → 可视化编辑
@@ -261,7 +261,7 @@ system 画布溢出不会反过来改变它）；测不到时退回固定 960 �
 > 本节是对它的逐项文字转述。
 >
 > **状态声明**：这是**产品目标版式**。M2 封板时是按声部堆叠的过渡态（M2 明确把跨声部对齐排除在范围外）；
-> **M2.5 起已按系统交错渲染**（实现完成；T9c final validation 已完成（本地）；Stage A seal verification 待 docs commit CI；之后进入 Stage B final seal），
+> **M2.5 起已按系统交错渲染**（实现完成；T9c Stage A ✅，docs `9a1fd5d` / CI run 37452773013 success；Stage B final seal 提交的 CI success 后 M2.5 SEALED），
 > 尚未实现的目标元素见 §2.7.4。
 > 设计稿按目标版式画。
 
@@ -384,8 +384,8 @@ profile**，各自选择哪些层、以什么顺序出现，**不推翻 M2.5 的
 
 #### 2.7.6 里程碑 M2.5「乐谱系统版式」（已裁决排在 M3 之前，见 §10.17）
 
-> **状态（2026-10-06）**：M2.5 实现全部完成；T9c final validation 已完成（本地）；Stage A seal verification 待 docs commit CI；
-> 之后进入 Stage B final seal（M2.5 尚未封板）。
+> **状态（2026-10-06）**：M2.5 实现全部完成；T9c Stage A ✅ COMPLETE（docs `9a1fd5d`，CI run 37452773013 三平台 success）；
+> Stage B final seal 提交的三平台 CI success 后 M2.5 正式 SEALED。M3 尚未开始。
 > 下面的范围与影响点是当初的规划说明，落地结果见 §2.7.4 与 `HANDOFF.md` §30.1。
 
 **排在 M3 之前**（正式裁决）：M3B 的 selection / 三向定位 / anchor highlight /
