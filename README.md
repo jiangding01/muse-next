@@ -17,10 +17,10 @@ Electron / React 技术栈重建其核心能力，优先顺序是：
 
 **当前阶段**：`.jcx` 格式的解码、词法、无损 AST、Domain 归一化、序列化
 （preserve / canonical 两种模式）与 round-trip 兼容性护栏均已完成并通过三平台 CI
-（M0–M1.8，见 §5「路线图」）；谱面渲染（M2）T0–T9 已全部完成并封板（2026-09-22）——
-和弦图（Chord）、简谱（Jianpu）、吉他 TAB、五线谱（Staff，经 VexFlow adapter）
-四种记谱均可渲染，支持缩放与渲染诊断面板，并有覆盖四种记谱的契约测试矩阵
-（见 §5「路线图」）。
+（M0–M1.8）；谱面渲染 **M2 已封板**（2026-09-22），和弦图（Chord）、简谱（Jianpu）、
+吉他 TAB、五线谱（Staff，经 VexFlow adapter）四种记谱均可渲染。**M2.5 Score System
+Layout 的实现已全部完成**，T9c final validation 已于 2026-10-06 在本地完成，Stage A 的 seal 验证（文档同步提交的
+CI）待确认，之后**等待独立的 Stage B final seal**（M2.5 尚未封板；M3 尚未开始）。详见 §5「路线图」。
 
 ## 2. 核心发现与设计原则
 
@@ -88,7 +88,11 @@ src/
 │                                 Domain，两条分支单向不交叉
 │                                 （由 tests/unit/jcx/serialize/architecture.test.ts
 │                                 与 canonical.boundary*.test.ts 守卫）
-├── notation/chord/                SVG 和弦图渲染（当前唯一已实现的渲染子系统）
+├── notation/                       渲染层：从 Domain 出发，不读 JCX 文本 / AST
+│   ├── model/ · layout/ · svg/      RenderScore、诊断注册表、公共度量、SVG 节点
+│   ├── chord/ · jianpu/ · tab/ · staff/   四种记谱各自的 layout（Staff 只到 adapter 输入）
+│   └── system/                      M2.5 成品谱 system：分组 / 小节对齐 / 共享时间轴 /
+│                                    公共几何 / 和弦 overlay / 纵向组装 / PageModel
 ├── main/ · preload/ · renderer/   Electron 主进程 / 类型化能力桥 / React 桌面 UI
 └── shared/                        IPC 契约
 ```
@@ -181,11 +185,24 @@ projectionEquals(before, after); // true 表示语义往返无损
   `src/renderer/integrations/vexflow/**` 是全仓唯一允许 import VexFlow 的目录，
   `JCX Parser → VexFlow objects` 未被短路。渲染层有覆盖四种记谱的 C1/C2/C3 契约
   测试矩阵（详见 `HANDOFF.md` §30.1「M2 进行中状态」），已于 2026-09-22 经三平台 CI 全绿封板。
-  全仓测试规模（`npm test`）：74 个测试文件 / 5642 个用例全部通过。
+  （封板时的测试规模是 74 个测试文件 / 5642 个用例，属当时快照；当前数字见 `docs/VALIDATION.md`。）
+
+实现已完成、等待 Stage B final seal（2026-10-06 本地完成 T9c final validation，Stage A seal 验证待 CI）：
+
+- **M2.5 — Score System Layout**：把各声部从「各画各的」组装成成品谱 system——
+  - **System 模型**：`bracket=N` 视觉分组 → 同一 group 的声部进入同一 system；
+  - **共享小节几何**：跨声部小节对齐（结构冲突 / 错位锁存时降级并给出诊断）、共享时间轴、两端对齐；
+  - **刻印感知的宽度需求**：TAB / 简谱按拍连组，字形需求反向约束最小宽度（Meter 不直接决定间距）；
+  - **和弦 overlay**：和弦图 / 和弦名按名称精确查表，画在和弦变化的位置上方，碰撞时降级为只画名；
+  - **纵向组装**：层高按内容决定（简谱歌词行数、TAB 时值深度、五线谱纵向墨迹自适应加高）；
+  - **PageModel**：按 system 边界分页的纯数据模型（单个 system 不跨页）；打印界面属于 M5，尚未实现；
+  - **system 化 renderer**：屏幕按 system 渲染，所有 system 的音乐起点左对齐；行首和弦图与行首长歌词
+    向左伸出时整体留出左侧空白，任何缩放下都能横向滚动看全（T9c.P）；简谱歌词居中于数字。
+  - 五线谱只承诺小节框对齐（Staff tier 1），小节内音符的跨声部对齐属于 M2.5 之后的增强。
 
 下一阶段：
 
-- **M3 — Editor Core**：选区/光标模型、命令架构、撤销重做、源码 ↔ 可视化选区同步。
+- **M3 — Editor Core**（M2.5 封板之后）：选区/光标模型、命令架构、撤销重做、源码 ↔ 可视化选区同步。
   开工前先完成 M3 前的 UI 设计（功能清单 + 设计要求）。
 - **M4 及以后 — Playback / Import-Export / Layout**：播放、MIDI 导入导出、页面布局
   与打包分发。以 `HANDOFF.md` §61 的规划为准，本文档不重复展开、不提前承诺细节。
@@ -209,7 +226,7 @@ npm ci
 |---|---|---|
 | `npm run typecheck` | `tsc --noEmit` 严格类型检查 | 否 |
 | `npm test` | `vitest run` 全量单元测试 | 否 |
-| `npm run jcx:corpus-test` | 对本地 legacy `.jcx` 语料跑 Lexer / AST / Parse / Round-trip 四级回归，另含 GB18030 encoding composition 检查 | 是（语料缺失时打印跳过提示并以 exit 0 结束，CI 上直接跳过） |
+| `npm run jcx:corpus-test` | 对本地 legacy `.jcx` 语料跑 Lexer / AST / Parse / Round-trip 四级回归，另含 GB18030 encoding composition 检查 | 是（仅作为本地 validation evidence；当前 GitHub Actions workflow 不执行该命令；本地语料缺失时脚本打印跳过提示并以 exit 0 结束） |
 | `npm run jcx:fixture-report` | 对 `tests/fixtures/jcx/**` 跑同一套 fixture 矩阵检查，输出显式分母的六项指标 | 否（不含真实语料内容） |
 | `npm run jcx:scan` | 本地语料发现扫描器，生成 `docs/generated/` 下的统计报告 | 是 |
 | `npm run dev` | 启动 Electron + Vite 开发环境 | 否 |
@@ -219,7 +236,8 @@ npm ci
 `ubuntu-latest` 三平台矩阵上依次跑 `npm ci` → `npm run typecheck` → `npm test` →
 `npm run jcx:fixture-report`；最后一步在 GitHub Actions 环境下会把 fixture 矩阵的
 Markdown 表格追加到该次 run 的 Step Summary，便于直接在 CI 页面查看六项指标而不必
-下载日志。语料相关命令不在 CI 中运行（语料目录被 `.gitignore` 排除）。
+下载日志。当前 workflow 不执行 `npm run jcx:corpus-test` 与 `npm run jcx:scan`：真实语料被 `.gitignore` 排除，
+`jcx:corpus-test` 只作为本地 validation evidence。
 
 ## 7. 质量护栏
 
@@ -247,14 +265,23 @@ composition（GB18030 → UTF-8 → GB18030）必须 100%（分母 = 语料中 G
 计入分子分母，而不是从矩阵中静默剔除——报告会同时打印「豁免了几条」与「意外失败了
 几条」，两者含义不同，不得混淆。
 
-**四条已知限制**（详见 `HANDOFF.md` §30.1「四条已知限制」）：
+**格式层已知限制**（canonical 序列化，编号与 `HANDOFF.md` §30.1「四条已知限制」、`CHANGELOG.md` 保持一致；历史编号 1–4，
+其中第 2 条已关闭，**当前仍有效 3 类**：第 1、3、4 条）：
 
 1. 未闭合括号上下文（chord/grace/TAB 的 `[`/`{`）后紧跟小节线时，事件分类在往返后
    发生漂移（文本仍一致）。
-2. `TabGroupEvent.stroke` 的 `V`/`U` 前缀在 Domain 中没有对应事实字段，无法写回。
+2. ~~`TabGroupEvent.stroke` 的 `V`/`U` 前缀在 Domain 中没有对应事实字段，无法写回~~ **已关闭**：已在 M2.5
+   formats preflight（2026-09-22）回填，不再是限制。
 3. 组级时值后缀（如 `[CEG]2`）的写回形态与源文本不同（往返一致，排版不同）。
 4. `w:` 歌词行绑定到零事件声部时，canonical 会丢弃整条歌词行（Domain 语义级、不可
    逆，非排版丢失）。
+
+注意两种计数口径不同，不得混用：上表是**格式层限制类别**（当前有效 3 类）；fixture 矩阵的
+`L2_KNOWN_LIMITATION` 只钉死**入库的 fixture 实例**（当前 1 个登记实例，即第 1 条的 `unclosed-chord.jcx`）——
+第 3 条往返语义一致、不需要 L2 豁免，第 4 条会破坏 L2 相等，因此只由单元测试直接覆盖、不作为矩阵 fixture。
+
+谱面渲染层的已知限制与后续增强（例如五线谱 tier 2、bracket 连接符号、超长歌词碰撞）见
+`HANDOFF.md` §30.1「M2.5 T9c Stage A 实际状态」中的「M2.5 债务分类」（A / B / C 三类）。
 
 ## 8. 文档导航
 
@@ -263,8 +290,10 @@ composition（GB18030 → UTF-8 → GB18030）必须 100%（分母 = 语料中 G
 | [`HANDOFF.md`](HANDOFF.md) | 面向接手 Agent 的完整交接文档：逆向结论、逐里程碑实际状态、DoD 证据、下一步任务 |
 | [`CHANGELOG.md`](CHANGELOG.md) | 按里程碑归纳的产品/架构/兼容性变化 |
 | [`docs/JCX_SPEC.md`](docs/JCX_SPEC.md) | `.jcx` 格式规格，逐条结论标注 evidence level |
+| [`docs/M2.5_SYSTEM_LAYOUT_PLAN.md`](docs/M2.5_SYSTEM_LAYOUT_PLAN.md) | M2.5 Score System Layout 冻结方案与 post-freeze amendment 记录 |
+| [`docs/UI_DESIGN_BRIEF.md`](docs/UI_DESIGN_BRIEF.md) | M3 前置的 UI 设计需求说明（含当前谱面实现状态） |
 | [`docs/TECHNICAL_PLAN.md`](docs/TECHNICAL_PLAN.md) | 早期技术方案与架构原则（现状对照见文中说明） |
-| [`docs/VALIDATION.md`](docs/VALIDATION.md) | 兼容性验证记录 |
+| [`docs/VALIDATION.md`](docs/VALIDATION.md) | 验证记录（按时间倒序；含最新的本地 final validation 数字） |
 | [`NOTICE.md`](NOTICE.md) | 版权、语料与字体策略 |
 
 ## 9. 版权、语料与字体策略
@@ -278,7 +307,7 @@ fixture 时优先使用自造的合成样本。
 
 ## 10. 贡献约定
 
-- 每一轮改动后确保 `npm run typecheck && npx vitest run` 全绿再继续下一步。
+- 每一轮改动后确保 `npm run typecheck && npm test` 全绿再继续下一步（不要用 `npx` 临时下载工具）。
 - 单个源文件建议不超过 350 行。
 - 不使用 `class`（可读性偏好）；优先具名导出（`export { xxx }`），避免默认导出
   （Electron/Node 侧脚本除外）。

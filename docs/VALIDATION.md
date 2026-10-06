@@ -1,20 +1,70 @@
 # Compatibility validation log
 
-> **当前验证状态**：本文件最早的一条记录是 M0 阶段针对早期脚手架 parser 的一次性
-> 人工烟雾测试，早期脚手架代码（`parseJcx()`）已在 M1.6 移除。M1.4–M1.8 期间，
-> 验证方式已经从「手工跑一次、记一条日志」升级为**自动化、可重复执行**的分级
-> round-trip 回归：
+> **验证总览**：本文件按时间倒序记录关键 validation milestone；历史数字是当时的快照，不代表当前覆盖规模。
+> 当前的验证体系分两类：
 >
-> - fixture 矩阵（`npm run jcx:fixture-report`，102 个合成 fixture，六项检查，
->   见 `README.md` §7）；
-> - 本地语料回归（`npm run jcx:corpus-test`，11 个真实语料文件，Lexer /
->   AST / Parse / Round-trip 四级，另含 GB18030 encoding composition 检查；
->   语料 git 忽略、CI 上跳过）；
-> - 三平台 CI（`.github/workflows/ci.yml`，macOS/Windows/Ubuntu）。
+> - **GitHub CI**（`.github/workflows/ci.yml`，macOS / Windows / Ubuntu 三平台，Node 24）实际只运行
+>   `npm ci` → `npm run typecheck` → `npm test` → `npm run jcx:fixture-report`（合成 fixture 矩阵，
+>   不含真实语料）。
+> - **本地 final validation evidence**（不在 CI 中运行）：`npm run jcx:corpus-test`（11 份本地真实语料，
+>   语料目录被 `.gitignore` 排除）、真实语料的 production-pipeline probe、Electron 冒烟测试。
 >
-> 最新实测数字与已知限制以 `README.md` §6/§7 与 `HANDOFF.md` §30.1 为准，不在本文件
-> 重复维护。下面保留的是历史上第一条验证记录，作为项目验证方式演进的起点，不代表
-> 当前的验证覆盖范围。
+> 早期 M0 的一次性人工烟雾测试与早期脚手架 `parseJcx()` 已在 M1.4–M1.8 被自动化分级回归取代（见文末历史记录）。
+
+## 2026-10-06 — M2.5 T9c final validation（Stage A）
+
+> 本记录是 Stage A 的本地 final validation 证据。Stage A 的 seal 验证（包含本记录的文档同步提交在 GitHub CI 上的结果）
+> 待确认，由 Stage B seal commit 记录；M2.5 尚未封板。
+
+在 `42fb4df`（T9c.P code `1e7fb1c` + docs `42fb4df` 之后的 HEAD，工作区干净）上重新实际运行，**不沿用** T9c.P
+之前或 T9c.P 自身报告中的数字；被 T9c.P 打断的那次 Stage A 不作为本次证据。
+
+**自动化 gate（本地运行，原始退出码均为 0）**
+
+| 项 | 结果 |
+|---|---|
+| `npm run -s typecheck` | 通过 |
+| `npm test` | 108 个测试文件 / 7163 个用例全部通过 |
+| `npm run -s jcx:fixture-report` | 105/105 fixture：L1 105/105；L2 104/105 + pinned known limitation 1/105（`unclosed-chord.jcx`）、unexpected 0；L3 105/105；idempotent 105/105；closure 105/105；reparse-clean 105/105 |
+| `npm run -s jcx:corpus-test` | 11/11 语料：lexer / AST / parse / round-trip（byte-identical、semantic、reparse-clean、closure 均 11/11）全部通过；GB18030 encoding composition 10/10 |
+| T3–T9c 关键基线（`tests/unit/notation/` 下 12 个文件：`system.timeline.test.ts`、`system.timeline.brokenRhythm.test.ts`、`beams.regression.test.ts`、`system.compose.test.ts`、`t5.defaultRegression.test.ts`、`system.chordOverlay.test.ts`、`system.composeLayout.test.ts`、`system.composeLayout.lyrics.test.ts`、`system.composeLayout.staff.test.ts`、`system.verticalLayout.test.ts`、`system.pageModel.test.ts`、`staff.verticalDemand.test.ts`） | 12 个文件 / 483 个用例 |
+| render matrix（`tests/unit/notation/render.matrix.test.ts`） | 1215 个用例 |
+| architecture（`tests/unit/notation/` 下 `architecture.test.ts`、`architecture.t9a.test.ts`、`architecture.t9b.test.ts`、`architecture.t9bs.test.ts`、`architecture.t9c.test.ts`、`architecture.t9cp.test.ts`） | 6 个文件 / 702 个用例 |
+| T5 默认路径 golden | 945/945 键集合一致、漂移 0（golden 仍是 T5 `ed4ea88` 生成的版本，未更新） |
+
+**真实语料 production-pipeline probe**（11 份语料 × screen 960 / screen 300 / page target（默认 PageSpec content width））：每份语料走
+`loadJcx → buildRenderScore → composeSystemGeometry → composeScoreLayout`，screen 再走 `buildScoreRender`，page 再走
+`pageModel`。断言 system index 唯一递增、box / 层 / measure 全部有限、层序与 group 声部顺序一致、fallback 层高 0、Staff
+层高 ≥ 基础高且 topInset 合法、和弦 overlay anchor 不重复、J4 `leftOffset ≥ 0` 且所有 system 的音乐 x = 0 对齐、
+**T9c.P 歌词可达性**（每个简谱歌词 `leftGutter + lyricLeft ≥ 0`，有目标 `x − 宽/2`、无目标 `x`；只验证 screen renderer
+可达性，不把歌词墨迹解释为 `ScoreSystemLayout.box` 合同）、PageModel 保序 / 无空页 / 容量 / 分页边界最大装填、诊断码全部
+在注册表内（49 个）且级别只有 info / warning：**0 违例**。分支覆盖（真实语料，零样本记为 evidence gap）：结构冲突、小节数
+不一致、错位锁存（desync）、和弦 overlay、和弦图碰撞降级、Staff、Staff 动态加高、fallback、多声部 group 均有样本；
+同名 gchord 歧义、和弦符号冲突、多个 bracket group、connector 未建模、Staff topInset > 0、歌词实际决定 gutter 均为 0 样本。
+真实语料的歌词在两种 screen 宽度下都没有决定 gutter（gutter 由和弦决定）；歌词决定 gutter 的情形由合成单测与 Electron
+冒烟覆盖。
+
+**确定性**：同一进程内对每次 production call 连续调用两次并逐字段比较；另用两个独立进程分别生成 319 项逐字段哈希
+（诊断 id / 顺序、systems、box、measures、layers、和弦 overlay、Staff 几何、voice layout、ScoreRender、leftGutter /
+leftOffset、PageModel），差异 0。
+
+**PageModel**：真实语料 page target 共 34 页、overflow 0（当前证据，不是 golden）；首页页眉 11 次、续页页眉 23 次容量正确，
+23 个分页边界全部为最大装填；9 个零高 system 正常分页，含加高 Staff 的页 1 个。合成 PageSpec：exact-fit（首页恰好容纳
+2 个 system）、超高 system 各自独占一页且首页非空、overflow 诊断 12 条均锚到首层声部。单元测试覆盖首页 / 续页页眉、gap
+只出现一次、零高 system、超高 system、overflow 诊断锚点。**PageModel 只是分页数据模型；Print Preview / 打印界面属于 M5，
+尚未实现。**
+
+**Electron final smoke（本地 dev 渲染进程，合成谱 + 默认示例）：25 项全部通过，console 0 error。** 覆盖：默认示例（Guitar TAB + Melody 简谱）；和弦图、只有名字的和弦、
+和弦图碰撞降级为只画名；简谱 + TAB 共享 system；Staff 多 system 与极高 / 极低音动态加高（层高 272 / 96 / 158 / 262u，按
+真实字形墨迹测量全部在层框内）；fallback 单独成 system 并在下方提示；缩放 50% / 100% / 150% / 300%；窄 → 宽 → 窄（每档
+容器宽度连续多帧稳定，system 数往返一致，无反馈环）；左伸和弦与行首 34 字符长歌词在 `scrollLeft = 0` 时都可完整访问（300% +
+760px 视口下歌词左端位于可滚动区域内 129px）；有目标歌词 `middle`、无目标歌词 `start`，anchor 误差 0；音乐 x = 0 跨
+system 偏差 0；事件 / 关系 / 和弦 overlay / fallback 提示 / 诊断 → 谱面高亮均正确，Staff 重绘后高亮恢复；system 间距恰好
+一次 `systemGap × zoom`；console 0 error。已知且不修：极长有目标歌词与相邻歌词会轻微重叠（renderer / engraving polish）。
+
+**T9c.P 回归证据**：上述 gate 中的 `t5.defaultRegression`（945 零漂移）、`system.composeLayout.lyrics`、
+`jianpu.lyricAnchor`、`jianpu.external`（同行与跨 system 弧线端点）、`systemRender.lyricGutter`、`architecture.t9cp`
+全部通过；probe 与 Electron 冒烟的歌词可达性检查 0 违例。
 
 ## 2026-09-22 — M2 T8 render matrix：C1/C2/C3 契约的自动化矩阵回归
 
