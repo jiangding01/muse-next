@@ -2,7 +2,8 @@
 
 > 面向后续实现 Agent 的项目交接文档  
 > 项目代号：`muse-next`  
-> 当前阶段：**M0–M1.8 已封板；M2 Notation Rendering T0–T9 已全部完成（Chord / Jianpu / TAB / Staff 四种记谱可渲染 + T8 render matrix 契约测试 + T9 文档封板），✅ 2026-09-22 封板（原始 seal CI run 35700198783；T8.1 post-seal 契约收紧 run 35702615344；当前 HEAD run 35702885112 三平台全绿）；UI 设计 Brief 已完成（`docs/UI_DESIGN_BRIEF.md` v1.3.8）；M2.5 Score System Layout 方案冻结为 v1.0，**T0 已完成（2026-10-04，`6e5a532` + 命名修订 `3f5b48c`），T1 声部视觉分组已完成（`2b9882c`），T2 跨声部 measure identity 已完成（`218d143`），T2.1 小节错位锁存已完成（`9037351`），T3 共享小节时间轴已完成（`7ee1e27`），T3.5 TAB / 简谱节奏刻印已完成（`d2486aa`），T4 公共几何编排已完成（2026-10-05，`9661810`），T5 三个 voice layout 的外部几何适配已完成（2026-10-05，`ed4ea88`），均三平台 CI 全绿；T5.S VexFlow shared timing spike 已完成（2026-10-05，结论 `feasible-with-cost` / no adapter merged，M2.5 只承诺 Staff tier 1）；T6 和弦图层水平规划已完成（2026-10-05，`c74094e`）；T8 最终系统纵向编排已完成（2026-10-05，`b513261`）；T9a 页面模型已完成（2026-10-05，`49b0e11`）；T9b renderer system 化已完成（2026-10-05，`9eb5722`）；T9b.S Staff 纵向需求已完成（2026-10-06，`17efec3`，T9b 与 T9c 之间插入的 pre-seal 阶段）；T9c A0 seal coverage 测试加固已完成（2026-10-06，`2c2634c`）；T9c.P 简谱歌词 / 弧线横向锚点补丁已完成（2026-10-06，code `1e7fb1c` + docs `42fb4df`，T9c Stage A 第一次 final smoke 发现行首歌词左侧不可达后插入）；T9c Stage A ✅ COMPLETE（validation base `42fb4df`，docs `9a1fd5d`，CI run 37452773013 attempt 1 completed / success，macOS / Windows / Ubuntu 全部 success；见 §30.1「M2.5 T9c Stage A 实际状态」与 `docs/VALIDATION.md`）——M2.5 实现全部完成；M2.5 Stage B final seal = 本提交（`docs: seal M2.5 Score System Layout`），本提交 macOS / Windows / Ubuntu CI 全部 success 后 M2.5 正式 SEALED；M3 NOT STARTED**；M3 排在 M2.5 之后**（详见 §30 里程碑表、§30.1「M2 进行中状态」与「M2.5 T0 实际状态」、§69「当前明确的下一任务」）  
+> 当前阶段：**M0–M1.8 已封板；M2 Notation Rendering T0–T9 已全部完成（Chord / Jianpu / TAB / Staff 四种记谱可渲染 + T8 render matrix 契约测试 + T9 文档封板），✅ 2026-09-22 封板（原始 seal CI run 35700198783；T8.1 post-seal 契约收紧 run 35702615344；当前 HEAD run 35702885112 三平台全绿）；UI 设计 Brief 已完成（`docs/UI_DESIGN_BRIEF.md` v1.3.8）；M2.5 Score System Layout 方案冻结为 v1.0，**T0 已完成（2026-10-04，`6e5a532` + 命名修订 `3f5b48c`），T1 声部视觉分组已完成（`2b9882c`），T2 跨声部 measure identity 已完成（`218d143`），T2.1 小节错位锁存已完成（`9037351`），T3 共享小节时间轴已完成（`7ee1e27`），T3.5 TAB / 简谱节奏刻印已完成（`d2486aa`），T4 公共几何编排已完成（2026-10-05，`9661810`），T5 三个 voice layout 的外部几何适配已完成（2026-10-05，`ed4ea88`），均三平台 CI 全绿；T5.S VexFlow shared timing spike 已完成（2026-10-05，结论 `feasible-with-cost` / no adapter merged，M2.5 只承诺 Staff tier 1）；T6 和弦图层水平规划已完成（2026-10-05，`c74094e`）；T8 最终系统纵向编排已完成（2026-10-05，`b513261`）；T9a 页面模型已完成（2026-10-05，`49b0e11`）；T9b renderer system 化已完成（2026-10-05，`9eb5722`）；T9b.S Staff 纵向需求已完成（2026-10-06，`17efec3`，T9b 与 T9c 之间插入的 pre-seal 阶段）；T9c A0 seal coverage 测试加固已完成（2026-10-06，`2c2634c`）；T9c.P 简谱歌词 / 弧线横向锚点补丁已完成（2026-10-06，code `1e7fb1c` + docs `42fb4df`，T9c Stage A 第一次 final smoke 发现行首歌词左侧不可达后插入）；T9c Stage A ✅ COMPLETE（validation base `42fb4df`，docs `9a1fd5d`，CI run 37452773013 attempt 1 completed / success，macOS / Windows / Ubuntu 全部 success；见 §30.1「M2.5 T9c Stage A 实际状态」与 `docs/VALIDATION.md`）——**M2.5 ✅ SEALED**（2026-10-06，Stage B final seal `30395fe` `docs: seal M2.5 Score System Layout`，CI run 37457437828 attempt 1，macOS / Windows / Ubuntu 全部 success）；**M3.P0 Editor Core Planning ✅ SEALED**（2026-10-07，`docs/M3_EDITOR_CORE_PLAN.md` v5，见 §30.1「M3.P0 实际状态」）；**M3 implementation NOT STARTED；Next = M3 T0**（待用户指令）**（详见 §30 里程碑表、§30.1「M2.5 T9c Stage A 实际状态」与「M3.P0 实际状态」、§69「当前明确的下一任务」）
+>
 > 核心目标：以现代 TypeScript 技术栈重建已停止维护的 **Muse Pro 2.70** 的核心能力，并优先恢复其 `.jcx` 乐谱格式、谱面渲染、编辑与播放能力。
 
 ---
@@ -1803,10 +1804,12 @@ T9b.S ✅ 2026-10-06（`17efec3`，CI run 37339645866 三平台全绿，Staff �
 T9c A0 ✅ 2026-10-06（`2c2634c`，CI run 37346900838 三平台全绿，seal coverage 测试加固）；
 T9c.P ✅ 2026-10-06（code `1e7fb1c` CI run 37359560191 + docs `42fb4df` CI run 37360974994 attempt 2，均三平台全绿，简谱歌词 / 弧线横向锚点，T9c Stage A 中断后插入）；
 T9c Stage A ✅ 2026-10-06（validation base `42fb4df` 本地 final validation + 六文档同步 + 独立 docs review；docs `9a1fd5d`，CI run 37452773013 attempt 1 三平台全绿；见 §30.1「M2.5 T9c Stage A 实际状态」）；
-Stage B：final seal commit = 本提交；seal condition = 本提交三平台 CI success（满足后 M2.5 ✅ SEALED））
+Stage B ✅ 2026-10-06（final seal `30395fe`，CI run 37457437828 attempt 1 三平台全绿）——M2.5 ✅ SEALED）
 
 → M3
 Editor Core
+（M3.P0 架构规划 ✅ 2026-10-07 SEALED：`docs/M3_EDITOR_CORE_PLAN.md` v5；
+implementation NOT STARTED；阶段 T0–T9，下一步 T0）
 
 → M4
 Playback / MIDI
@@ -2698,12 +2701,12 @@ visual debt、T7 第 6 条），按 视觉 / 架构 / 测试 分类，每行注�
 - **T9c A0 ✅（2026-10-06，`2c2634c`，CI run 37346900838 三平台全绿；seal coverage 测试加固：brokenRhythm 正面用例 + `architecture.t9c.test.ts`）**。
 - **T9c.P ✅（2026-10-06，code `1e7fb1c` / docs `42fb4df`，CI 三平台全绿；T9c Stage A final smoke 中断后插入的补丁；见下方「M2.5 T9c.P 实际状态」）**。
 - **T9c Stage A ✅ COMPLETE（2026-10-06，validation base `42fb4df`，docs `9a1fd5d`，CI run 37452773013 三平台全绿；见下方「M2.5 T9c Stage A 实际状态」）**。
-- **Stage B M2.5 final seal**：本提交为 final seal commit；本提交三平台 CI success 后 M2.5 正式 SEALED。
+- **Stage B M2.5 final seal ✅（2026-10-06，`30395fe`，CI run 37457437828 三平台全绿）——M2.5 ✅ SEALED**。
 - 前置条件（M2.5 之前、独立 formats 小任务）：~~`strokePrefix → TabGroupEvent.stroke` 回填~~ **已完成（2026-09-22，M2.5 formats preflight）**：`scan.ts` 顶层循环把紧邻 `tabGroup` 的 `strokePrefix` 绑进 `TabGroupEvent.stroke`，不改 Domain 类型/serializer 代码，dangling-stroke 诊断未对绑定成功的 group stroke 误报（真悬空的仍照常发 info）。U06（body `L:` 按声部作用域）已于 `8a74e8e` 结案。
 - 架构：`src/notation/system/**`（contracts 叶子层 → groupVoices / measureIdentity / timeline / composeSystem / justify / chordOverlay / pageModel）；System = overlay layers（chord diagrams，`layoutChord` 保持 document 级）+ ordered voice layers（jianpu/tab/staff 接受外部 system/measure 几何）+ attached layers（lyrics）；voice layout 不得反向 import composer。
 - 关键裁决：`MeasureTimeline` 只含 timed onset（绝对 Rational 累计 offset）+ `chordSymbol` zero-time overlay，barline 固定 `endX`，decoration/grace/unknown 走 voice-local slot；跨 voice measure identity = ordinal candidate + 结构兼容性校验（时值总量逐 measure 绝对相等，不预设相等，不等进 tier 3；缺 measure 留空保留公共宽度；冲突 fallback + 诊断，不重写事件）；公共 measure width = 各 voice demand 取 max → packing → water-filling justify（`justified: full|partial|none`，末行不拉）；D11 精确名匹配（0 只画名 / 1 名+图 / >1 只画名 + ambiguity 诊断）；`ComposedSystemLayout {target:'screen'|'page'}`，PageModel 只收 page 产物，单 system 不跨页；Staff 验收 = tier 1（共享 measure 边界/宽度），T5.S 为非阻塞 spike。
 - 刻印（T3.5，先于 T4 demand solver）：TAB/简谱 beam 按拍分组（x/4 四分一拍、6/8 等附点四分一拍、5/8·7/8 与 `M:` raw 不分组；用 voice 自身 offset，不依赖 shared timeline）；**P1-3 窄化为新裁决**：Meter 不得直接决定 spacing，可用于 engraving grouping，glyph demand 反向约束最小宽度；扫弦 `V/U` → ↓/↑；纵向次序 和弦名 → 和弦图 → 箭头 → 第 1 弦。
-- 任务链：T0 contracts + negative guards → T1 group → T2 measure identity → T3 timeline → T3.5 beam/demand → T4 packing/justify（+ positive guard）→ T5 voice external geometry（只做三个 layout 的 adapter）→ T5.S staff spike → T6 chord overlay → T8 system matrix + **纵向 system 组装**（composer 调用三个 external layout、层 top / height、歌词 / TAB 深时值补高、和弦带、`ScoreSystemLayout` / `ComposedSystemLayout`，T5 用户裁决 N-a）→ T9a PageModel → T9b renderer system 化 → T9b.S Staff 纵向需求（pre-seal 插入）→ T9c smoke/docs/seal（实际执行为：A0 测试加固 → Stage A 第一次 final smoke 中断 → T9c.P 补丁 → Stage A ✅（final validation `42fb4df` + 六文档同步 docs `9a1fd5d` + CI run 37452773013 三平台全绿）→ Stage B 独立 seal commit（本提交；本提交三平台 CI success 后 M2.5 SEALED））。每步 ≤350 行、无 class/as/any、诊断码只追加、只用现有四种 Anchor。
+- 任务链：T0 contracts + negative guards → T1 group → T2 measure identity → T3 timeline → T3.5 beam/demand → T4 packing/justify（+ positive guard）→ T5 voice external geometry（只做三个 layout 的 adapter）→ T5.S staff spike → T6 chord overlay → T8 system matrix + **纵向 system 组装**（composer 调用三个 external layout、层 top / height、歌词 / TAB 深时值补高、和弦带、`ScoreSystemLayout` / `ComposedSystemLayout`，T5 用户裁决 N-a）→ T9a PageModel → T9b renderer system 化 → T9b.S Staff 纵向需求（pre-seal 插入）→ T9c smoke/docs/seal（实际执行为：A0 测试加固 → Stage A 第一次 final smoke 中断 → T9c.P 补丁 → Stage A ✅（final validation `42fb4df` + 六文档同步 docs `9a1fd5d` + CI run 37452773013 三平台全绿）→ Stage B 独立 seal commit ✅（`30395fe`，CI run 37457437828 三平台全绿，M2.5 SEALED））。每步 ≤350 行、无 class/as/any、诊断码只追加、只用现有四种 Anchor。
 
 **M2.5 T0 实际状态（2026-10-04，`6e5a532` CI run 37137587990 + 命名修订 `3f5b48c` CI run 37137776164，均三平台全绿）**：
 - 范围：只做 contracts / system metrics / 诊断码 / negative guards；renderer、三个 voice layout、Domain / parse / serializer 零改动。
@@ -3175,10 +3178,27 @@ visual debt、T7 第 6 条），按 视觉 / 架构 / 测试 分类，每行注�
   5. independent docs review ✅；
   6. Stage A docs commit ✅（`9a1fd5d`）；
   7. Stage A CI 三平台 success ✅（run 37452773013）；
-  8. Stage B final seal commit：本提交（`docs: seal M2.5 Score System Layout`）；
-  9. Stage B commit CI 三平台 success：push 后验证（本提交无法记录自身的 SHA 与 run，结果记在外部最终报告中）。
-  提交前 M2.5 = seal candidate；第 9 项满足后 M2.5 = ✅ SEALED。
-- 下一阶段（Stage B CI success 之后）：**M3 planning / Editor Core task breakdown**。M3 尚未开始，正式任务拆分在 M3 planning 中冻结。
+  8. Stage B final seal commit ✅（`30395fe`，`docs: seal M2.5 Score System Layout`）；
+  9. Stage B commit CI 三平台 success ✅（run 37457437828 attempt 1，macOS / Windows / Ubuntu 均 success；由 M3.P0 冻结提交补记）。
+  **M2.5 = ✅ SEALED（2026-10-06）**。
+- 下一阶段：M3 planning 已完成，见下方「M3.P0 实际状态」。
+
+**M3.P0 实际状态（2026-10-07，✅ SEALED：Editor Core 架构冻结方案 `docs/M3_EDITOR_CORE_PLAN.md` v5）**：
+- 范围：只产出架构冻结方案与 T0–T9 阶段拆分；未改 `src/**`、`tests/**`、`package.json`、`.github/**`。
+- 审查：四轮独立对抗审查（第一轮 1 CRITICAL / 3 HIGH；第二轮 8 HIGH；第三轮 4 HIGH；第四轮 0 HIGH / 6 条 P0 类 MEDIUM）+ v5 多次定点复核；
+  冻结时 CRITICAL = 0、HIGH = 0、P0 阻断类 MEDIUM = 0，H-1 已关闭。逐条处理记录见方案 §0.1–§0.3。
+- 核心裁决（详见方案 §5、§27）：Exact Source 是编辑 / 持久化唯一权威，每个 `sourceVersion` 的 AST / Domain / DomainIndex 是该版本唯一权威的语义快照；
+  可视化命令只产生最小局部 TextPatch；File Codec Boundary 在 main（解码、往返检查、保存前自解码校验、能力授权、sameFile、磁盘指纹、原子写）；
+  renderer 只经 `src/formats/jcxParse.ts` parse façade 使用格式层；统一撤销重做；确定性选区保持（补丁变换 + 指纹校验，fail closed）；
+  单窗口守卫（同一时刻至多一个 replacement intent，phase 状态机）。serializer / parser / notation / M2.5 既有行为零修改。
+- Historical amendments（方案 §3.2，A1–A11）：本节即为 HANDOFF 侧的正式加注入口——§44 的 mutable Domain 写回（A1，Command Architecture 保留）、
+  §68 反向回写链（A2，降为历史设计）、§45 永久 NodeId 作为唯一实现（A3）与 incremental update（A4，延期）由方案取代或限定；
+  其余 A5–A11 涉及 `docs/TECHNICAL_PLAN.md` §8、`docs/UI_DESIGN_BRIEF.md` H7 / §10.8 / §4.5 / F6、formats 入口组织，以方案 §3.2 为准；UI Brief H6 继续有效。
+- 带入 T5 的非阻塞契约事项：`SaveResult { requestId, phase, ok, clean }`，`phase` 标识具体阶段实例（intent 内递增 sequence / generation），
+  用于拒绝旧 saving phase 的迟到 `SaveResult`；不阻止 P0 冻结。
+- 冻结后规则：不再启动新的 M3.P0 架构审查，不再扩写方案；post-M3 / LOW / robustness debt 保留在方案 §26；
+  实现阶段发现的问题按 T0–T9 各阶段 gate 处理，不重新打开 P0。
+- **M3 implementation NOT STARTED；Next = M3 T0**（纯核心契约，见方案 §22），待用户明确指令。
 
 **M2 seal 与 M3 前置（T9 之后，恢复时从这里继续）**：**2026-09-22 追加裁决：M2 与 UI 目标版式确认之后、M3 之前先做 M2.5 Score System Layout（见 §30 路线表与 `docs/UI_DESIGN_BRIEF.md` §2.7.6、§10.17/10.18）；M2.5 的 System 模型 = overlay layers（chord diagrams）+ ordered voice layers（TAB/Jianpu/Staff 接受外部 system/measure 几何）+ attached layers（lyrics），chord 不是第四种声部 layout，system 高度由内容决定、分页只在 system 边界，`bracket` 只证明视觉分组、需定义 cross-voice measure mismatch policy。**原文：T0–T9 已全部完成并推送，
 下一步不是继续写渲染代码，而是：
@@ -3760,6 +3780,10 @@ interface TabNote {
 
 # 44. M3 Editor Core
 
+> **M3.P0 amendment (2026-10-07):**
+> 本节的 Command Architecture 继续有效，但「Command 直接修改 mutable Domain」的写回模型已被 M3.P0 supersede。
+> 现行编辑链为 Command → minimal TextPatch → Exact Source → loadJcx() → versioned semantic snapshot。见 `docs/M3_EDITOR_CORE_PLAN.md` §3.2 / D1。
+
 编辑层建议采用 Command Architecture。
 
 例如：
@@ -3787,6 +3811,10 @@ Undo / Redo
 ---
 
 # 45. Source ↔ Visual Sync
+
+> **M3.P0 amendment (2026-10-07):**
+> 本节的跨 Source / Domain / Render 可定位目标继续有效；永久 stable NodeId 不再是唯一实现要求，增量更新也不属于 M3 Core 首版。
+> 现行 identity / reconciliation 规则见 `docs/M3_EDITOR_CORE_PLAN.md`。
 
 这是长期关键能力。
 
@@ -4682,6 +4710,10 @@ Serializer
 JCX
 ```
 
+> **M3.P0 amendment (2026-10-07):**
+> 该反向写回链为历史设计，不再作为 M3 实现路线。
+> 普通编辑以 Exact Source 为持久化权威，通过最小 TextPatch 修改后重新解析；canonical serializer 仅用于显式 Normalize Copy。
+
 ---
 
 # 69. 当前明确的下一任务
@@ -4726,12 +4758,14 @@ Chord / Jianpu / TAB / Staff 四种记谱可渲染（T0–T7，T7 Staff + VexFlo
    **M2.5 T9b.S 已完成**（`17efec3`，三平台 CI 全绿，Staff 纵向需求，T9c 前插入的 pre-seal 阶段，见 §30.1「M2.5 T9b.S 实际状态」），
    **M2.5 T9c.P 已完成**（`1e7fb1c`，三平台 CI 全绿，简谱歌词 / 弧线横向锚点，T9c Stage A 中断后插入，见 §30.1「M2.5 T9c.P 实际状态」）。
    **M2.5 T9c Stage A ✅ COMPLETE**（validation base `42fb4df`，docs `9a1fd5d`，CI run 37452773013 三平台全绿，见 §30.1「M2.5 T9c Stage A 实际状态」）。
-   **当前正在执行 Stage B M2.5 final seal**：本提交为 final seal commit（只标记里程碑、不改代码与测试）；本提交 macOS / Windows /
-   Ubuntu CI 全部 success 后，M2.5 正式 SEALED。M3 尚未开始。剩余工作按 §30.1「M2.5 债务分类」的 A / B / C 三类处理
+   **M2.5 Stage B final seal ✅**（`30395fe`，CI run 37457437828 三平台全绿）——**M2.5 ✅ SEALED（2026-10-06）**。剩余工作按 §30.1「M2.5 债务分类」的 A / B / C 三类处理
    （post-M2.5 enhancement / polish & robustness / evidence gap），仍**不得**顺手实现 Staff tier 2；新的 architecture 守卫
    必须新建 `architecture.<stage>.test.ts`，不得再往 `architecture.test.ts` 追加；
-4. Stage B CI success 之后的下一阶段是 **M3 planning / Editor Core task breakdown**（待用户指令）。早期的 M3A / M3B / M3C 拆分
-   只是历史规划，正式任务拆分在 M3 planning 中冻结。
+4. **M3.P0 Editor Core Planning ✅ SEALED（2026-10-07）**：架构冻结方案 `docs/M3_EDITOR_CORE_PLAN.md` v5（见 §30.1「M3.P0 实际状态」）；
+   早期的 M3A / M3B / M3C 拆分只是历史分组名，正式阶段为方案 §22 的 T0–T9；
+5. **M3 implementation NOT STARTED。下一任务：M3 T0**（纯核心契约：Text Patch 与 SourceRange 变换、SourceProjection、会话派生与源码不变量、
+   EditorSelection 持久合同、IPC 契约类型、parse façade 与闭包守卫、冻结文件哈希清单），**待用户明确指令再启动**；
+   每阶段按方案 §29 的节奏：只读 preflight → 用户裁决 → 实现 → gate → 独立 review → 变异 → /check → 提交 → 三平台 CI → 文档 → 停下。
 ```
 
 **M2 入口要求**（§40/§41/§52）：从 `src/domain/` 的 `Score` 出发画谱面，

@@ -18,13 +18,18 @@ evidence level 以 [`docs/JCX_SPEC.md`](docs/JCX_SPEC.md) 为准。
 M1.8「Round-trip Guardrails」已封板。**M2 — Notation Rendering 已于 2026-09-22 封板**（Chord / Jianpu / TAB /
 Staff 四种记谱可渲染，seal 前 push 的 CI run 35700198783 三平台全绿）。
 
-**M2.5 Score System Layout：实现全部完成；T9c Stage A ✅ COMPLETE（Stage A docs / CI evidence：`9a1fd5d` / run 37452773013 success）；
-Stage B final seal = 当前提交，seal condition = 当前提交三平台 CI success，满足后 M2.5 正式 SEALED**（M3 尚未开始）。M2.5 在 M3 之前插入（方案冻结 v1.0），依次完成了 T0–T6、T8、T9a、T9b、T9b.S、
+**M2.5 Score System Layout ✅ SEALED（2026-10-06）**：T9c Stage A ✅ COMPLETE（Stage A docs / CI evidence：`9a1fd5d` / run 37452773013 success）；
+Stage B final seal `30395fe`，CI run 37457437828 三平台 success。M2.5 在 M3 之前插入（方案冻结 v1.0），依次完成了 T0–T6、T8、T9a、T9b、T9b.S、
 T9c.P（各条目见下方 Changed / Fixed）：声部按 `bracket=N` 分组成 system、跨声部小节对齐与共享时间轴、TAB / 简谱按拍
 连组、两端对齐、和弦图按名称精确查表并就地画在谱上、按内容决定层高（含五线谱纵向墨迹）、屏幕按 system 渲染、简谱
 歌词居中于数字且行首长歌词可横向滚动看全；另有按 system 分页的 PageModel（纯分页数据模型，打印界面属于 M5，尚未
 实现）。五线谱只承诺小节框对齐。现状、债务分类与恢复位置见 `HANDOFF.md` §30.1「M2.5 T9c Stage A 实际状态」，
 本轮验证数字见 `docs/VALIDATION.md`。
+
+**M3.P0 Editor Core Planning ✅ SEALED（2026-10-07）**：M3 Editor Core 的架构冻结方案定稿为
+[`docs/M3_EDITOR_CORE_PLAN.md`](docs/M3_EDITOR_CORE_PLAN.md) v5（源码权威编辑 + 版本化语义快照、File Codec Boundary 在 main、
+保存前自解码校验、能力授权的 IPC、统一撤销重做、确定性选区保持、T0–T9 阶段拆分），经四轮对抗审查与定点复核，
+CRITICAL / HIGH / P0 阻断类 MEDIUM 均为 0。本阶段只产出文档，未改代码与测试。**M3 implementation NOT STARTED，下一步是 T0。**
 
 ### Added
 

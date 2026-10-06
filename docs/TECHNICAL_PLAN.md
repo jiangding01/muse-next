@@ -229,6 +229,9 @@ new MuseScoreDocument
 render + serializer
 ```
 
+> **M3.P0 amendment (2026-10-07):**
+> 本节的命令/语义 Domain 原则继续有效；其中编辑动作直接形成新 Domain document 再回写的机制已被 M3.P0 的 source-authoritative TextPatch 模型取代（见 `docs/M3_EDITOR_CORE_PLAN.md` §3.2 A5）。
+
 Examples:
 
 - `InsertNote`

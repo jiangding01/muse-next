@@ -54,6 +54,9 @@
 | H9 | 诊断分两条独立通道：`jcx.*`（解析）与 `muse.render.*`（渲染），**不得在界面上合并成一个列表而抹掉来源** | `src/notation/model/diagnostics.ts` §4.2 |
 | H10 | **源码面板是 Inspector，不是主编辑画布的替代品。** Muse Next 的最终目标是乐谱编辑器，不是 JCX 文本 IDE；M3 先实现源码编辑不意味着产品重心转向代码编辑范式 | 产品裁决（v1.1）；`HANDOFF.md` §5.2 双表示、§44 Editor Core |
 
+> **M3.P0 clarification (2026-10-07):**
+> H7「文件不会因语法错误而不可打开」仅适用于 bytes 已成功解码为合法 source string 之后的 parser 阶段；unsupported/corrupt byte encoding 可以在 decode 阶段拒绝打开（见 `docs/M3_EDITOR_CORE_PLAN.md` §3.2 A6）。H6 不受影响，继续有效。
+
 **开放项（本轮设计要拍板的）**：界面字体、配色体系（含深色主题）、图标风格、
 三栏的折叠/拖宽行为、菜单与工具栏的职责划分、快捷键、空/错误状态的视觉语言、
 打印预览的页面呈现、诊断面板的位置与分级呈现。
@@ -101,7 +104,7 @@ macOS 与 Windows 桌面（Electron 44，React 19）。Linux 有打包器配置�
 ```text
 M2 Notation Rendering            ✅ 已封板（四种记谱可渲染；封板时按声部堆叠）
 UI 目标版式                       ✅ 本文档（§2.7 Guitar Arrangement System Profile）
-M2.5 System Layout               实现完成；T9c Stage A ✅（docs 9a1fd5d / CI 37452773013 success）；Stage B final seal 提交 CI success 后 SEALED（系统交错版式，§2.7.6）
+M2.5 System Layout               ✅ SEALED 2026-10-06（Stage B seal 30395fe / CI 37457437828 success；系统交错版式，§2.7.6）
 M3A source / save / history      → 源码编辑、保存、撤销重做
 M3B selection + 三向同步          → 依赖 M2.5 的 systemIndex / measure 几何 / x,y / voice grouping
 M3C visual editing               → 可视化编辑
@@ -109,7 +112,7 @@ M4 Playback → M5 Import/Export/Print → M6 Compatibility / Packaging
 ```
 
 > 权威里程碑表在 `HANDOFF.md` §30（M2.5 各阶段已逐项写入）。上表中的 M3A / M3B / M3C 是早期 M3 拆分规划的历史说明；
-> M2.5 已进入最终封板流程，M3 的正式任务拆分留待 M3 planning 阶段冻结，不再要求从本段同步旧拆分到 HANDOFF。
+> M2.5 已封板；M3 的正式任务拆分已在 M3.P0 冻结（`docs/M3_EDITOR_CORE_PLAN.md` v5 §22，T0–T9，2026-10-07），不再要求从本段同步旧拆分到 HANDOFF。
 
 ---
 
@@ -261,7 +264,7 @@ system 画布溢出不会反过来改变它）；测不到时退回固定 960 �
 > 本节是对它的逐项文字转述。
 >
 > **状态声明**：这是**产品目标版式**。M2 封板时是按声部堆叠的过渡态（M2 明确把跨声部对齐排除在范围外）；
-> **M2.5 起已按系统交错渲染**（实现完成；T9c Stage A ✅，docs `9a1fd5d` / CI run 37452773013 success；Stage B final seal 提交的 CI success 后 M2.5 SEALED），
+> **M2.5 起已按系统交错渲染**（M2.5 ✅ SEALED：Stage A docs `9a1fd5d` / CI run 37452773013；Stage B seal `30395fe` / CI run 37457437828，均三平台 success），
 > 尚未实现的目标元素见 §2.7.4。
 > 设计稿按目标版式画。
 
@@ -385,7 +388,7 @@ profile**，各自选择哪些层、以什么顺序出现，**不推翻 M2.5 的
 #### 2.7.6 里程碑 M2.5「乐谱系统版式」（已裁决排在 M3 之前，见 §10.17）
 
 > **状态（2026-10-06）**：M2.5 实现全部完成；T9c Stage A ✅ COMPLETE（docs `9a1fd5d`，CI run 37452773013 三平台 success）；
-> Stage B final seal 提交的三平台 CI success 后 M2.5 正式 SEALED。M3 尚未开始。
+> Stage B final seal `30395fe`，CI run 37457437828 三平台 success——M2.5 ✅ SEALED。M3.P0 架构规划已于 2026-10-07 冻结（`docs/M3_EDITOR_CORE_PLAN.md` v5），M3 实现尚未开始。
 > 下面的范围与影响点是当初的规划说明，落地结果见 §2.7.4 与 `HANDOFF.md` §30.1。
 
 **排在 M3 之前**（正式裁决）：M3B 的 selection / 三向定位 / anchor highlight /
@@ -439,6 +442,9 @@ grouping**——先把版式从"按声部堆叠"改成"系统交错"，才不会
 | F5 | 保存 / 另存为 | P1 | `TECHNICAL_PLAN.md` §10、`HANDOFF.md` §37（serializer 两模式） | 菜单 + 脏标记 + 关闭确认 | 未实现。**序列化有 preserve / canonical 两种模式**，UI 需要能表达"保存时是否规范化"这个选择 |
 | F6 | 只读 vs 编辑模式 | P1 | `HANDOFF.md` §44（M3 Editor Core） | 模式切换 + 状态提示 | 未实现。当前源码 textarea 可改但改不回文件，等于"沙盒编辑"。设计需要明确区分"浏览"与"编辑" |
 | F7 | 多文档 / 标签页 | P2 | 无 | — | 未实现且无规划。设计不必支持，但不要把布局做成"只能单文档" |
+
+> **M3.P0 clarification (2026-10-07):**
+> F6：M3 通过文档级 edit/write capability 与状态提示满足该要求，不新增全局 Read/Edit 产品模式；模式控件属于后续 UI 重设计（见 `docs/M3_EDITOR_CORE_PLAN.md` §3.2 A11）。
 
 ### 3.2 谱面视图
 
@@ -937,6 +943,9 @@ loading / error（如适用）八态，浅色与深色各一套。
 | 10.16 | 和弦图画在哪？ | **方案 B：每次和弦变化处，在六线谱正上方画小和弦图，和弦名标在图的上方**（§2.7.2） | **页首/纸面底部的和弦图总表不作为主要形式**，可保留为**可选的附录区**；本裁决要求开启 D11（和弦名 → `%%gchord` 按名查表），未定义的和弦只写名不画图 |
 | 10.17 | M2.5「乐谱系统版式」是否插在 M3 之前？ | **是。M2.5 排在 M3 之前** | 理由：M3B 的 selection / 三向定位 / anchor highlight / 可视化编辑**全部依赖最终谱面元素的 `systemIndex`、measure 几何、x/y、voice grouping**。正式路线：M2 ✅ → UI 目标版式 ✅ → **M2.5 System Layout** → M3A source/save/history → M3B selection + 三向同步 → M3C visual editing。范围与架构影响点见 §2.7.6 |
 | 10.18 | 每行放几小节由什么决定？ | **交互式 Score View 自动求解**（`availableWidth` + `zoom` + 内容最小宽度）；**Print Preview / PDF 在解析成功且放得下时优先尊重 `%%barsperstaff`**，否则按可打印宽度自动求解 | `%%barsperstaff` 当前是 **DOC-ONLY**（只在 lexer 词表 `lineVocabulary.ts`，未进 Domain）。若将来支持：屏幕端把它当作者给出的**上限/期望**——窄窗口允许提前换行，**不为硬塞而缩坏谱面**。优先级 —— **打印**：显式 `barsperstaff` > 页面/谱宽约束 > auto；**屏幕**：可用宽度 / zoom > `barsperstaff` 作上限。参考图的"每行 5 小节"**只是该成品谱的示例，不是默认值** |
+
+> **M3.P0 amendment (2026-10-07):**
+> 10.8：Normalize / Canonical Save As 在 M3 中定义为 Normalize Copy：导出规范化副本，不切换当前 Document identity、source、history 或 saved checkpoint（见 `docs/M3_EDITOR_CORE_PLAN.md` §3.2 A7）。
 
 ---
 
