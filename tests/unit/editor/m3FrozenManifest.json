@@ -1,0 +1,2076 @@
+{
+ "schemaVersion": 1,
+ "baselineCommit": "c04626010a7f8bda67ffac6e5c92ef68e2440235",
+ "files": [
+  {
+   "path": ".gitattributes",
+   "mode": "norm",
+   "sha256": "534bf8a5936dbc6f8c7b47f7be7cf99e98ce4c3ac007a8d93caa9785d9ebaf79"
+  },
+  {
+   "path": "scripts/jcx/corpus-lex-test.ts",
+   "mode": "norm",
+   "sha256": "dd4801ca4562b1de82774d8c26b2e2167edfc729e2d6baf33fcba8c7eb0cfb70"
+  },
+  {
+   "path": "scripts/jcx/fixture-report.ts",
+   "mode": "norm",
+   "sha256": "7a4c6d6c466f05206c8b79a073cbf3bf016613e3d0bf6ac8b3444240179d86f7"
+  },
+  {
+   "path": "scripts/jcx/lib/astInvariants.ts",
+   "mode": "norm",
+   "sha256": "520062fc3534c8bf7e5ac62eef470e2b59c779df1f93afc1dfa461e63eab048a"
+  },
+  {
+   "path": "scripts/jcx/lib/checkCorpusFile.ts",
+   "mode": "norm",
+   "sha256": "22a09e3f64d7933b422dd18bc32878bb9d43a940d41f0ed7b0de3db660aee660"
+  },
+  {
+   "path": "scripts/jcx/lib/classifyLine.ts",
+   "mode": "norm",
+   "sha256": "56b2dec2f74b704eacabd76c5639ed5c0759a906b984d0798e25001815223f16"
+  },
+  {
+   "path": "scripts/jcx/lib/decodeJcx.ts",
+   "mode": "norm",
+   "sha256": "d3133794955e9d3528cb51f782db6c7cc4ab50f28999fecaba717d3c5b551d01"
+  },
+  {
+   "path": "scripts/jcx/lib/encodingComposition.ts",
+   "mode": "norm",
+   "sha256": "479402d02000904a5ff6cb4cf72f8e42a051819a12007fea7759e4beeec9a69a"
+  },
+  {
+   "path": "scripts/jcx/lib/parseInvariants.ts",
+   "mode": "norm",
+   "sha256": "bd4d1f57029690d7fe9b4056653453a7aabd76076c21d3a9b8d6acaf51d13eb4"
+  },
+  {
+   "path": "scripts/jcx/lib/printCorpusSummary.ts",
+   "mode": "norm",
+   "sha256": "d8096604042f9675b6eff8939de06c787219414179bdfd150fdf2b574548e24a"
+  },
+  {
+   "path": "scripts/jcx/lib/roundtripInvariants.ts",
+   "mode": "norm",
+   "sha256": "93d5c45f71a6e7699089299fac2fc45921118f1385b65d8fa416524943bffc71"
+  },
+  {
+   "path": "scripts/jcx/lib/types.ts",
+   "mode": "norm",
+   "sha256": "969c8e3543ba08e9516809cd3ae6d10736ad4cce25bcbadff2849a55a5e4db8a"
+  },
+  {
+   "path": "scripts/jcx/scan-corpus.ts",
+   "mode": "norm",
+   "sha256": "01893ac1bd813a2585d63f77c713fe35c4598eabf366fbc555f6bf7cf36f1760"
+  },
+  {
+   "path": "scripts/notation/beam-regression-golden.ts",
+   "mode": "norm",
+   "sha256": "f4ac982d6a04f1f241bd2ecf28f09c8af7713f354d2fe0988be95d4fe59cbc85"
+  },
+  {
+   "path": "scripts/notation/t5-default-golden.ts",
+   "mode": "norm",
+   "sha256": "a3a6527f063157131810868d42faec4736a1149085fc26632e2b6f7e1429139e"
+  },
+  {
+   "path": "src/domain/event.ts",
+   "mode": "norm",
+   "sha256": "e55780b94de86ef4e1b46414cda86b0050df46b12d4449807480b29665fe4fc8"
+  },
+  {
+   "path": "src/domain/ids.ts",
+   "mode": "norm",
+   "sha256": "36ca8e6b6f6426d103d2e362bd9fc333a805b8c595d1a90a102b9df05f75699e"
+  },
+  {
+   "path": "src/domain/index.ts",
+   "mode": "norm",
+   "sha256": "3df4e457094fa6f55415cd1eaa7967515f99b9a87cda9bd12f5b615921caaccc"
+  },
+  {
+   "path": "src/domain/rational.ts",
+   "mode": "norm",
+   "sha256": "8517b72a65729f66b91c8ed34df424b6c56ecdf6b44a9a471031b6ba01073516"
+  },
+  {
+   "path": "src/domain/relation.ts",
+   "mode": "norm",
+   "sha256": "ec2ecd467e846aa97a12ee197bcc0f9e773cc4bc79513ddd50e4f30336d44894"
+  },
+  {
+   "path": "src/domain/score.ts",
+   "mode": "norm",
+   "sha256": "10f9e37bc41f829f9f6731b2e897d24500458c817b7b4f4e6bdddf4b3616d5ec"
+  },
+  {
+   "path": "src/domain/sourceRef.ts",
+   "mode": "norm",
+   "sha256": "7decaecc1ca7ea08ef3b0214acbfadbc0c1a049afe92b57e66d545bde08947b6"
+  },
+  {
+   "path": "src/domain/voice.ts",
+   "mode": "norm",
+   "sha256": "6ac6fa8c8ee35d989605919f2986f2b7fc9d5bd4aead018fe577585d220c9a60"
+  },
+  {
+   "path": "src/formats/jcx/ast/astPath.ts",
+   "mode": "norm",
+   "sha256": "e2ae35b9229736756e975d8b528e6e3a01956ebfd8054b8f173c08fcc5c10c0d"
+  },
+  {
+   "path": "src/formats/jcx/ast/buildBodyItems.ts",
+   "mode": "norm",
+   "sha256": "6a9c7a33c7037056374e2263540a216ceb6cd28ad7c9f7ef68e71a4e4fdd3871"
+  },
+  {
+   "path": "src/formats/jcx/ast/buildBodyLine.ts",
+   "mode": "norm",
+   "sha256": "6ed1d29359fb0db84a314a5ee36d76e1f57562c81936011fcb3fc2b07bf89408"
+  },
+  {
+   "path": "src/formats/jcx/ast/buildLines.ts",
+   "mode": "norm",
+   "sha256": "4b3494f04768fb2746f6abd82f5bb9dc3a64100e43b0a5fb3eb8c9016bc45b9e"
+  },
+  {
+   "path": "src/formats/jcx/ast/groupBrackets.ts",
+   "mode": "norm",
+   "sha256": "8a84c3d6360c089c33f3798264432b8445eca17b385b748e8db93017faf546d7"
+  },
+  {
+   "path": "src/formats/jcx/ast/groupPitch.ts",
+   "mode": "norm",
+   "sha256": "f87d8832aaaecf279ce987d60c492bdf24efa966491c39e49d44d3eaf351e873"
+  },
+  {
+   "path": "src/formats/jcx/ast/groupTab.ts",
+   "mode": "norm",
+   "sha256": "0f508d5185be5c4e8b0cd21811ddfa180f8184bf6600d5c8ac93dc7e94afd7ed"
+  },
+  {
+   "path": "src/formats/jcx/ast/index.ts",
+   "mode": "norm",
+   "sha256": "e17e634b9e8b36cbed332bea0a3db29e72d695a1b42b531b3023b50d57f3e0a7"
+  },
+  {
+   "path": "src/formats/jcx/ast/leaf.ts",
+   "mode": "norm",
+   "sha256": "80cde5c8e096a48d6cdc53eb03b37adfb1a154c8c8e55573c0fb31a8ca56b5a3"
+  },
+  {
+   "path": "src/formats/jcx/ast/nodes.ts",
+   "mode": "norm",
+   "sha256": "666b09baa7ec373487783937c2f8b5d1a20f19d6ef53ff0bec0a18533da24a27"
+  },
+  {
+   "path": "src/formats/jcx/ast/printAst.ts",
+   "mode": "norm",
+   "sha256": "620faa982b8d5f21def6a39538950360760a55efa667a2ee14aa464e44c03f9c"
+  },
+  {
+   "path": "src/formats/jcx/ast/tokenCursor.ts",
+   "mode": "norm",
+   "sha256": "de94a213b25b403ac9f95d96ff637cdaf9447e7780718527b623ab38cd198f5c"
+  },
+  {
+   "path": "src/formats/jcx/encoding/decodeJcx.ts",
+   "mode": "norm",
+   "sha256": "4030564fa98b6a3446900e84b0efec82a883e85f4f76eb0e456f0f236a7a998a"
+  },
+  {
+   "path": "src/formats/jcx/encoding/types.ts",
+   "mode": "norm",
+   "sha256": "c3399e9501f9db1712a084aa7a82942f06ac03cebc399bf9d1067c9705d85d53"
+  },
+  {
+   "path": "src/formats/jcx/index.ts",
+   "mode": "norm",
+   "sha256": "606d4d68a1f82e7dad64e52a12aa71ceb1f1c2eea6ee5284934385b06866433a"
+  },
+  {
+   "path": "src/formats/jcx/lexer/diagnostics.ts",
+   "mode": "norm",
+   "sha256": "a4bf97bbe8c8ffa0d5635e8acea4bcf68c94510fde1102a92d5faa4e0be004e9"
+  },
+  {
+   "path": "src/formats/jcx/lexer/index.ts",
+   "mode": "norm",
+   "sha256": "27c59edc8ee7643019907b3e333dc0e49d6b58d54b53b4ce5a49834602c9083d"
+  },
+  {
+   "path": "src/formats/jcx/lexer/lexBody.ts",
+   "mode": "norm",
+   "sha256": "5e397a04737b293fb963ce78df6d3c48be75023457f3dd7c2eda22a8d86bee11"
+  },
+  {
+   "path": "src/formats/jcx/lexer/lexBodyCommon.ts",
+   "mode": "norm",
+   "sha256": "19168708ee9777c9175f5167565a3f5c0087977c16f51500d1461686e6324323"
+  },
+  {
+   "path": "src/formats/jcx/lexer/lexBodyPitch.ts",
+   "mode": "norm",
+   "sha256": "710b582af9b74c7578fc34cbd6982b899a6ec88c9a51996a30adf696ffeb8148"
+  },
+  {
+   "path": "src/formats/jcx/lexer/lexBodyTab.ts",
+   "mode": "norm",
+   "sha256": "750276dd6fbee0251986e06044c8f1bfe95f968b117cb959e99e0b3e15d97d0c"
+  },
+  {
+   "path": "src/formats/jcx/lexer/lexDocument.ts",
+   "mode": "norm",
+   "sha256": "edc917f82def81984a2dcd237062388ea6e9986e9fafa561050b8355e8d4249d"
+  },
+  {
+   "path": "src/formats/jcx/lexer/lexLineKinds.ts",
+   "mode": "norm",
+   "sha256": "7efbcbd86979a4309a6efd724acaea139ffb21bf9d487e213c17bd5f3500a5a5"
+  },
+  {
+   "path": "src/formats/jcx/lexer/lexModes.ts",
+   "mode": "norm",
+   "sha256": "275f6365a4ea97bda8c0ed858e140e60c293f3a8a38775fce09518ee0878f037"
+  },
+  {
+   "path": "src/formats/jcx/lexer/lineSplit.ts",
+   "mode": "norm",
+   "sha256": "01785c6b2be5ef58ac23f758237a8e4705509843cd03aeb457245668ce436059"
+  },
+  {
+   "path": "src/formats/jcx/lexer/lineVocabulary.ts",
+   "mode": "norm",
+   "sha256": "eccaef2b0e64eac295ab3f6df2a1872ca0343e6b096ac1c0eb138b994b597db9"
+  },
+  {
+   "path": "src/formats/jcx/lexer/sourceSpan.ts",
+   "mode": "norm",
+   "sha256": "552a4016b7f4ca98eb95787abf84d422fde35def14add2d21e99787be5b0f06c"
+  },
+  {
+   "path": "src/formats/jcx/lexer/token.ts",
+   "mode": "norm",
+   "sha256": "79497a77b7c661c6bdbda8651c76bd628a7dcdf2a3db9671866d92d73944c422"
+  },
+  {
+   "path": "src/formats/jcx/lexer/tokenBuilder.ts",
+   "mode": "norm",
+   "sha256": "841684807dc9539103d79a91b61e7531620e76c89328ef23ed06693e95b819ec"
+  },
+  {
+   "path": "src/formats/jcx/loadJcx.ts",
+   "mode": "norm",
+   "sha256": "a7dd3b47a682259d170e2d9e730791cf529a6d42aa25b10d734f0b93438b5b3e"
+  },
+  {
+   "path": "src/formats/jcx/parse/body/lyrics.ts",
+   "mode": "norm",
+   "sha256": "8c9ec3a527a957a82de32d639c7cb17fa3ea86b6109fc82811cbee9023574654"
+  },
+  {
+   "path": "src/formats/jcx/parse/body/pairBrokenRhythm.ts",
+   "mode": "norm",
+   "sha256": "b7c1a80c015fbb91843318d6dae23e5d504265a7a4869df7c8dc43b249e72f75"
+  },
+  {
+   "path": "src/formats/jcx/parse/body/pairShared.ts",
+   "mode": "norm",
+   "sha256": "39f378094dfee4ce930bda813e7dc6977cecffb0be0358884c902d7a94473366"
+  },
+  {
+   "path": "src/formats/jcx/parse/body/pairSlurs.ts",
+   "mode": "norm",
+   "sha256": "1a0b951b627e7d25fa3de7cf3833983c649eec6eef2f6b7b07cc101ab56175aa"
+  },
+  {
+   "path": "src/formats/jcx/parse/body/pairTabRelations.ts",
+   "mode": "norm",
+   "sha256": "591fa28774466fa316ae1be9ddf546d7c3ff56bf7bf2ab693ed850fd43e6c8d1"
+  },
+  {
+   "path": "src/formats/jcx/parse/body/pairTies.ts",
+   "mode": "norm",
+   "sha256": "022ca851844a989f7b49269ed3a940561152269479c2ed1c393bc82ed38c3a4d"
+  },
+  {
+   "path": "src/formats/jcx/parse/body/pairTuplets.ts",
+   "mode": "norm",
+   "sha256": "067642299377985c94e60806bc8889e132d2f9fe6103e681ccbc3721bbc0a5e1"
+  },
+  {
+   "path": "src/formats/jcx/parse/body/pairing.ts",
+   "mode": "norm",
+   "sha256": "0517b5183b8fafc2e4987c050bf29cc8c6ead49079cf9b3952008243312c70c0"
+  },
+  {
+   "path": "src/formats/jcx/parse/body/scan.ts",
+   "mode": "norm",
+   "sha256": "aef1b428f7bb02768829bd1abddbe80bdff292fd7ee0ef3e55f51a57c940c374"
+  },
+  {
+   "path": "src/formats/jcx/parse/body/scanLeaf.ts",
+   "mode": "norm",
+   "sha256": "d666d0caa8aaec837b474e21dd24b059eabdfce33e7434a556ac6f0f4aedbab2"
+  },
+  {
+   "path": "src/formats/jcx/parse/body/scanPitch.ts",
+   "mode": "norm",
+   "sha256": "76acbd7e6ca556ca0ff78e428957d1c27299d1962a38f9b9d7a6afed62e6ea51"
+  },
+  {
+   "path": "src/formats/jcx/parse/body/scanTab.ts",
+   "mode": "norm",
+   "sha256": "0a19d66b242c06a4e3b572821d1dd15406210e200ab0d8cf0b13175e98ee2949"
+  },
+  {
+   "path": "src/formats/jcx/parse/body/segments.ts",
+   "mode": "norm",
+   "sha256": "0d8755fcae0416c4babe6d5cd77e2825674a16f789c20ee15b561bf69229a55b"
+  },
+  {
+   "path": "src/formats/jcx/parse/body/unitLength.ts",
+   "mode": "norm",
+   "sha256": "155d16935243bd119b2553a98b7fe156cba986a4f711e79a181a47c08c3351a1"
+  },
+  {
+   "path": "src/formats/jcx/parse/body/unitLengthBinding.ts",
+   "mode": "norm",
+   "sha256": "ce8fcabb38bb666c532bb545db021aa509ec6421f920ebad86fe9e02402d34f2"
+  },
+  {
+   "path": "src/formats/jcx/parse/buildIndex.ts",
+   "mode": "norm",
+   "sha256": "54073abd01a456afb9f3a2bdeb11570310db618643413995a2ae3b2b0ab3b080"
+  },
+  {
+   "path": "src/formats/jcx/parse/diagnostics.ts",
+   "mode": "norm",
+   "sha256": "0da17aa6c5e95238c9b1023dba2ef78a114202bba887ab0e0ce81711ce6974bb"
+  },
+  {
+   "path": "src/formats/jcx/parse/directives.ts",
+   "mode": "norm",
+   "sha256": "8ac7267153210cfa82ec43a59e76705fae97734c091add9f4a56e9a3f817ba22"
+  },
+  {
+   "path": "src/formats/jcx/parse/duration.ts",
+   "mode": "norm",
+   "sha256": "8ce0e1473bfab459369fbc435bf34cd1f6495a9d7f05609be236f96a1eaf2bd8"
+  },
+  {
+   "path": "src/formats/jcx/parse/gchord.ts",
+   "mode": "norm",
+   "sha256": "a27228aefb6a4be3beca7b61f5a35b8d399dda7d85b424c1d28f57dd1d9d81e1"
+  },
+  {
+   "path": "src/formats/jcx/parse/header.ts",
+   "mode": "norm",
+   "sha256": "749017691d8d9b74818f049d3fe3059fb49b2b419638ea5a1ef1580ae183fab8"
+  },
+  {
+   "path": "src/formats/jcx/parse/index.ts",
+   "mode": "norm",
+   "sha256": "00dd99d13418b57afe76ab228ee26e4b0e64ee6203e780a76ff73334be337622"
+  },
+  {
+   "path": "src/formats/jcx/parse/keyMeter.ts",
+   "mode": "norm",
+   "sha256": "87c7b5f957d13e60e3830f420768378217929834393aa242664e2fcde806c12b"
+  },
+  {
+   "path": "src/formats/jcx/parse/origin.ts",
+   "mode": "norm",
+   "sha256": "02111d4a37a6d36962ce004e9c8d93ecef5a6fa6188a04570e42b0b100e95f11"
+  },
+  {
+   "path": "src/formats/jcx/parse/voice.ts",
+   "mode": "norm",
+   "sha256": "b94c3307ad932ac64f22d4af9cca960f7859e242aed39633fe9769f807db3ab0"
+  },
+  {
+   "path": "src/formats/jcx/serialize/canonical/body.ts",
+   "mode": "norm",
+   "sha256": "1d4bbf86ebea6eae6162a19476f70f69dec08d5cdf9739376c76eb0cbc8bbbe2"
+  },
+  {
+   "path": "src/formats/jcx/serialize/canonical/bodyEvents.ts",
+   "mode": "norm",
+   "sha256": "8a31e899a491d95d88bc7335c0ee6747bb2c3d99e4c713885335fabd4a77482e"
+  },
+  {
+   "path": "src/formats/jcx/serialize/canonical/bodyFields.ts",
+   "mode": "norm",
+   "sha256": "ea90d9e026153e2ec02afbb606a8bd68dd4d62a6f90f39726f716a8ebbd59836"
+  },
+  {
+   "path": "src/formats/jcx/serialize/canonical/bodyRelations.ts",
+   "mode": "norm",
+   "sha256": "5b4e0619661d76ff5217ffc0babf4fbbf526b70b506e4200a37c4a4f5d2c8970"
+  },
+  {
+   "path": "src/formats/jcx/serialize/canonical/diagnostic.ts",
+   "mode": "norm",
+   "sha256": "1081e6355a1206ef641542cb9624a0cd11d9c26ef41261b8037efe7112a2f781"
+  },
+  {
+   "path": "src/formats/jcx/serialize/canonical/directives.ts",
+   "mode": "norm",
+   "sha256": "d97322f722854e8f7bbd1d7e51ba042a52d12c00aadf0e13a8e7460640235840"
+  },
+  {
+   "path": "src/formats/jcx/serialize/canonical/header.ts",
+   "mode": "norm",
+   "sha256": "786dd35cba9c1366894186bd0063077c4a513e94736d26324fe54d97b42963f0"
+  },
+  {
+   "path": "src/formats/jcx/serialize/canonical/index.ts",
+   "mode": "norm",
+   "sha256": "208942de28dbba475a102d5b4148f8a9231d71fa526caf8bb6a27e6b956d3908"
+  },
+  {
+   "path": "src/formats/jcx/serialize/canonical/lyrics.ts",
+   "mode": "norm",
+   "sha256": "e011859454dc28daa84826d6fa04099cf4d47779037aaa11837f673fbf1140af"
+  },
+  {
+   "path": "src/formats/jcx/serialize/canonical/voice.ts",
+   "mode": "norm",
+   "sha256": "30098faabdc91e7a5f075ab033838e28c74a40a2027e0d77acb7d4875f055b3f"
+  },
+  {
+   "path": "src/formats/jcx/serialize/encodeJcx.ts",
+   "mode": "norm",
+   "sha256": "5a3760e664f9360a5151d0974d658a1cd1e08006907ebab668a9499b60c9035b"
+  },
+  {
+   "path": "src/formats/jcx/serialize/index.ts",
+   "mode": "norm",
+   "sha256": "02a6befdb9408ec0b941f0f8a5f7a84ae97baed125deb7276366ef8c4dfcded7"
+  },
+  {
+   "path": "src/formats/jcx/serialize/preserve.ts",
+   "mode": "norm",
+   "sha256": "20c28400ca11e675db95ffbd3b2575121e54070f76eb494567005d5e20974e8a"
+  },
+  {
+   "path": "src/formats/jcx/serialize/projection/compare.ts",
+   "mode": "norm",
+   "sha256": "a36ae0810060cbb24ba33ff08566c576dedc486124f73b9d2bbe1a2bcb4db048"
+  },
+  {
+   "path": "src/formats/jcx/serialize/projection/events.ts",
+   "mode": "norm",
+   "sha256": "e2a57f216fb0997702ef169b68d02595dd1f917f2d82e1db645e19f5f9a35cb5"
+  },
+  {
+   "path": "src/formats/jcx/serialize/projection/index.ts",
+   "mode": "norm",
+   "sha256": "848901808c272aa6e08019ab41bf607e7edef11397e9ae6d0b18e47da1e631a6"
+  },
+  {
+   "path": "src/formats/jcx/serialize/projection/refs.ts",
+   "mode": "norm",
+   "sha256": "5a02d78e8fb20aff80d76860c273f8430d00cc901b0bcfb10565af5098795dbd"
+  },
+  {
+   "path": "src/formats/jcx/serialize/projection/types.ts",
+   "mode": "norm",
+   "sha256": "54957b8c314ad3742be4f66f13de036afdc617f7971b584aa8df3cd7d07d2066"
+  },
+  {
+   "path": "src/formats/jcx/serialize/projection/voice.ts",
+   "mode": "norm",
+   "sha256": "0f444c157c5256a1c016dcd04b066849713033c76db76aee6b4d65faf6fc09f9"
+  },
+  {
+   "path": "src/formats/jcx/serialize/types.ts",
+   "mode": "norm",
+   "sha256": "bd8e89c6b52fcb8cdd756445619a30d41c8e46e7da637edfcb4ad5cc9a60a286"
+  },
+  {
+   "path": "src/notation/chord/layoutChord.ts",
+   "mode": "norm",
+   "sha256": "7e2c2a0dea5e3405048763b0236361a44a9c2141f7f5dec3d89822612d6127e7"
+  },
+  {
+   "path": "src/notation/chord/toSvg.ts",
+   "mode": "norm",
+   "sha256": "b64eae21fcd55bbfe5efd27260a98297cf54e4c0970179dff081f48d223537e6"
+  },
+  {
+   "path": "src/notation/jianpu/jianpuArcs.ts",
+   "mode": "norm",
+   "sha256": "8742db35f850c13d51b83c2b4415ec6ef98ec569e0d725db77ac30c64c226d6e"
+  },
+  {
+   "path": "src/notation/jianpu/jianpuBeams.ts",
+   "mode": "norm",
+   "sha256": "288d9a8d1b1a528ff5e936f8480417842d90f0e6f6fbc1cb0923ade2efc35fb3"
+  },
+  {
+   "path": "src/notation/jianpu/jianpuEventNodes.ts",
+   "mode": "norm",
+   "sha256": "0026889b7ed593dbc962ea6596412937bd60c8319398bc27022fcd54d014aa4d"
+  },
+  {
+   "path": "src/notation/jianpu/jianpuGlyphBuilders.ts",
+   "mode": "norm",
+   "sha256": "25d197bff1b11429b46c942c86ff9ad955162e73ddbf7809512130d97df32e10"
+  },
+  {
+   "path": "src/notation/jianpu/jianpuGlyphs.ts",
+   "mode": "norm",
+   "sha256": "de45b3a855a1aab3087d2fb20a176ac9bdefea81206886c00de012cf2a7163c5"
+  },
+  {
+   "path": "src/notation/jianpu/jianpuSections.ts",
+   "mode": "norm",
+   "sha256": "22ac8b6be0726d4289cb83114284109db9b2dd2b093f330015ff9eec45179ea2"
+  },
+  {
+   "path": "src/notation/jianpu/jianpuSlotWidths.ts",
+   "mode": "norm",
+   "sha256": "b37ba13e3f7adebc1c1a8f0005711fd9a9bfae14dbef721ccff4641dbcce78e0"
+  },
+  {
+   "path": "src/notation/jianpu/jianpuVerticalDemand.ts",
+   "mode": "norm",
+   "sha256": "508b92e64f400dff8c5eb2a8175c981ca1eb01b408909464e645fb8108023cb2"
+  },
+  {
+   "path": "src/notation/jianpu/layoutJianpu.ts",
+   "mode": "norm",
+   "sha256": "83957e78808134e5f97c4a84df34903216d96f64caaccd38919f8d16a4e76283"
+  },
+  {
+   "path": "src/notation/jianpu/pitchToNumber.ts",
+   "mode": "norm",
+   "sha256": "233688e9c71ca687fb78364407ebfe04c344ed0aeb88ea633a59e1473c8093f0"
+  },
+  {
+   "path": "src/notation/jianpu/toSvg.ts",
+   "mode": "norm",
+   "sha256": "7d2083ba3023fb734d24daefbd8640d9904994b848cc2cc110ffc148d4a34c7e"
+  },
+  {
+   "path": "src/notation/layout/beamEngraving.ts",
+   "mode": "norm",
+   "sha256": "347159dc84d47d75e25dd98696ab402e2b74053e8017d44b3611b41f34acd429"
+  },
+  {
+   "path": "src/notation/layout/beamGroups.ts",
+   "mode": "norm",
+   "sha256": "52c1ef611203f28bebc14e5922030efaeb906e904193ceb17faedc55289a5a4e"
+  },
+  {
+   "path": "src/notation/layout/chordSymbolDisplay.ts",
+   "mode": "norm",
+   "sha256": "8750571c0b8c52fa1598c9248cdd26ed1eba73ddd8cb7b988f018ad2fc0f78ba"
+  },
+  {
+   "path": "src/notation/layout/eventTiming.ts",
+   "mode": "norm",
+   "sha256": "ca44b2132517ad6d463cb6240d4f4a04a2302f9b6b966a61bf2b9552a4a836ab"
+  },
+  {
+   "path": "src/notation/layout/fallbackSummary.ts",
+   "mode": "norm",
+   "sha256": "f7c4dd74d09d47dcc4ada0d241c30e082b9e7782619f8a9b38227718f21453a3"
+  },
+  {
+   "path": "src/notation/layout/keySpelling.ts",
+   "mode": "norm",
+   "sha256": "2f371586e080221ae0b8ca0802ba4c4a62622a24894502fcbba6ba3a3a791a47"
+  },
+  {
+   "path": "src/notation/layout/measureOnsets.ts",
+   "mode": "norm",
+   "sha256": "fbe1114f68d915983c3543ef362492c5323b5962b92f7a32c1c935681b823e17"
+  },
+  {
+   "path": "src/notation/layout/measurePlacement.ts",
+   "mode": "norm",
+   "sha256": "1aa7660be2f664a99f08cbaa74b41b0c7771479dffefa8d1ca635130811bcf1a"
+  },
+  {
+   "path": "src/notation/layout/metrics/chord.ts",
+   "mode": "norm",
+   "sha256": "f6c8180aa18a6631a9c080993306ff546557a8f8eb3984aba033924006f64e7f"
+  },
+  {
+   "path": "src/notation/layout/metrics/index.ts",
+   "mode": "norm",
+   "sha256": "edbbbe71c5480281d3c2c03438fa9092833b7b3166f85dc17c45b2f8b7a5bcd0"
+  },
+  {
+   "path": "src/notation/layout/metrics/jianpu.ts",
+   "mode": "norm",
+   "sha256": "1262ba74e60f5274dadf89c7d34986ce6d422f2f66cee6c09f55b8d4ca6fa13b"
+  },
+  {
+   "path": "src/notation/layout/metrics/shared.ts",
+   "mode": "norm",
+   "sha256": "ddf834b78ef01df6747efef4e765e17d3ccc187908df3a9093a3370ae572ba5f"
+  },
+  {
+   "path": "src/notation/layout/metrics/staff.ts",
+   "mode": "norm",
+   "sha256": "23d8726101259b6d7e8ca73aa0dd8c6edc0ea070e7122f1aa11d27c605e030dc"
+  },
+  {
+   "path": "src/notation/layout/metrics/system.ts",
+   "mode": "norm",
+   "sha256": "370f3d87a28661bf33f88768ee43952f10ca7d1e36cc67a508645fa39725542a"
+  },
+  {
+   "path": "src/notation/layout/metrics/tab.ts",
+   "mode": "norm",
+   "sha256": "4ea1ca72cb58a5ceb63b3cf58dcc5f7183bfb5d22c34bbdbde1aa7ef39cc4ca8"
+  },
+  {
+   "path": "src/notation/layout/primitives.ts",
+   "mode": "norm",
+   "sha256": "ac3f1453c197716e5bd71bd781ee5065e9c8479556428b6548105180f9fd9dec"
+  },
+  {
+   "path": "src/notation/layout/scoreHeader.ts",
+   "mode": "norm",
+   "sha256": "ecb5f82f290c76102f55839fd174ecac235f4a59409a9d6c301c8104621aeb66"
+  },
+  {
+   "path": "src/notation/layout/spacing.ts",
+   "mode": "norm",
+   "sha256": "d52ec15e1d7ba41289f7c03384ce69327eb010f3221cbd1bc6b0f2e2d727fd95"
+  },
+  {
+   "path": "src/notation/layout/systems.ts",
+   "mode": "norm",
+   "sha256": "fbebe20363207edc8f9124923fb1a6675b044f9b66c80a02c04eb8799471b4bc"
+  },
+  {
+   "path": "src/notation/layout/textMeasurer.ts",
+   "mode": "norm",
+   "sha256": "2333f09135c2f48b87eafa9743656dddd39b0dcab24ea885bcb38abc5a9e7774"
+  },
+  {
+   "path": "src/notation/model/buildRenderScore.ts",
+   "mode": "norm",
+   "sha256": "cef922b86325d4e1414f6b7e7d5e9e1d053852df863d24b6932229b43090a595"
+  },
+  {
+   "path": "src/notation/model/diagnostics.ts",
+   "mode": "norm",
+   "sha256": "0cc621a7a401aca00d2867dab0d775b93fa850f254092a5e113eeeedc40c25e0"
+  },
+  {
+   "path": "src/notation/model/duration.ts",
+   "mode": "norm",
+   "sha256": "659eb53e754f0a90728e453a6754d111d14714e6148c19752d5c5a942bc61021"
+  },
+  {
+   "path": "src/notation/model/relations.ts",
+   "mode": "norm",
+   "sha256": "82a65ab416714f7ac4ccaac7dc4d562556efdd1dff367b4adba23101818b54ba"
+  },
+  {
+   "path": "src/notation/model/types.ts",
+   "mode": "norm",
+   "sha256": "b4df8b9dfad1ed69d0d543e86eb9b94d5536f86c59891e9ba0aa9e69a189975e"
+  },
+  {
+   "path": "src/notation/staff/layoutStaff.ts",
+   "mode": "norm",
+   "sha256": "ad4600703f2ec515d1c830f2790bb6b5812d9849cc00b5c1911c50edb5681f23"
+  },
+  {
+   "path": "src/notation/staff/staffClef.ts",
+   "mode": "norm",
+   "sha256": "7f938968d33f475af50da7e32f59662a735a3955110bbee32465e077cf2a2a4e"
+  },
+  {
+   "path": "src/notation/staff/staffDurations.ts",
+   "mode": "norm",
+   "sha256": "c6ef2399f8f72fa1c595ac53012176f61e4847ecd4bebad9cb009ec885520d52"
+  },
+  {
+   "path": "src/notation/staff/staffEventNodes.ts",
+   "mode": "norm",
+   "sha256": "aa547d213ec13011fb935b0af9e63664e9c1c53165f16676e3d54b040e08a632"
+  },
+  {
+   "path": "src/notation/staff/staffHeader.ts",
+   "mode": "norm",
+   "sha256": "9934b03c98716dd89952086eb2f35af0ba9746504ecd26c6f1fe51153587f8a8"
+  },
+  {
+   "path": "src/notation/staff/staffPitch.ts",
+   "mode": "norm",
+   "sha256": "d5938b950c04e9ba04d68098ed64918341e56dcba9e90a6d792223fcae8ee470"
+  },
+  {
+   "path": "src/notation/staff/staffRelationTypes.ts",
+   "mode": "norm",
+   "sha256": "622b7faabe081ee99626aa153740ee213d1ec5499ceda8f017a38d8feb3c205f"
+  },
+  {
+   "path": "src/notation/staff/staffRelations.ts",
+   "mode": "norm",
+   "sha256": "afbfc919933632184ce20a0fea8453970d3b7355c62217abe43824f32eccca68"
+  },
+  {
+   "path": "src/notation/staff/staffSlotWidths.ts",
+   "mode": "norm",
+   "sha256": "11d83de3a38bf673d19537dd239bd8f4c5b06c8a69f46cd62d89e77bbbc8e95a"
+  },
+  {
+   "path": "src/notation/staff/staffTypes.ts",
+   "mode": "norm",
+   "sha256": "8b22ccefb3c3b0cf30c84ed600feeace492d6533aba66c1960360529cd941ad4"
+  },
+  {
+   "path": "src/notation/staff/staffVerticalDemand.ts",
+   "mode": "norm",
+   "sha256": "4da1387e2c306403730e7945cdf1fb87638287a760aba1bdefadfa8c4bac69d6"
+  },
+  {
+   "path": "src/notation/svg/node.ts",
+   "mode": "norm",
+   "sha256": "5c142d837163d86e9301b927af9f901d6e2b0aec34f7332d5033c5f47e2abdca"
+  },
+  {
+   "path": "src/notation/svg/serializeSvg.ts",
+   "mode": "norm",
+   "sha256": "a2f73213ed0fc6f954f7a35561ae088b2a356a4a8e640120ed4510fad9ddee42"
+  },
+  {
+   "path": "src/notation/system/chordOverlay.ts",
+   "mode": "norm",
+   "sha256": "54f431f6313d0f775dfe0bb6bae4853f1df7402b27634ca787c0aafeef10a192"
+  },
+  {
+   "path": "src/notation/system/chordOverlaySources.ts",
+   "mode": "norm",
+   "sha256": "d715831edae03e7765bbb77aaaf06cc22959e387ca33a0d71272d6c6eac4e80e"
+  },
+  {
+   "path": "src/notation/system/composeLayout.ts",
+   "mode": "norm",
+   "sha256": "eb70db4e1bdda5880d19b00da8dd4cfe646603a02f0e2c33ca37d737f49c50d3"
+  },
+  {
+   "path": "src/notation/system/composeSystem.ts",
+   "mode": "norm",
+   "sha256": "d9bbae551b795cbe1abb384291ec94be2c9c4eebed051bf49ba6019e84618b8f"
+  },
+  {
+   "path": "src/notation/system/contracts.ts",
+   "mode": "norm",
+   "sha256": "c668cc86d1342008550e339ca68ef1e73334f12a704b12b939babab9e67bb180"
+  },
+  {
+   "path": "src/notation/system/geometryTicks.ts",
+   "mode": "norm",
+   "sha256": "93bbc3b67a4e71f167a89141f04ef072be0c1a4b7ecf74f9449e70523e1d4988"
+  },
+  {
+   "path": "src/notation/system/groupVoices.ts",
+   "mode": "norm",
+   "sha256": "dbf4a8fb34c03dea5083cc4294e39af32bad0173bcdbcf6bfdb0d01a4774ce5f"
+  },
+  {
+   "path": "src/notation/system/justify.ts",
+   "mode": "norm",
+   "sha256": "26e8702240c2332f3676458de9e7a2b36579b7d7a59728bc43b325c3e80ef3e2"
+  },
+  {
+   "path": "src/notation/system/measureDemand.ts",
+   "mode": "norm",
+   "sha256": "2c0090d3d112db2be9c6bb7dbf964d52d0fbaecdb3826bc6098b80d1f72cbbaf"
+  },
+  {
+   "path": "src/notation/system/measureFeatures.ts",
+   "mode": "norm",
+   "sha256": "90c23180044a713121ac60a0357c737c0d9ee018a22a100004fc79a0963cb663"
+  },
+  {
+   "path": "src/notation/system/measureIdentity.ts",
+   "mode": "norm",
+   "sha256": "b8bb4480d3c86647c244e652a4bb20e7428764ea9e705db1fda91bada0052238"
+  },
+  {
+   "path": "src/notation/system/pageModel.ts",
+   "mode": "norm",
+   "sha256": "2770c7855f5b29432570221ee1c43d3a4745916fba0ce60f83ad944f76015ab0"
+  },
+  {
+   "path": "src/notation/system/timedDuration.ts",
+   "mode": "norm",
+   "sha256": "6230cca92839dd507dd28ed62690b56483754ecdfc4df635438ff3f3ff8c792f"
+  },
+  {
+   "path": "src/notation/system/timeline.ts",
+   "mode": "norm",
+   "sha256": "4188fb1cd5133db4edf952abbb645873e269b129a940035c855e2a8836c7051b"
+  },
+  {
+   "path": "src/notation/system/verticalDemand.ts",
+   "mode": "norm",
+   "sha256": "41fb9aa33938986f5bb16d15d80b1257bbd7abb04f1a655d8b081e265ed83d2a"
+  },
+  {
+   "path": "src/notation/system/verticalLayout.ts",
+   "mode": "norm",
+   "sha256": "40631c5cdcf02f34a60bb11ea6ad5f6631d55b4449b71e2d30a7d7efb3958a01"
+  },
+  {
+   "path": "src/notation/tab/layoutTab.ts",
+   "mode": "norm",
+   "sha256": "cfd7e0f36c373e31f28cace6b83fd9710d362c075d60dfd74d3daa5ad8359330"
+  },
+  {
+   "path": "src/notation/tab/tabBeams.ts",
+   "mode": "norm",
+   "sha256": "037171935241740e42d6aa589a4d1889f1211a8947d1c288e58fc03b3c6c08ab"
+  },
+  {
+   "path": "src/notation/tab/tabDurationGlyphs.ts",
+   "mode": "norm",
+   "sha256": "710df932e31a3de354b4aab79a1fa670f0d73c1e9bec3475cb1fd83a7304113b"
+  },
+  {
+   "path": "src/notation/tab/tabEventNodes.ts",
+   "mode": "norm",
+   "sha256": "c6d7691ce878b5856146551ceec6e10d4dee969dfd624c98b4a563b756251158"
+  },
+  {
+   "path": "src/notation/tab/tabGlyphs.ts",
+   "mode": "norm",
+   "sha256": "c33ae501d75cc498994eeeb74115e9ac7a74543fdaf4dce6a119b19f763e96bf"
+  },
+  {
+   "path": "src/notation/tab/tabRelations.ts",
+   "mode": "norm",
+   "sha256": "c812207df039a0227897ad667c5c6f7b45025a70b18da42866328228ad448d30"
+  },
+  {
+   "path": "src/notation/tab/tabSlotWidths.ts",
+   "mode": "norm",
+   "sha256": "0ac2c8ebc3fee6749a5294544bb4fb932ed884024eaca5983fac1df9e237b453"
+  },
+  {
+   "path": "src/notation/tab/tabStrokes.ts",
+   "mode": "norm",
+   "sha256": "df89fa7289ef9b858dc51f7d43918db4c860759d06b9fff7d2f3c858166758a0"
+  },
+  {
+   "path": "src/notation/tab/tabVerticalDemand.ts",
+   "mode": "norm",
+   "sha256": "f7ecdb1c9aaaf8aeb599402c7ac3fcf67a9c8011162c7ebde148b75915d385c6"
+  },
+  {
+   "path": "src/notation/tab/toSvg.ts",
+   "mode": "norm",
+   "sha256": "98464e1f7cb9f64a759905a3b378edb6b2c10fdea4621755601abce88a8b2a7d"
+  },
+  {
+   "path": "src/renderer/components/notation/ChordDiagram.tsx",
+   "mode": "norm",
+   "sha256": "4b12616a1adc4edf88d1a8647bcc98a10b9fff33899117f51cb9feaa5328156f"
+  },
+  {
+   "path": "src/renderer/components/notation/ScoreHeaderView.tsx",
+   "mode": "norm",
+   "sha256": "af8ce4de401cc523a2fcb4c93021a829f023b9b407e114bd6c8d8c196868c753"
+  },
+  {
+   "path": "src/renderer/components/notation/StaffSystemView.tsx",
+   "mode": "norm",
+   "sha256": "02060c3a31608ebb2be45b248ff4474e2439d7a835e895685c381b78851f7bcc"
+  },
+  {
+   "path": "src/renderer/components/notation/SvgTree.tsx",
+   "mode": "norm",
+   "sha256": "76fb0867335045d053ed1707a7c6677adc76564178b591b6ef86d89f69aedbcb"
+  },
+  {
+   "path": "src/renderer/components/notation/SystemView.tsx",
+   "mode": "norm",
+   "sha256": "835bdc86f11b0ea92ce7936d72dc3ca48d4f44dc393106052c61521ed2fe93cf"
+  },
+  {
+   "path": "src/renderer/components/notation/systemRender.ts",
+   "mode": "norm",
+   "sha256": "60c739bf5f7ee0d785e46b93f55dd43ca25480420cc64d66651dc54d7cc5ec9c"
+  },
+  {
+   "path": "src/renderer/components/notation/systemSlices.ts",
+   "mode": "norm",
+   "sha256": "a668bbe83d43dd85c7a97c658e3bc16d3b1a1080a9676c912781df953fc33013"
+  },
+  {
+   "path": "src/renderer/integrations/vexflow/renderStaff.ts",
+   "mode": "norm",
+   "sha256": "902591228b7218e7b63fea3b476ea829baf663809fa693b19380981d757837f6"
+  },
+  {
+   "path": "src/renderer/integrations/vexflow/staffSystemSlice.ts",
+   "mode": "norm",
+   "sha256": "37170a467cab437acf2a82075e6147db10fd98448991ac5199b412918cff0e6b"
+  },
+  {
+   "path": "src/renderer/integrations/vexflow/vexAnchors.ts",
+   "mode": "norm",
+   "sha256": "0a3eb2d031ef0e9419d5454c3c3ca68eb4ed47b289ffb7cc00862c5489824ae5"
+  },
+  {
+   "path": "src/renderer/integrations/vexflow/vexEncoding.ts",
+   "mode": "norm",
+   "sha256": "6b7850d7b49a6f8423252b1e07d73c95fcdee964b0a9bb209c8bd70f90fd91c8"
+  },
+  {
+   "path": "src/renderer/integrations/vexflow/vexRelations.ts",
+   "mode": "norm",
+   "sha256": "c278adc0d7ea9655c9021ba896296c2ad7e151126051bca0039d10da70349c18"
+  },
+  {
+   "path": "src/renderer/integrations/vexflow/vexTickables.ts",
+   "mode": "norm",
+   "sha256": "874c13b6c0fa708108c2aee98634332e02b1b7307f77150213b9af63d14ddda8"
+  },
+  {
+   "path": "tests/fixtures/golden/t35-raw-absent.sha256.json",
+   "mode": "norm",
+   "sha256": "66c13e89e1581139f758208714f12d4383cc5cfd285402ffb4830ca1a23608f7"
+  },
+  {
+   "path": "tests/fixtures/golden/t5-default-layout.sha256.json",
+   "mode": "norm",
+   "sha256": "0b9134262d6798a652280429f16a6bf4e8c3ce67fd231112db8bf34ce5bc8e27"
+  },
+  {
+   "path": "tests/fixtures/jcx/accidental-flat.jcx",
+   "mode": "raw",
+   "sha256": "943a181dcbd8025920ab55614be26a5315980b7d93a42444625a95269f57ec2a"
+  },
+  {
+   "path": "tests/fixtures/jcx/bare-duration-leaf.jcx",
+   "mode": "raw",
+   "sha256": "b64cb8026f715584a90ed32b6b634f9269183c1a080e3bbfaa1ba0f3f84c3881"
+  },
+  {
+   "path": "tests/fixtures/jcx/barline-variants.jcx",
+   "mode": "raw",
+   "sha256": "343f6c56c7e80074072d4af1e2ce71a2d7235842ccdef43e0afc0b3f48dabceb"
+  },
+  {
+   "path": "tests/fixtures/jcx/blank-lines.jcx",
+   "mode": "raw",
+   "sha256": "4dbb0755bd183b96e58289dc1665234c71bf0241878feac42c5f748585ebcaff"
+  },
+  {
+   "path": "tests/fixtures/jcx/body-field-l-two-voices.jcx",
+   "mode": "raw",
+   "sha256": "4fa4f743fe0ba8f362ec3cc84a7d9dbcb7abb5e0cd1d86f001a5ee497f88d697"
+  },
+  {
+   "path": "tests/fixtures/jcx/body-field-l.jcx",
+   "mode": "raw",
+   "sha256": "136ca05c68c7a5e26a4266eb261b693d1716cf2edf58a1419cc87eabae344c76"
+  },
+  {
+   "path": "tests/fixtures/jcx/bom-utf8.jcx",
+   "mode": "raw",
+   "sha256": "358adf0de15235087569b1781d6c505c01223c22894c1b08cfcbb0a89a6e3bbc"
+  },
+  {
+   "path": "tests/fixtures/jcx/broken-rhythm-left.jcx",
+   "mode": "raw",
+   "sha256": "beff0100f741134dc45a3ab796ad9c617368ee796e989194acf0807a34d62a27"
+  },
+  {
+   "path": "tests/fixtures/jcx/broken-rhythm-no-unit-length.jcx",
+   "mode": "raw",
+   "sha256": "1798b714a28db777ca42dc8c00b71e5f127acf416c10c4b7fe3d861176c5a1bb"
+  },
+  {
+   "path": "tests/fixtures/jcx/broken-rhythm-overflow.jcx",
+   "mode": "raw",
+   "sha256": "9af809a370ff58990c4ba997c1c15d5493cdb6cc96d80de841642e4ca850e05c"
+  },
+  {
+   "path": "tests/fixtures/jcx/broken-rhythm-pairs.jcx",
+   "mode": "raw",
+   "sha256": "16235d9049b11f6d95fb71bf1c225892cf0b657504a795df67008a860b1b4b93"
+  },
+  {
+   "path": "tests/fixtures/jcx/canonical-header-roles.jcx",
+   "mode": "raw",
+   "sha256": "c99c8de6cb7d4755e0b26599b23c9b7f1b57dbad304d3fb71131bb64cdaa5ac6"
+  },
+  {
+   "path": "tests/fixtures/jcx/chord-duration.jcx",
+   "mode": "raw",
+   "sha256": "4b90ec77ac9903240cf3b4663b9fb1b102bc3b1926fbfd7d72b87d9afaf93ca5"
+  },
+  {
+   "path": "tests/fixtures/jcx/chord-slash-bass.jcx",
+   "mode": "raw",
+   "sha256": "d4281507087836404a09a792c591d48d208488f8604918b723c66777b4853728"
+  },
+  {
+   "path": "tests/fixtures/jcx/comment-lines.jcx",
+   "mode": "raw",
+   "sha256": "53ff87f3c3fbbecf5e823f1935eaba5524e2dcf0a03e48881a91e76aeec4cbb3"
+  },
+  {
+   "path": "tests/fixtures/jcx/crlf-no-trailing-newline.jcx",
+   "mode": "raw",
+   "sha256": "702ec886f7810dea95e7f9f7adafbf567fb9ef76769103453fded0b164dc7d65"
+  },
+  {
+   "path": "tests/fixtures/jcx/crlf.jcx",
+   "mode": "raw",
+   "sha256": "6a1c7b6d12bbb7dc0ed27a60d77c27b5f905e55aa471644a98cb1d08d9dfc094"
+  },
+  {
+   "path": "tests/fixtures/jcx/decoration-adjacent.jcx",
+   "mode": "raw",
+   "sha256": "09fe84b5520395c545fe1c78315764ba18b66aff98168c7fc34fd7fa139de419"
+  },
+  {
+   "path": "tests/fixtures/jcx/decoration-complex.jcx",
+   "mode": "raw",
+   "sha256": "2447101c94266bd7f1e7f9a29659c3f88f1d784896bbd5a4cb81c166c2262076"
+  },
+  {
+   "path": "tests/fixtures/jcx/decoration-simple.jcx",
+   "mode": "raw",
+   "sha256": "2b28697802d4cecbf89d53b5f7245dc80f5b9ede75d31eb5c9e774585273a658"
+  },
+  {
+   "path": "tests/fixtures/jcx/directive-spaced.jcx",
+   "mode": "raw",
+   "sha256": "5ab555a60ad90eec1c72200594f4fe76318291fdd1948f82171a6ad473bc465d"
+  },
+  {
+   "path": "tests/fixtures/jcx/duplicate-fields.jcx",
+   "mode": "raw",
+   "sha256": "60b22463a20332482e3efa249d625473a70e72384a1ac22e43b20bb37baae152"
+  },
+  {
+   "path": "tests/fixtures/jcx/duration-slash.jcx",
+   "mode": "raw",
+   "sha256": "17aa8bb01bfbabd4042b5eb9896a2f1d5b1d222a5eeeec67e6e646a7026e1400"
+  },
+  {
+   "path": "tests/fixtures/jcx/empty-chord.jcx",
+   "mode": "raw",
+   "sha256": "078167fcee0cb4071d6c9d5c1d7b0873514b9e898d55c177446ee5132dd6c161"
+  },
+  {
+   "path": "tests/fixtures/jcx/encoding/bom-crlf.jcx",
+   "mode": "raw",
+   "sha256": "e84bab53eb15f8d7c6b963de652eaa5a0be0d037f650174b01fd22e8471538d0"
+  },
+  {
+   "path": "tests/fixtures/jcx/encoding/encoding-bom.jcx",
+   "mode": "raw",
+   "sha256": "13fbae61cce6a9ff4ec8e21130a24e5d42f0d7a55713b52bc7226d9afb81e77e"
+  },
+  {
+   "path": "tests/fixtures/jcx/encoding/encoding-gb18030.jcx",
+   "mode": "raw",
+   "sha256": "f85c6a9c34677f29f4cd98d51554a1c9ce321064280400e29ecf59b78227913d"
+  },
+  {
+   "path": "tests/fixtures/jcx/encoding/encoding-utf8.jcx",
+   "mode": "raw",
+   "sha256": "986e6e0fce77911354c8965b70b9a98f253fb415169451e87299f7e1cdcd42e6"
+  },
+  {
+   "path": "tests/fixtures/jcx/encoding/gb18030-leading-feff.jcx",
+   "mode": "raw",
+   "sha256": "dc1c5b207046f41107c6b10f10cb5d26eed9c76d06af28f03e7f36dbce590975"
+  },
+  {
+   "path": "tests/fixtures/jcx/gchord-bad-arity.jcx",
+   "mode": "raw",
+   "sha256": "f8a0f582e95edbcfa0e2c5b3b5f347125df52dd0b84cca5dfbebe448f1fc56ca"
+  },
+  {
+   "path": "tests/fixtures/jcx/gchord.jcx",
+   "mode": "raw",
+   "sha256": "569aecb50c548ce271abdaa2ec7cfe8cb581731ac73b81d15fcb715979f3935c"
+  },
+  {
+   "path": "tests/fixtures/jcx/grace-tab-nested.jcx",
+   "mode": "raw",
+   "sha256": "cb324f16425d00d0c5da05caa9a74845432e687e663efc67b67328c9bc33ade6"
+  },
+  {
+   "path": "tests/fixtures/jcx/grace-unclosed.jcx",
+   "mode": "raw",
+   "sha256": "61a7c3dee544b1a4b62d18b01d586ae6a436dae9f94e91f523d49916b40d7a35"
+  },
+  {
+   "path": "tests/fixtures/jcx/grace.jcx",
+   "mode": "raw",
+   "sha256": "e04554a08a372c34d7520161a27d4c863a8cabdc9a9fe8705dd8ea067681db12"
+  },
+  {
+   "path": "tests/fixtures/jcx/header-override.jcx",
+   "mode": "raw",
+   "sha256": "b0d02539b31057f0c649fd21f543264b185b1c62eed6a935fe169a1106916c08"
+  },
+  {
+   "path": "tests/fixtures/jcx/inline-field-ignored.jcx",
+   "mode": "raw",
+   "sha256": "4003d5f6f3c3a5cfe1c80213584c3b42afd6abe1ee9854f6a8e32864b74dd655"
+  },
+  {
+   "path": "tests/fixtures/jcx/inline-percent.jcx",
+   "mode": "raw",
+   "sha256": "44c5b80df12f3ef5fb9fd02eb6f471a4555580020de92aa01d71a11599e4929f"
+  },
+  {
+   "path": "tests/fixtures/jcx/inline-voice-alternating.jcx",
+   "mode": "raw",
+   "sha256": "071e527c87a0b73cc8ec8e46f5dd480bfb5307f0bc9cac49b173a534eee76881"
+  },
+  {
+   "path": "tests/fixtures/jcx/inline-voice-spaced.jcx",
+   "mode": "raw",
+   "sha256": "206b2be15b501f3d767089065f54d3a156d2c9c13883be0db568aedacdd357b9"
+  },
+  {
+   "path": "tests/fixtures/jcx/inline-voice-undeclared.jcx",
+   "mode": "raw",
+   "sha256": "4c39324cb5f311ab7edd196f610efd47a319583ff5a881b227653badac485373"
+  },
+  {
+   "path": "tests/fixtures/jcx/inline-voice.jcx",
+   "mode": "raw",
+   "sha256": "42d5b21ee862860180b11181f84efa2cfa418b38d4260cfd9c6a515b49daad59"
+  },
+  {
+   "path": "tests/fixtures/jcx/jianpu.jcx",
+   "mode": "raw",
+   "sha256": "8b2d1f7a95e0ae530b63c173e37bf3926e4b1275559015d00827044e0bf4be15"
+  },
+  {
+   "path": "tests/fixtures/jcx/lf.jcx",
+   "mode": "raw",
+   "sha256": "d4488b9137e2082fb48e0502bd71a9bf6d17614ee54e942934b9dbb9333c75ee"
+  },
+  {
+   "path": "tests/fixtures/jcx/lyrics-inline-trailing.jcx",
+   "mode": "raw",
+   "sha256": "9a6393a3bf5bf649fcc9a00286be615702e48ad4fba1dfcf75f3dda07b4590af"
+  },
+  {
+   "path": "tests/fixtures/jcx/lyrics-multi-verse.jcx",
+   "mode": "raw",
+   "sha256": "265e5d4eb6cb52c6b6a78a51d2aac0ad676efc3a8d0cd48a97d8600a72d63a79"
+  },
+  {
+   "path": "tests/fixtures/jcx/lyrics-no-target.jcx",
+   "mode": "raw",
+   "sha256": "793eb50595948c1cdde175d42578456e77e2e0702ca4224c45c8c10ca5eeb654"
+  },
+  {
+   "path": "tests/fixtures/jcx/lyrics-overflow.jcx",
+   "mode": "raw",
+   "sha256": "638bbf74e297d4a2d622bc0f8414e040a74b5dfe9c682a814861c0a4f578a7b5"
+  },
+  {
+   "path": "tests/fixtures/jcx/lyrics-tab.jcx",
+   "mode": "raw",
+   "sha256": "ff793c7c98a714976b77efafab14c94bd0b7d2bf9438b88d6f15d0f2f0c0a191"
+  },
+  {
+   "path": "tests/fixtures/jcx/lyrics.jcx",
+   "mode": "raw",
+   "sha256": "eb1338dd94ba2cf9ebce080bee615796a1a24c5ce49045be80d3c638495a2977"
+  },
+  {
+   "path": "tests/fixtures/jcx/magic-header.jcx",
+   "mode": "raw",
+   "sha256": "509ec7907c442bcf82fb834646e6e400f1a8e0d3402e1e03d2c26bde68b1cb3f"
+  },
+  {
+   "path": "tests/fixtures/jcx/meter-common-time.jcx",
+   "mode": "raw",
+   "sha256": "cde6bdc80fd1c8cf7c95be3703483c3870607339857a4f16573688eda9b0c675"
+  },
+  {
+   "path": "tests/fixtures/jcx/minimal.jcx",
+   "mode": "raw",
+   "sha256": "1429ee61580bacb13a6f85b69e61b7c50908f9b5eacdf6f1a8efce740eb97bf2"
+  },
+  {
+   "path": "tests/fixtures/jcx/no-magic-header.jcx",
+   "mode": "raw",
+   "sha256": "22f6b0d46f341962401b2833e2af9ee6be83445d69db4cb17c288e40ad084070"
+  },
+  {
+   "path": "tests/fixtures/jcx/no-trailing-newline.jcx",
+   "mode": "raw",
+   "sha256": "d897189fc8848c2ee8e90acee8b51b312cb2443c7e10aec1668bd7afd5b0f38c"
+  },
+  {
+   "path": "tests/fixtures/jcx/no-unit-length-no-meter.jcx",
+   "mode": "raw",
+   "sha256": "01f8a64a488ae3c1a81c7c71fd6d52f4e9b721a8cdec392fbb39483d95db9bf6"
+  },
+  {
+   "path": "tests/fixtures/jcx/no-unit-length-with-meter.jcx",
+   "mode": "raw",
+   "sha256": "d1bda820166a97c06950face93463926596558f861436cf4f03a99022442ae20"
+  },
+  {
+   "path": "tests/fixtures/jcx/no-voice-at-all.jcx",
+   "mode": "raw",
+   "sha256": "e2e36993882fdfaaaab27993967a67d8d3d1607939addfc882e9fb9ddb8dcc19"
+  },
+  {
+   "path": "tests/fixtures/jcx/pitch-chord-adjacent.jcx",
+   "mode": "raw",
+   "sha256": "c42d869cc2c78fa3b312cb0a1742ddd1b579acc56a5e56521faedc2e68c0b6eb"
+  },
+  {
+   "path": "tests/fixtures/jcx/rest-tab-duration.jcx",
+   "mode": "raw",
+   "sha256": "8caced308f2b0c92fe469bdbc6635746f5ab358b00af234e8f4273203805e2e6"
+  },
+  {
+   "path": "tests/fixtures/jcx/rest-z-upper.jcx",
+   "mode": "raw",
+   "sha256": "c28d0f0eeef483ac18b3b9b6b6242008a60191aad5509e06edf73ba0207c8d0e"
+  },
+  {
+   "path": "tests/fixtures/jcx/scan-markers.jcx",
+   "mode": "raw",
+   "sha256": "006409fbc20ece4ec8884b0cb94d7d0596bbf251710fc96c99d9aeb806617899"
+  },
+  {
+   "path": "tests/fixtures/jcx/scan-pitch-kinds.jcx",
+   "mode": "raw",
+   "sha256": "b7a60efd43f225bb728b4164fe26eac21932f5baa4b0fe97974ace7d6a33ca35"
+  },
+  {
+   "path": "tests/fixtures/jcx/scan-tab-kinds.jcx",
+   "mode": "raw",
+   "sha256": "f3dfffaf2cfdbcee58b9b66dd0ab41a746c48d6a730992953e13b857215f9283"
+  },
+  {
+   "path": "tests/fixtures/jcx/scan-unit-length-scope.jcx",
+   "mode": "raw",
+   "sha256": "870f871ac5307f66d0b57cc5b50ed58254b21ac0291e06026cb9f516c358ec7f"
+  },
+  {
+   "path": "tests/fixtures/jcx/showfinger-malformed-then-valid.jcx",
+   "mode": "raw",
+   "sha256": "cc62d659d5e226fe977b911698ebf681cd08fa0ff70d00d4500fb3c50052228b"
+  },
+  {
+   "path": "tests/fixtures/jcx/showfinger-variants.jcx",
+   "mode": "raw",
+   "sha256": "1b805bd6abfaa54d23f97669e64dd80795804364aea7a55e3d0558da8de5ab79"
+  },
+  {
+   "path": "tests/fixtures/jcx/slur-cross-line.jcx",
+   "mode": "raw",
+   "sha256": "ece903977603631ae36ca1338f9f48df4135b9f684ee4c549ebff3f96307bb9a"
+  },
+  {
+   "path": "tests/fixtures/jcx/stray-closers.jcx",
+   "mode": "raw",
+   "sha256": "bb3f778b3e328f7dfc94eed095fd721e069180a3d3cdf441d68be21503d3ae07"
+  },
+  {
+   "path": "tests/fixtures/jcx/tab-direction.jcx",
+   "mode": "raw",
+   "sha256": "d33acd52bebace6da0724bd4f0fe93614e478c9312bcfcd39da59ec43469cca8"
+  },
+  {
+   "path": "tests/fixtures/jcx/tab-grace.jcx",
+   "mode": "raw",
+   "sha256": "88fddce74f47c41b6936c86883084ba3e8c40daab30d7b97c2d02cca4f12c0a7"
+  },
+  {
+   "path": "tests/fixtures/jcx/tab-group-stroke.jcx",
+   "mode": "raw",
+   "sha256": "c00cb7d31d41baa8046cc4ed08f2fd56cce99d731e805bc75f6c3688b14cfba9"
+  },
+  {
+   "path": "tests/fixtures/jcx/tab-group-unclosed.jcx",
+   "mode": "raw",
+   "sha256": "6314909bdf179d9e9a0dca45b911a6030d71fd5f66f2f1bddd74b5c39d339a13"
+  },
+  {
+   "path": "tests/fixtures/jcx/tab-relation-cross-string.jcx",
+   "mode": "raw",
+   "sha256": "67bb5d60c5c307a9c313b97e8c409a7794b9bb06b2fb0f25d416eb81f1bd1ddf"
+  },
+  {
+   "path": "tests/fixtures/jcx/tab-relation-grace-exit.jcx",
+   "mode": "raw",
+   "sha256": "8d4194d6ac2090a4de9679b4d7c7436856361059cb36736db3c1b2a5f23c23df"
+  },
+  {
+   "path": "tests/fixtures/jcx/tab-relation-group-endpoints.jcx",
+   "mode": "raw",
+   "sha256": "b4428831f5d8164c1fc90c613a24156ccc8746d74bf24f7ff9dd50db52a781cd"
+  },
+  {
+   "path": "tests/fixtures/jcx/tab-relation.jcx",
+   "mode": "raw",
+   "sha256": "2341940e6d877e2e333e99f8fffc2cedff85634dd62142460d812770eb69ca93"
+  },
+  {
+   "path": "tests/fixtures/jcx/tab-relations.jcx",
+   "mode": "raw",
+   "sha256": "116939073ae4cfa27d3536d6d914303d527a7195d295fe6b4c69905328e74a30"
+  },
+  {
+   "path": "tests/fixtures/jcx/tab-stroke-prefix.jcx",
+   "mode": "raw",
+   "sha256": "e7e5e3ec43a546a5e998c48cf52646ee737cfb5e2f975e7783be02e37129de28"
+  },
+  {
+   "path": "tests/fixtures/jcx/tab.jcx",
+   "mode": "raw",
+   "sha256": "587e91743bf2f21a4b2e495ef90455d0c29318c39ada0fe2a7ad7aee9d539a75"
+  },
+  {
+   "path": "tests/fixtures/jcx/text-block-unclosed.jcx",
+   "mode": "raw",
+   "sha256": "bc5b9cb8e50b3866294883d4a77a142adb18f27aff33d5c626935ffd0b49db48"
+  },
+  {
+   "path": "tests/fixtures/jcx/text-block.jcx",
+   "mode": "raw",
+   "sha256": "7d0e1cfa095cdcd69b7e313947e513237e97e5d02e3510e645e2b649d0ecf18b"
+  },
+  {
+   "path": "tests/fixtures/jcx/tie-chord-members.jcx",
+   "mode": "raw",
+   "sha256": "9a189bd4d88e94121893a6461a5bcd889edd8d5e6e21977733dc9caba812f66c"
+  },
+  {
+   "path": "tests/fixtures/jcx/tie-partial-members.jcx",
+   "mode": "raw",
+   "sha256": "31c05d732028a532a535077ff4e1d1d07f86bc2b0bb5fac605c3b47cc0144187"
+  },
+  {
+   "path": "tests/fixtures/jcx/trailing-space.jcx",
+   "mode": "raw",
+   "sha256": "990fb00cde20384fc100eb21f9227650e0f9b20c689812c788c2357e9963ac7e"
+  },
+  {
+   "path": "tests/fixtures/jcx/tuplet-incomplete.jcx",
+   "mode": "raw",
+   "sha256": "b8407e30d72c72996b98a78b49018aa478ede925869cdb648f2f860dbed4e946"
+  },
+  {
+   "path": "tests/fixtures/jcx/tuplet.jcx",
+   "mode": "raw",
+   "sha256": "d7e4bbb5dfe8219846b8f334fe212321796cd89ec9a3a24dae3d41479289c224"
+  },
+  {
+   "path": "tests/fixtures/jcx/unclosed-chord.jcx",
+   "mode": "raw",
+   "sha256": "4eb8e8f608db23d3bd7439febe6e256ea1f3f6b35310e304fe602aaa0eef0ac5"
+  },
+  {
+   "path": "tests/fixtures/jcx/unit-length-voice-scope-interleaved.jcx",
+   "mode": "raw",
+   "sha256": "41b3cd1c2fd49b46a7a7a791ca628d89bf031b2a5e2399bdbcb46256fb03486f"
+  },
+  {
+   "path": "tests/fixtures/jcx/unit-length-voice-scope.jcx",
+   "mode": "raw",
+   "sha256": "1b1566daa2b9832765ae5761adcdef4c5510666539425fef73c1237d2410c28b"
+  },
+  {
+   "path": "tests/fixtures/jcx/unknown-body-token.jcx",
+   "mode": "raw",
+   "sha256": "d415c878f6f03af479669c7060852d20f991767431a2fc96de4deb35f043b67f"
+  },
+  {
+   "path": "tests/fixtures/jcx/unknown-directive.jcx",
+   "mode": "raw",
+   "sha256": "0b9ab412e36c20b36cd699565488c774b640df6b7017cb8ecd860f5694db0e88"
+  },
+  {
+   "path": "tests/fixtures/jcx/unknown-field.jcx",
+   "mode": "raw",
+   "sha256": "2c09d7acfb409638b22d454b663aa40dda45dc3f52ef952fea166be7d1321142"
+  },
+  {
+   "path": "tests/fixtures/jcx/voice-alias-new.jcx",
+   "mode": "raw",
+   "sha256": "8f2d11043a25607897bfebf2945c620a93a8e384f7ee90c4669aaabfc2a8a2ab"
+  },
+  {
+   "path": "tests/fixtures/jcx/voice-alias-old.jcx",
+   "mode": "raw",
+   "sha256": "75ced59f832ac1fdbac76a2577f91d2161e175f61d578e03e385f77ca0d200bf"
+  },
+  {
+   "path": "tests/fixtures/jcx/voice-attr-quoted-space.jcx",
+   "mode": "raw",
+   "sha256": "c9536f54f57c2f0e54f622297061dd243edeec3fd5e22d5923c97830f79129d1"
+  },
+  {
+   "path": "tests/fixtures/jcx/voice-duplicate-id.jcx",
+   "mode": "raw",
+   "sha256": "2e3f293122cddf4af21abe06cbe55d56b16a7beb6800275b2bf1f8730f8f639b"
+  },
+  {
+   "path": "tests/fixtures/jcx/voice-empty.jcx",
+   "mode": "raw",
+   "sha256": "4be358c8d9b98a710f7b3eab63d7b4e0fb8540474a83183a4a1cacfa5042d9a5"
+  },
+  {
+   "path": "tests/fixtures/jcx/voice-no-style.jcx",
+   "mode": "raw",
+   "sha256": "1202aadd760818c913f8cf969edd95165e0329ce979d5c18ab0adbd8dff21930"
+  },
+  {
+   "path": "tests/fixtures/jcx/voice-numeric-bad.jcx",
+   "mode": "raw",
+   "sha256": "87455502f47dac2893201e3fcfaabd1eb7d60448334456282ee91453cc5f8bae"
+  },
+  {
+   "path": "tests/fixtures/jcx/voice-play.jcx",
+   "mode": "raw",
+   "sha256": "5d15054a0aff0783cfce122d7fe8be1ce093a86a289aecd737624c2c7c72ad68"
+  },
+  {
+   "path": "tests/fixtures/jcx/voice-quoted-name.jcx",
+   "mode": "raw",
+   "sha256": "fffc3dbac5896a260442cff664131d49ed1cd35351000a1db9fabf3455b3c8bd"
+  },
+  {
+   "path": "tests/fixtures/jcx/voice-unknown-attr.jcx",
+   "mode": "raw",
+   "sha256": "1601dcaecd291b8ab88fee0a2604a68c663b4c206bfe570fa6fe7217a07fe47f"
+  },
+  {
+   "path": "tests/fixtures/jcx/voice-unknown-style.jcx",
+   "mode": "raw",
+   "sha256": "9ad93334bfb3e94b5771aef1de75e9e4fe822120bdab971a90ed1dc633090954"
+  },
+  {
+   "path": "tests/fixtures/jcx/voice-without-inline.jcx",
+   "mode": "raw",
+   "sha256": "17c7d42990efc9992e59e6ca3e59700d1b3d06dcd83c4a77e01b4923e2f0c704"
+  },
+  {
+   "path": "tests/fixtures/jcx/voice.jcx",
+   "mode": "raw",
+   "sha256": "2e3beba9bcf8398e364218eaeb35675bde4c0e29aac2ac6514c42c65341bc992"
+  },
+  {
+   "path": "tests/unit/domain/architecture.test.ts",
+   "mode": "norm",
+   "sha256": "ab4f343d55c917600bda37effcbf97b9ac7345783695dabd930cc2d3e43a4117"
+  },
+  {
+   "path": "tests/unit/domain/ids.test.ts",
+   "mode": "norm",
+   "sha256": "1c76834460d3a84bc4eec5fac0fb051731710e0606c68b71aebadeeea4e59b90"
+  },
+  {
+   "path": "tests/unit/domain/rational.test.ts",
+   "mode": "norm",
+   "sha256": "ff3def5eda0c8605ab9364b53b4354d2c23c4ba28440377e6389abb002d1a725"
+  },
+  {
+   "path": "tests/unit/jcx/ast/astFixtures.ts",
+   "mode": "norm",
+   "sha256": "a22683c12638067394f372ac739c77540305620258c80c801f7e8cd89a981196"
+  },
+  {
+   "path": "tests/unit/jcx/ast/astPath.test.ts",
+   "mode": "norm",
+   "sha256": "1eed12a8a5d6620ae36f4fdc83256ced667b63c21a912868ef429a22325c32c1"
+  },
+  {
+   "path": "tests/unit/jcx/ast/buildBodyLine.test.ts",
+   "mode": "norm",
+   "sha256": "045c76b895203afbd9de1bdcf19d65e95150878e0ca2dc11995aaa95f2b75aed"
+  },
+  {
+   "path": "tests/unit/jcx/ast/buildLines.test.ts",
+   "mode": "norm",
+   "sha256": "9be2d1c0e4e8d0e01b6ebe57a1e24cd80e18da50d83c165ff8d24018c6bda5f2"
+  },
+  {
+   "path": "tests/unit/jcx/ast/groupBrackets.test.ts",
+   "mode": "norm",
+   "sha256": "0fed6e564b3adc2a3dd6ab746ae646ddb5da469943e99d86512047c17650abd3"
+  },
+  {
+   "path": "tests/unit/jcx/ast/groupHelpers.ts",
+   "mode": "norm",
+   "sha256": "11619f334004ac1436218df7708017272a97b43e07cba882e2bd35d49a0e4d8e"
+  },
+  {
+   "path": "tests/unit/jcx/ast/groupPitch.test.ts",
+   "mode": "norm",
+   "sha256": "b79e4eb9454e292c871711d6d14c0dd5da98d611d64c91939fa636c226ef6f6d"
+  },
+  {
+   "path": "tests/unit/jcx/ast/groupTab.test.ts",
+   "mode": "norm",
+   "sha256": "76a3e81e9adf181912972fdcb06f49c92da7fddd78b29f87c7940bbe992446cd"
+  },
+  {
+   "path": "tests/unit/jcx/ast/lossless.test.ts",
+   "mode": "norm",
+   "sha256": "6866f290368b806bd4cc02ea348fd0866527b54cdf6aa648e53eac8fbc065019"
+  },
+  {
+   "path": "tests/unit/jcx/ast/nodes.test.ts",
+   "mode": "norm",
+   "sha256": "57798a65850d01bddc1a9eb37ba93ab673691231813b8a2369e7aa67d31bf063"
+  },
+  {
+   "path": "tests/unit/jcx/ast/preservation.test.ts",
+   "mode": "norm",
+   "sha256": "7f99bcc6bdc4c8163b554a24ca7789f19d1ad0b42a2c28fbf53dcb5aba3a99cf"
+  },
+  {
+   "path": "tests/unit/jcx/ast/printAst.test.ts",
+   "mode": "norm",
+   "sha256": "9acc50a479a9cbf153d8ea64491a699a0224ac5f6ab05e5ac7136f89e3efc32e"
+  },
+  {
+   "path": "tests/unit/jcx/decodeJcx.test.ts",
+   "mode": "norm",
+   "sha256": "8ec94d8e65e0ae053e0c9e185fd4afb280a69b7a1e43dfa6fb78a148f15ecde1"
+  },
+  {
+   "path": "tests/unit/jcx/diagnostics.test.ts",
+   "mode": "norm",
+   "sha256": "8085de18489ddfae763d6e13121f40508bc8f9fd3f727651307e2f0b0b88cb2f"
+  },
+  {
+   "path": "tests/unit/jcx/lexBodyPitch.test.ts",
+   "mode": "norm",
+   "sha256": "6e7ff84bb50e5b547ae2eecdcd24998cc5da4451eaa31ee37696906d14c8cf02"
+  },
+  {
+   "path": "tests/unit/jcx/lexBodyTab.test.ts",
+   "mode": "norm",
+   "sha256": "05d520f0b08446202437bc214b640114ea7f6e8b2a3eeba47af04093cf3706ee"
+  },
+  {
+   "path": "tests/unit/jcx/lexDocument.classify.test.ts",
+   "mode": "norm",
+   "sha256": "2bef53884b3ffc17125d0f7bf2b8515c1979052ebc1fbdfc710245a332c4ae97"
+  },
+  {
+   "path": "tests/unit/jcx/lexDocument.lines.test.ts",
+   "mode": "norm",
+   "sha256": "bc8f7e83323f669b1e0a989b662e7b5587b578c8e34a09599f66ecf62684abf7"
+  },
+  {
+   "path": "tests/unit/jcx/lexModes.test.ts",
+   "mode": "norm",
+   "sha256": "caa9a04158c19825ef42b3caba8160db432418a18b214772ba430eb5b1808f1f"
+  },
+  {
+   "path": "tests/unit/jcx/loadJcx.test.ts",
+   "mode": "norm",
+   "sha256": "50cb4bd2f2d102dda8b6052824444568087a0a7de9683f78073835d425a1781f"
+  },
+  {
+   "path": "tests/unit/jcx/lossless.test.ts",
+   "mode": "norm",
+   "sha256": "6c7e5ee955c1ca5a8f6f61fe9b800c55ff3b572683a04155dfa15eca12e87c08"
+  },
+  {
+   "path": "tests/unit/jcx/parse/directives.test.ts",
+   "mode": "norm",
+   "sha256": "42fdb86b1d0e1db7667364c6252aa044e5ecf6613971658f659b089b01e6c129"
+  },
+  {
+   "path": "tests/unit/jcx/parse/gchord.test.ts",
+   "mode": "norm",
+   "sha256": "b27efe6b9dd62fafcbb8e569408d0c1a553d2718a9ee23b8e693003006150fcb"
+  },
+  {
+   "path": "tests/unit/jcx/parse/header.test.ts",
+   "mode": "norm",
+   "sha256": "23a778b883cad46267927392b07934548a85f615e370b5ec202977cbbf9b4808"
+  },
+  {
+   "path": "tests/unit/jcx/parse/infrastructure.test.ts",
+   "mode": "norm",
+   "sha256": "783f27d6377aec6f69cf17d786e8bcb2766d166771122da1ca1e2242b5e0f516"
+  },
+  {
+   "path": "tests/unit/jcx/parse/invariants.test.ts",
+   "mode": "norm",
+   "sha256": "dbc35c3f4b371ef544ff5bc1211262d4046249aca5b6c1555466d5bd41db1de1"
+  },
+  {
+   "path": "tests/unit/jcx/parse/keyMeter.test.ts",
+   "mode": "norm",
+   "sha256": "ded67b2034b5c73be3c5188271e660ddf8a6191d3501ab68456b6db2d93da594"
+  },
+  {
+   "path": "tests/unit/jcx/parse/lyrics.test.ts",
+   "mode": "norm",
+   "sha256": "a4a9d2af08b58578c3f615df475587e8dce5172afc15017aa5413940a73e66f6"
+  },
+  {
+   "path": "tests/unit/jcx/parse/pairing.test.ts",
+   "mode": "norm",
+   "sha256": "e56e340b3a79018046938d5600c8f3e34e72e0ae2fbba528d94cbe1d99b17e82"
+  },
+  {
+   "path": "tests/unit/jcx/parse/scan.test.ts",
+   "mode": "norm",
+   "sha256": "362bb9e790b067e5385742ed6215d1ea4617f1de1da99c26dbc010e7b6089a50"
+  },
+  {
+   "path": "tests/unit/jcx/parse/segments.test.ts",
+   "mode": "norm",
+   "sha256": "4e08c472bfe5f99b335156b36d08a1c8319e2cf2e95f76dc21f8a0cd183f0424"
+  },
+  {
+   "path": "tests/unit/jcx/parse/unitLength.test.ts",
+   "mode": "norm",
+   "sha256": "4eadcfb0fb8b1554bf673410f5eb808f15466318ad4a56e3b6397b33b423ad4c"
+  },
+  {
+   "path": "tests/unit/jcx/parse/voice.test.ts",
+   "mode": "norm",
+   "sha256": "56f34ef354153de20765ab1d6b2b5e10e0f0d74ddf5c64b48f2681fa0b42aeb2"
+  },
+  {
+   "path": "tests/unit/jcx/serialize/architecture.test.ts",
+   "mode": "norm",
+   "sha256": "dc72c8693b94967bc40aacc12d3904c2cbc3728883a222ff1fb7543bc53a16b9"
+  },
+  {
+   "path": "tests/unit/jcx/serialize/canonical.body.test.ts",
+   "mode": "norm",
+   "sha256": "66b6fe279e013d38d0c1b43d4a12990ceaa6fc5c9ccc5f55297b864a054734e2"
+  },
+  {
+   "path": "tests/unit/jcx/serialize/canonical.boundary.domain.test.ts",
+   "mode": "norm",
+   "sha256": "aead0e7cb649755fec7bcda803e269f5779f401240f0fb64a3365ed438997cee"
+  },
+  {
+   "path": "tests/unit/jcx/serialize/canonical.boundary.test.ts",
+   "mode": "norm",
+   "sha256": "074e4d29066f81d151c2f1d2c4eb2179e1905ec2af6429e57f3ecbedc27a0377"
+  },
+  {
+   "path": "tests/unit/jcx/serialize/canonical.header.test.ts",
+   "mode": "norm",
+   "sha256": "035b68227e90de98c08025006788fe8e68ec3d14e514e169485fc98aa2dc32db"
+  },
+  {
+   "path": "tests/unit/jcx/serialize/canonical.lyrics.test.ts",
+   "mode": "norm",
+   "sha256": "b125de2e897e01a1c694bc1f73e421ed7771869a758f51b34ebfd76ab9751c72"
+  },
+  {
+   "path": "tests/unit/jcx/serialize/encodeJcx.test.ts",
+   "mode": "norm",
+   "sha256": "9af74e1f51d5d344280e290e8041d5dd8a564714beb914e1fff827c064a5cf8a"
+  },
+  {
+   "path": "tests/unit/jcx/serialize/fixtureMatrix.ts",
+   "mode": "norm",
+   "sha256": "7bef41cbf37ca28092e36fb3e7416a13a30c743a60e4b316feb691dcb57387f8"
+  },
+  {
+   "path": "tests/unit/jcx/serialize/preserve.encoding-composition.test.ts",
+   "mode": "norm",
+   "sha256": "28b04d9570a2ffcd0635af7450ec9b09423ee3172a8d13990ff7c2125d06e61b"
+  },
+  {
+   "path": "tests/unit/jcx/serialize/preserve.test.ts",
+   "mode": "norm",
+   "sha256": "c1cbf1d135617439612d08e6cf78983ca920878a0eb52bbbffd7b838425015b6"
+  },
+  {
+   "path": "tests/unit/jcx/serialize/projection.test.ts",
+   "mode": "norm",
+   "sha256": "2d3ac689f4036f5b0b63076455861e091de6a2e019380b5e62057d74ce622ea3"
+  },
+  {
+   "path": "tests/unit/jcx/serialize/roundtrip.closure.helpers.ts",
+   "mode": "norm",
+   "sha256": "71990b7010aac13cc307b395fbbfae102a212e136c6baf638444119184d8b5d7"
+  },
+  {
+   "path": "tests/unit/jcx/serialize/roundtrip.closure.test.ts",
+   "mode": "norm",
+   "sha256": "ce5b36b6bfffc6e38f132adf6ad78c92e198b9a4c5c6b7b30c8e98b30196d3a6"
+  },
+  {
+   "path": "tests/unit/jcx/serialize/roundtrip.helpers.ts",
+   "mode": "norm",
+   "sha256": "2ad074a4fa00ad5fb0c6552e4ced1eac0036fd323e4f66d0345d7c13bc61fb1f"
+  },
+  {
+   "path": "tests/unit/jcx/serialize/roundtrip.test.ts",
+   "mode": "norm",
+   "sha256": "2dfcbba58abab306965b725d8591fe5419d2a81f6752f56d7f7262b7db43c4e6"
+  },
+  {
+   "path": "tests/unit/jcx/sourceSpan.test.ts",
+   "mode": "norm",
+   "sha256": "b5b915afaa0689e849b70414eea4c3918c7b57dacc8b433320db22b6113a68d2"
+  },
+  {
+   "path": "tests/unit/notation/architecture.t9a.test.ts",
+   "mode": "norm",
+   "sha256": "eeec197ba52c11f14bba2219f2ac94603da6302f78ec548fd01484e1a3796faf"
+  },
+  {
+   "path": "tests/unit/notation/architecture.t9b.test.ts",
+   "mode": "norm",
+   "sha256": "c4cea06eb0e910f6ab7b5435ebbb8c308c715bc5a33b5c5d0d1f2829ce40927e"
+  },
+  {
+   "path": "tests/unit/notation/architecture.t9bs.test.ts",
+   "mode": "norm",
+   "sha256": "c9e04e65171a164909952e511dacdf91ce14ca67bfcbb8e8a7d023915085fce3"
+  },
+  {
+   "path": "tests/unit/notation/architecture.t9c.test.ts",
+   "mode": "norm",
+   "sha256": "f7a265a2b0cb63b3621e8593178ee27e40c15f301b124a2a47cb6cf87db19498"
+  },
+  {
+   "path": "tests/unit/notation/architecture.t9cp.test.ts",
+   "mode": "norm",
+   "sha256": "dbc956aa678c82ffcd04272b792c865a366e63d44fdbf5be6b1e6fa3e4fd32cb"
+  },
+  {
+   "path": "tests/unit/notation/architecture.test.ts",
+   "mode": "norm",
+   "sha256": "0604583a11f7ec9f2029a3b426b13e78f5bddc76d47cac089130b59e6937dc9b"
+  },
+  {
+   "path": "tests/unit/notation/beamGroups.test.ts",
+   "mode": "norm",
+   "sha256": "503d3b44ef015d79b5203c5da94e0af6cdeeaf424931b343e6852e22aafca7fb"
+  },
+  {
+   "path": "tests/unit/notation/beams.regression.test.ts",
+   "mode": "norm",
+   "sha256": "f06458295eaf185ffaed917661deeccbfedea286b1d11e15a1e74294cb26f56d"
+  },
+  {
+   "path": "tests/unit/notation/beamsRegression.helpers.ts",
+   "mode": "norm",
+   "sha256": "59bc46728933104c2c8d644cc2141690624d30592919c59bada1c261ada997a4"
+  },
+  {
+   "path": "tests/unit/notation/buildRenderScore.test.ts",
+   "mode": "norm",
+   "sha256": "bd7d8a07bc859161200fd04c04a1e28f0dbfa64900c7a0dbd3e4e0451eec5fc0"
+  },
+  {
+   "path": "tests/unit/notation/chord.test.ts",
+   "mode": "norm",
+   "sha256": "bd65a0db1f70ea8fa2a26981b51b3c9b0f5eb40006af46f09d18574c30c7fc72"
+  },
+  {
+   "path": "tests/unit/notation/chordSymbolDisplay.test.ts",
+   "mode": "norm",
+   "sha256": "748204c6de5893702d0fbb7aef373f8879e9a983ccf5aa31ab7c264a70c66d97"
+  },
+  {
+   "path": "tests/unit/notation/duration.test.ts",
+   "mode": "norm",
+   "sha256": "5b42638ecb605449279ff0d4108875c03b49c063bddf4388de2f68f781573551"
+  },
+  {
+   "path": "tests/unit/notation/fallbackSummary.test.ts",
+   "mode": "norm",
+   "sha256": "61b11dd45dd6863a6539ebcd31d55b1d4783becbc0564efce0fc8c76de693c5a"
+  },
+  {
+   "path": "tests/unit/notation/jianpu.arcs.test.ts",
+   "mode": "norm",
+   "sha256": "692a46982fb79293fdf6c62a5b126c8ebe4d7d92ab7968f0a91632dfb03a847d"
+  },
+  {
+   "path": "tests/unit/notation/jianpu.beams.test.ts",
+   "mode": "norm",
+   "sha256": "bc6332620d5d0e5d03dcacbcbfb2f42e4107843a2661e7a34245bcdeddc59efa"
+  },
+  {
+   "path": "tests/unit/notation/jianpu.clearance.test.ts",
+   "mode": "norm",
+   "sha256": "2407d8e1810e54ea8d3a076def91485f371c8d572735bf73992b0e967a02f9ad"
+  },
+  {
+   "path": "tests/unit/notation/jianpu.external.test.ts",
+   "mode": "norm",
+   "sha256": "369452b2c7c505a8ab2e1b5993bcdfe426df395d7da1f41fcbe183b4a0f902cd"
+  },
+  {
+   "path": "tests/unit/notation/jianpu.layout.test.ts",
+   "mode": "norm",
+   "sha256": "ba0685c6b8b2b78237e396689d1261cb1bd99c26f3ce9458f9eb39b67543e420"
+  },
+  {
+   "path": "tests/unit/notation/jianpu.lyricAnchor.test.ts",
+   "mode": "norm",
+   "sha256": "39232b376a535733ecf96d65515e15680682447ad4e39991466fea5d1b42af9f"
+  },
+  {
+   "path": "tests/unit/notation/jianpu.lyrics.test.ts",
+   "mode": "norm",
+   "sha256": "35277db0f8d5a6fc7b5985fe649fc3d1e2e45dc178d0ddfb2be02b3b8419403c"
+  },
+  {
+   "path": "tests/unit/notation/jianpu.slotWidth.test.ts",
+   "mode": "norm",
+   "sha256": "edcd35e683568030a2fd5ff32220d95af1b87ebdbfb370922276b9bc59fa5342"
+  },
+  {
+   "path": "tests/unit/notation/jianpu.toSvg.test.ts",
+   "mode": "norm",
+   "sha256": "096cf60182cf4891c9e225b3074d9cb49a747039b082a6a7ad0a651d02447625"
+  },
+  {
+   "path": "tests/unit/notation/keySpelling.test.ts",
+   "mode": "norm",
+   "sha256": "f5bd4d5639e3142ee37da1f80de5290d66f31ac8085a9463c30d355a0ec9b01a"
+  },
+  {
+   "path": "tests/unit/notation/layout.measurePlacement.test.ts",
+   "mode": "norm",
+   "sha256": "e862ad9b754fe4c28bdde008f1a934d2bc2e6c5d7bd21a2b09a20722ca26fcd3"
+  },
+  {
+   "path": "tests/unit/notation/render.matrix.test.ts",
+   "mode": "norm",
+   "sha256": "188a1d39598dac3f8597983ed5dcc23501895c2c79aa6e482c2670b312684226"
+  },
+  {
+   "path": "tests/unit/notation/renderMatrix.cases.ts",
+   "mode": "norm",
+   "sha256": "ea185f22dd788322e3332f1af656b76414a4f94f164e098a211e27bf7f74109a"
+  },
+  {
+   "path": "tests/unit/notation/renderMatrix.helpers.ts",
+   "mode": "norm",
+   "sha256": "8fea6200977a2e50e8363780085cb9b6434da450ef985752c549a348ed56e401"
+  },
+  {
+   "path": "tests/unit/notation/spacing.overlay.test.ts",
+   "mode": "norm",
+   "sha256": "f039b0bf024e2c8dbde6b75cf746b0905a54064e53c02e2db05a080d59cd73ca"
+  },
+  {
+   "path": "tests/unit/notation/staff.duration.test.ts",
+   "mode": "norm",
+   "sha256": "c5d8ebd1c5bc984a7f870bb14a93aca4a609a9d4fde19d81ae38e5785870dbb0"
+  },
+  {
+   "path": "tests/unit/notation/staff.external.test.ts",
+   "mode": "norm",
+   "sha256": "8a0cb9d0c191641d2708e90a13dda7d5ad83bca7dc07a44c2b773ab7dba362df"
+  },
+  {
+   "path": "tests/unit/notation/staff.layout.test.ts",
+   "mode": "norm",
+   "sha256": "db76d056ca89287a8c25d0b096ba6bf34cbae3edde13c5570e5178c120d1c284"
+  },
+  {
+   "path": "tests/unit/notation/staff.pitch.test.ts",
+   "mode": "norm",
+   "sha256": "927e35d3c817e1e64243622a49b5bd3596f95d47c20774f39b554ce87a7f0bfe"
+  },
+  {
+   "path": "tests/unit/notation/staff.relations.test.ts",
+   "mode": "norm",
+   "sha256": "2e6598bf5771e1d7f30735a795d1751d38e8a8c36df35b000203a4891018ce71"
+  },
+  {
+   "path": "tests/unit/notation/staff.verticalDemand.test.ts",
+   "mode": "norm",
+   "sha256": "ed311760bed4659c6f56e6508936658087e9074c5bdc92ae83defdc107caa392"
+  },
+  {
+   "path": "tests/unit/notation/svg.test.ts",
+   "mode": "norm",
+   "sha256": "8cfb31b1ff380cb6a8d27cd8270881975de62296e4607ff6187aa490bc8cf8be"
+  },
+  {
+   "path": "tests/unit/notation/system.chordOverlay.test.ts",
+   "mode": "norm",
+   "sha256": "c85d011e7170c321af1cca5d727505a5ac6259a9e5a62627abaf38c46435dc05"
+  },
+  {
+   "path": "tests/unit/notation/system.compose.test.ts",
+   "mode": "norm",
+   "sha256": "719c6d10c77872c9d017bd4fe10e0d105a4cea17426fb265afc7f3177a85b0f7"
+  },
+  {
+   "path": "tests/unit/notation/system.composeLayout.helpers.ts",
+   "mode": "norm",
+   "sha256": "988d647d0c1aaab10a2786abb4bd5a527421733612a8c2f24597088eee709fc9"
+  },
+  {
+   "path": "tests/unit/notation/system.composeLayout.lyrics.test.ts",
+   "mode": "norm",
+   "sha256": "546ef858b78d4c77c854974062f78404ad91d297c64c1972af9db1a2a64d0a89"
+  },
+  {
+   "path": "tests/unit/notation/system.composeLayout.staff.test.ts",
+   "mode": "norm",
+   "sha256": "2bc3bfb153b4cf4d91def82f9c8f67f46def3f90e76fde5fb64d363b03fc818d"
+  },
+  {
+   "path": "tests/unit/notation/system.composeLayout.test.ts",
+   "mode": "norm",
+   "sha256": "9f6fe76af4abce82ebc937b7de9e15a548f333f9753f827ac9dad9c02ff5b84d"
+  },
+  {
+   "path": "tests/unit/notation/system.contracts.test.ts",
+   "mode": "norm",
+   "sha256": "5a078f021142dcfcbc7ef4856f5060bc0acda65d3e59cd3e56e7ed4f7414d52a"
+  },
+  {
+   "path": "tests/unit/notation/system.demand.test.ts",
+   "mode": "norm",
+   "sha256": "7ffd907048d416fce8b5b0f8bb6ff28a35c27a993bd2fcbcbe9ec6d439dd9f53"
+  },
+  {
+   "path": "tests/unit/notation/system.external.integration.test.ts",
+   "mode": "norm",
+   "sha256": "bef970f93b5db6b87f8c63623b23307b29a4f5ef2875d3585ac248b846ab0a72"
+  },
+  {
+   "path": "tests/unit/notation/system.groupVoices.test.ts",
+   "mode": "norm",
+   "sha256": "c65e5a47b7ca074a81429f3c9caa62d196630b411b711d8feb947f511ff41534"
+  },
+  {
+   "path": "tests/unit/notation/system.justify.test.ts",
+   "mode": "norm",
+   "sha256": "18300fdf33d7c9061ded08d041febab6b1392d8783c7c0bf072697e0762f2912"
+  },
+  {
+   "path": "tests/unit/notation/system.measureIdentity.test.ts",
+   "mode": "norm",
+   "sha256": "9c7551873773b6f1db0d4819c9185bad3295aaf726dba8dd9e462102666e2152"
+  },
+  {
+   "path": "tests/unit/notation/system.pageModel.test.ts",
+   "mode": "norm",
+   "sha256": "b3ac37b60cd9dbee20c6096b56c73f6eace8ce5dd0032a1fbd3458108bf986ec"
+  },
+  {
+   "path": "tests/unit/notation/system.timeline.brokenRhythm.test.ts",
+   "mode": "norm",
+   "sha256": "6f2a6c4693bbffea92f2b0d65a65f7c4e36f5030db6103ac040f6125955e55a1"
+  },
+  {
+   "path": "tests/unit/notation/system.timeline.test.ts",
+   "mode": "norm",
+   "sha256": "7334b6bf25b29d002a5775f2ff928e77ddb320d11e4cb0f220800f6d91bfb320"
+  },
+  {
+   "path": "tests/unit/notation/system.verticalLayout.test.ts",
+   "mode": "norm",
+   "sha256": "dfdbea3892d65dd9e9e40f360a929af48bc3478fddc2742aa7a45d9c7b108104"
+  },
+  {
+   "path": "tests/unit/notation/systemExternal.helpers.ts",
+   "mode": "norm",
+   "sha256": "a2eb270c8a723bce1edaee93bef04a136876b8d9b795d74cae26445088be0875"
+  },
+  {
+   "path": "tests/unit/notation/t5.defaultRegression.test.ts",
+   "mode": "norm",
+   "sha256": "3886f731d916e2dfc46df24b7700018627bf90400602247d4f6897f141e945be"
+  },
+  {
+   "path": "tests/unit/notation/t5DefaultLayout.helpers.ts",
+   "mode": "norm",
+   "sha256": "830c1bed4b0e691f3c97d08d359f76ae7b07e491c183ebe3e1f35f0a705357b8"
+  },
+  {
+   "path": "tests/unit/notation/tab.beams.test.ts",
+   "mode": "norm",
+   "sha256": "a2bb12c6d09986f32fbc343e2567962222459ab9a3fc4ef9d920a868516fd922"
+  },
+  {
+   "path": "tests/unit/notation/tab.duration.test.ts",
+   "mode": "norm",
+   "sha256": "911dd8ab705f9b62afbfd9ba804031bcaaddf1c52c6a65fdb50cb4832022c1cb"
+  },
+  {
+   "path": "tests/unit/notation/tab.external.test.ts",
+   "mode": "norm",
+   "sha256": "c04ca477498fb4284a2d5fc5abec65e84fb19522a5e043de28af55484da33598"
+  },
+  {
+   "path": "tests/unit/notation/tab.layout.test.ts",
+   "mode": "norm",
+   "sha256": "6e30ddb3778edca21ff31b5d98921cea3f6dceb36bee31a71460cb4b8e293073"
+  },
+  {
+   "path": "tests/unit/notation/tab.relations.test.ts",
+   "mode": "norm",
+   "sha256": "e3bc46bdbb1072f55d3a9a7c6502e77980b61329abea0efb2a4ab81356803f3b"
+  },
+  {
+   "path": "tests/unit/notation/tab.toSvg.test.ts",
+   "mode": "norm",
+   "sha256": "e829baaf07a7bada3e780ff4d8de4a275887722fa70643fb8bfa5213dbc9e229"
+  },
+  {
+   "path": "tests/unit/notation/vexEncoding.test.ts",
+   "mode": "norm",
+   "sha256": "8bc441b9f10203ce7f24afdf623e8889782d5e0760cd6afefc3c4c3d9f13642c"
+  },
+  {
+   "path": "tests/unit/renderer/staffVerticalParity.test.ts",
+   "mode": "norm",
+   "sha256": "eba15afa3a7c6779231884eb23186a27bc818d38feca85796ba0178fa2ca7f5b"
+  },
+  {
+   "path": "tests/unit/renderer/systemRender.lyricGutter.test.ts",
+   "mode": "norm",
+   "sha256": "d6b529c70a9e44243c4f11c8edfc1a839adc0fa54d7f792da6652b839e6f0708"
+  },
+  {
+   "path": "tests/unit/renderer/systemRender.test.ts",
+   "mode": "norm",
+   "sha256": "1c6ce687197f2fd7b857846fcfdf51d53b102c9bd53a6750299e2a9ce32f51c5"
+  },
+  {
+   "path": "tests/unit/renderer/systemSlices.test.ts",
+   "mode": "norm",
+   "sha256": "56feff5cbe4149992e32109aaa841960842aa1d336ec58261f6bc6bdb7e78dff"
+  },
+  {
+   "path": "tests/unit/renderer/vexTickables.test.ts",
+   "mode": "norm",
+   "sha256": "c906de6defc684f0457282053ab4d0703f97ab6a35608b7b27babd22561d2143"
+  }
+ ]
+}
