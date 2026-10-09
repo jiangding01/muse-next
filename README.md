@@ -21,8 +21,8 @@ Electron / React 技术栈重建其核心能力，优先顺序是：
 吉他 TAB、五线谱（Staff，经 VexFlow adapter）四种记谱均可渲染。**M2.5 Score System
 Layout 的实现已全部完成**，**T9c Stage A ✅ COMPLETE**（2026-10-06：Stage A docs `9a1fd5d`，CI run 37452773013 三平台
 success），**M2.5 ✅ SEALED**（2026-10-06，Stage B seal `30395fe`，CI run 37457437828 三平台 success）。
-**M3.P0 Editor Core Planning ✅ SEALED**（2026-10-07，架构冻结方案 [`docs/M3_EDITOR_CORE_PLAN.md`](docs/M3_EDITOR_CORE_PLAN.md) v5）；
-M3 implementation NOT STARTED，下一步是 T0。详见 §5「路线图」。
+**M3.P0 Editor Core Planning ✅ SEALED**（2026-10-07，架构冻结方案 [`docs/M3_EDITOR_CORE_PLAN.md`](docs/M3_EDITOR_CORE_PLAN.md) v5，CI run 37513609019）；
+**M3 T0 ✅ SEALED**（2026-10-09，Editor Core 纯核心契约，`bee1224`，CI run 37944766436）；**M3 T1 = NEXT / NOT STARTED**。详见 §5「路线图」。
 
 ## 2. 核心发现与设计原则
 
@@ -206,7 +206,8 @@ projectionEquals(before, after); // true 表示语义往返无损
 
 - **M3 — Editor Core**：**M3.P0 架构规划 ✅ SEALED**（2026-10-07，[`docs/M3_EDITOR_CORE_PLAN.md`](docs/M3_EDITOR_CORE_PLAN.md) v5）。
   源码权威编辑 + 版本化语义快照、统一撤销重做、精确保留字节的保存、选区与源码 ↔ 谱面联动、第一条可视化编辑竖切；
-  按 T0–T9 分阶段实施。**实现尚未开始，下一步是 T0。**
+  按 T0–T9 分阶段实施。**T0 ✅ SEALED**（2026-10-09）：已建立 Editor Core 的纯核心契约（文本补丁、源码投影、会话状态、
+  持久选区合同与只接受字符串的解析入口）。**T1–T9 尚未开始，下一步是 T1。**
 - **M4 及以后 — Playback / Import-Export / Layout**：播放、MIDI 导入导出、页面布局
   与打包分发。以 `HANDOFF.md` §61 的规划为准，本文档不重复展开、不提前承诺细节。
 

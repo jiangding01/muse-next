@@ -29,7 +29,12 @@ T9c.P（各条目见下方 Changed / Fixed）：声部按 `bracket=N` 分组成 
 **M3.P0 Editor Core Planning ✅ SEALED（2026-10-07）**：M3 Editor Core 的架构冻结方案定稿为
 [`docs/M3_EDITOR_CORE_PLAN.md`](docs/M3_EDITOR_CORE_PLAN.md) v5（源码权威编辑 + 版本化语义快照、File Codec Boundary 在 main、
 保存前自解码校验、能力授权的 IPC、统一撤销重做、确定性选区保持、T0–T9 阶段拆分），经四轮对抗审查与定点复核，
-CRITICAL / HIGH / P0 阻断类 MEDIUM 均为 0。本阶段只产出文档，未改代码与测试。**M3 implementation NOT STARTED，下一步是 T0。**
+CRITICAL / HIGH / P0 阻断类 MEDIUM 均为 0。本阶段只产出文档，未改代码与测试（`c046260`，CI run 37513609019 三平台 success）。
+
+**M3 T0 Pure Core Contracts ✅ SEALED（2026-10-09）**：`bee1224`，CI run 37944766436 三平台 success。只新增文件、既有文件零改动：
+文本补丁与选区范围变换、源码投影（受保护开头 U+FEFF、换行与孤立 CR 原样保留）、会话状态合同与源码不变量、持久选区合同、
+最小 shared 文档契约、只接受字符串的 renderer-safe 解析入口 `src/formats/jcxParse.ts`，以及锁定 414 个既有文件
+（raw 105 / norm 309）的冻结哈希清单与 M3 架构守卫；变异 36/36 killed。**M3 T1–T9 尚未开始，下一步是 T1。**
 
 ### Added
 

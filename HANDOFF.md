@@ -2,7 +2,7 @@
 
 > 面向后续实现 Agent 的项目交接文档  
 > 项目代号：`muse-next`  
-> 当前阶段：**M0–M1.8 已封板；M2 Notation Rendering T0–T9 已全部完成（Chord / Jianpu / TAB / Staff 四种记谱可渲染 + T8 render matrix 契约测试 + T9 文档封板），✅ 2026-09-22 封板（原始 seal CI run 35700198783；T8.1 post-seal 契约收紧 run 35702615344；当前 HEAD run 35702885112 三平台全绿）；UI 设计 Brief 已完成（`docs/UI_DESIGN_BRIEF.md` v1.3.8）；M2.5 Score System Layout 方案冻结为 v1.0，**T0 已完成（2026-10-04，`6e5a532` + 命名修订 `3f5b48c`），T1 声部视觉分组已完成（`2b9882c`），T2 跨声部 measure identity 已完成（`218d143`），T2.1 小节错位锁存已完成（`9037351`），T3 共享小节时间轴已完成（`7ee1e27`），T3.5 TAB / 简谱节奏刻印已完成（`d2486aa`），T4 公共几何编排已完成（2026-10-05，`9661810`），T5 三个 voice layout 的外部几何适配已完成（2026-10-05，`ed4ea88`），均三平台 CI 全绿；T5.S VexFlow shared timing spike 已完成（2026-10-05，结论 `feasible-with-cost` / no adapter merged，M2.5 只承诺 Staff tier 1）；T6 和弦图层水平规划已完成（2026-10-05，`c74094e`）；T8 最终系统纵向编排已完成（2026-10-05，`b513261`）；T9a 页面模型已完成（2026-10-05，`49b0e11`）；T9b renderer system 化已完成（2026-10-05，`9eb5722`）；T9b.S Staff 纵向需求已完成（2026-10-06，`17efec3`，T9b 与 T9c 之间插入的 pre-seal 阶段）；T9c A0 seal coverage 测试加固已完成（2026-10-06，`2c2634c`）；T9c.P 简谱歌词 / 弧线横向锚点补丁已完成（2026-10-06，code `1e7fb1c` + docs `42fb4df`，T9c Stage A 第一次 final smoke 发现行首歌词左侧不可达后插入）；T9c Stage A ✅ COMPLETE（validation base `42fb4df`，docs `9a1fd5d`，CI run 37452773013 attempt 1 completed / success，macOS / Windows / Ubuntu 全部 success；见 §30.1「M2.5 T9c Stage A 实际状态」与 `docs/VALIDATION.md`）——**M2.5 ✅ SEALED**（2026-10-06，Stage B final seal `30395fe` `docs: seal M2.5 Score System Layout`，CI run 37457437828 attempt 1，macOS / Windows / Ubuntu 全部 success）；**M3.P0 Editor Core Planning ✅ SEALED**（2026-10-07，`docs/M3_EDITOR_CORE_PLAN.md` v5，见 §30.1「M3.P0 实际状态」）；**M3 implementation NOT STARTED；Next = M3 T0**（待用户指令）**（详见 §30 里程碑表、§30.1「M2.5 T9c Stage A 实际状态」与「M3.P0 实际状态」、§69「当前明确的下一任务」）
+> 当前阶段：**M0–M1.8 已封板；M2 Notation Rendering T0–T9 已全部完成（Chord / Jianpu / TAB / Staff 四种记谱可渲染 + T8 render matrix 契约测试 + T9 文档封板），✅ 2026-09-22 封板（原始 seal CI run 35700198783；T8.1 post-seal 契约收紧 run 35702615344；当前 HEAD run 35702885112 三平台全绿）；UI 设计 Brief 已完成（`docs/UI_DESIGN_BRIEF.md` v1.3.8）；M2.5 Score System Layout 方案冻结为 v1.0，**T0 已完成（2026-10-04，`6e5a532` + 命名修订 `3f5b48c`），T1 声部视觉分组已完成（`2b9882c`），T2 跨声部 measure identity 已完成（`218d143`），T2.1 小节错位锁存已完成（`9037351`），T3 共享小节时间轴已完成（`7ee1e27`），T3.5 TAB / 简谱节奏刻印已完成（`d2486aa`），T4 公共几何编排已完成（2026-10-05，`9661810`），T5 三个 voice layout 的外部几何适配已完成（2026-10-05，`ed4ea88`），均三平台 CI 全绿；T5.S VexFlow shared timing spike 已完成（2026-10-05，结论 `feasible-with-cost` / no adapter merged，M2.5 只承诺 Staff tier 1）；T6 和弦图层水平规划已完成（2026-10-05，`c74094e`）；T8 最终系统纵向编排已完成（2026-10-05，`b513261`）；T9a 页面模型已完成（2026-10-05，`49b0e11`）；T9b renderer system 化已完成（2026-10-05，`9eb5722`）；T9b.S Staff 纵向需求已完成（2026-10-06，`17efec3`，T9b 与 T9c 之间插入的 pre-seal 阶段）；T9c A0 seal coverage 测试加固已完成（2026-10-06，`2c2634c`）；T9c.P 简谱歌词 / 弧线横向锚点补丁已完成（2026-10-06，code `1e7fb1c` + docs `42fb4df`，T9c Stage A 第一次 final smoke 发现行首歌词左侧不可达后插入）；T9c Stage A ✅ COMPLETE（validation base `42fb4df`，docs `9a1fd5d`，CI run 37452773013 attempt 1 completed / success，macOS / Windows / Ubuntu 全部 success；见 §30.1「M2.5 T9c Stage A 实际状态」与 `docs/VALIDATION.md`）——**M2.5 ✅ SEALED**（2026-10-06，Stage B final seal `30395fe` `docs: seal M2.5 Score System Layout`，CI run 37457437828 attempt 1，macOS / Windows / Ubuntu 全部 success）；**M3.P0 Editor Core Planning ✅ SEALED**（2026-10-07，`docs/M3_EDITOR_CORE_PLAN.md` v5，`c046260`，CI run 37513609019 三平台 success，见 §30.1「M3.P0 实际状态」）；**M3 T0 纯核心契约 ✅ SEALED**（2026-10-09，`bee1224`，CI run 37944766436 attempt 1 三平台 success，见 §30.1「M3 T0 实际状态」）；**M3 T1–T9 NOT STARTED；Next = M3 T1 preflight**（待用户指令）**（详见 §30 里程碑表、§30.1「M3.P0 实际状态」与「M3 T0 实际状态」、§69「当前明确的下一任务」）
 >
 > 核心目标：以现代 TypeScript 技术栈重建已停止维护的 **Muse Pro 2.70** 的核心能力，并优先恢复其 `.jcx` 乐谱格式、谱面渲染、编辑与播放能力。
 
@@ -1808,8 +1808,9 @@ Stage B ✅ 2026-10-06（final seal `30395fe`，CI run 37457437828 attempt 1 三
 
 → M3
 Editor Core
-（M3.P0 架构规划 ✅ 2026-10-07 SEALED：`docs/M3_EDITOR_CORE_PLAN.md` v5；
-implementation NOT STARTED；阶段 T0–T9，下一步 T0）
+（M3.P0 架构规划 ✅ 2026-10-07 SEALED：`docs/M3_EDITOR_CORE_PLAN.md` v5，`c046260`，CI run 37513609019 三平台 success；
+T0 纯核心契约 ✅ 2026-10-09 SEALED：`bee1224`，CI run 37944766436 attempt 1 三平台 success；
+T1–T9 NOT STARTED，下一步 T1 preflight）
 
 → M4
 Playback / MIDI
@@ -3183,7 +3184,7 @@ visual debt、T7 第 6 条），按 视觉 / 架构 / 测试 分类，每行注�
   **M2.5 = ✅ SEALED（2026-10-06）**。
 - 下一阶段：M3 planning 已完成，见下方「M3.P0 实际状态」。
 
-**M3.P0 实际状态（2026-10-07，✅ SEALED：Editor Core 架构冻结方案 `docs/M3_EDITOR_CORE_PLAN.md` v5）**：
+**M3.P0 实际状态（2026-10-07，✅ SEALED：Editor Core 架构冻结方案 `docs/M3_EDITOR_CORE_PLAN.md` v5；`c046260`，CI run 37513609019 三平台 success）**：
 - 范围：只产出架构冻结方案与 T0–T9 阶段拆分；未改 `src/**`、`tests/**`、`package.json`、`.github/**`。
 - 审查：四轮独立对抗审查（第一轮 1 CRITICAL / 3 HIGH；第二轮 8 HIGH；第三轮 4 HIGH；第四轮 0 HIGH / 6 条 P0 类 MEDIUM）+ v5 多次定点复核；
   冻结时 CRITICAL = 0、HIGH = 0、P0 阻断类 MEDIUM = 0，H-1 已关闭。逐条处理记录见方案 §0.1–§0.3。
@@ -3198,7 +3199,21 @@ visual debt、T7 第 6 条），按 视觉 / 架构 / 测试 分类，每行注�
   用于拒绝旧 saving phase 的迟到 `SaveResult`；不阻止 P0 冻结。
 - 冻结后规则：不再启动新的 M3.P0 架构审查，不再扩写方案；post-M3 / LOW / robustness debt 保留在方案 §26；
   实现阶段发现的问题按 T0–T9 各阶段 gate 处理，不重新打开 P0。
-- **M3 implementation NOT STARTED；Next = M3 T0**（纯核心契约，见方案 §22），待用户明确指令。
+- 实施进度：T0 ✅ SEALED（见下方「M3 T0 实际状态」）；T1–T9 NOT STARTED。
+
+**M3 T0 实际状态（2026-10-09，✅ SEALED：`bee1224`，CI run 37944766436 attempt 1 三平台 success；npm ci / typecheck / npm test / fixture report 四步均实际执行成功）**：
+- 范围：Pure Core Contracts，只新增文件（32 个），既有文件零改动；未改 renderer / main / preload / `package.json` / `.github/**`。
+- 已建立的契约：TextPatch（顺序补丁、逆补丁）与 SourceRange 变换 / bias（§17.2，含 replacement 吸收）；SourceProjection
+  （受保护开头 U+FEFF、CRLF / LF、孤立 CR 占位、dominant EOL、偏移映射、交换律、CR / LF 合并与 CRLF 拆分 fail closed）；
+  DocumentSession 合同、派生状态与源码不变量（baseVersion、单调版本、快照身份校验）；EditorSelection 持久合同；
+  最小 shared 文档契约（`src/shared/documentContracts.ts`）；renderer-safe、只接受字符串的 parse façade `src/formats/jcxParse.ts`。
+- 冻结清单：`tests/unit/editor/m3FrozenManifest.json` 锁 414 个既有文件（raw 105 / norm 309），既有冻结文件 0 改动；更新清单须经用户裁决。
+- 守卫：`tests/unit/editor/architecture.m3t0.test.ts`（editor 依赖与受限类型环境编译、façade 闭包、shared、renderer 白名单；
+  `store.ts` 两条遗留导入在 T1 迁移后归零）与 `frozenManifest.m3t0.test.ts`。
+- 验证：本地全量 gate（120 个测试文件 / 7743 个用例、fixture report 105/105、corpus 11/11）与三平台 CI 通过；两轮独立 review 已关闭；
+  变异 36/36 killed。
+- 规则：T1 起不得回头修改 T0 冻结契约，除非出现真实 blocker 并先经用户裁决。
+- **Next = M3 T1 preflight**（打开与解码，见方案 §22），待用户明确指令。
 
 **M2 seal 与 M3 前置（T9 之后，恢复时从这里继续）**：**2026-09-22 追加裁决：M2 与 UI 目标版式确认之后、M3 之前先做 M2.5 Score System Layout（见 §30 路线表与 `docs/UI_DESIGN_BRIEF.md` §2.7.6、§10.17/10.18）；M2.5 的 System 模型 = overlay layers（chord diagrams）+ ordered voice layers（TAB/Jianpu/Staff 接受外部 system/measure 几何）+ attached layers（lyrics），chord 不是第四种声部 layout，system 高度由内容决定、分页只在 system 边界，`bracket` 只证明视觉分组、需定义 cross-voice measure mismatch policy。**原文：T0–T9 已全部完成并推送，
 下一步不是继续写渲染代码，而是：
@@ -4763,8 +4778,9 @@ Chord / Jianpu / TAB / Staff 四种记谱可渲染（T0–T7，T7 Staff + VexFlo
    必须新建 `architecture.<stage>.test.ts`，不得再往 `architecture.test.ts` 追加；
 4. **M3.P0 Editor Core Planning ✅ SEALED（2026-10-07）**：架构冻结方案 `docs/M3_EDITOR_CORE_PLAN.md` v5（见 §30.1「M3.P0 实际状态」）；
    早期的 M3A / M3B / M3C 拆分只是历史分组名，正式阶段为方案 §22 的 T0–T9；
-5. **M3 implementation NOT STARTED。下一任务：M3 T0**（纯核心契约：Text Patch 与 SourceRange 变换、SourceProjection、会话派生与源码不变量、
-   EditorSelection 持久合同、IPC 契约类型、parse façade 与闭包守卫、冻结文件哈希清单），**待用户明确指令再启动**；
+5. **M3 T0 纯核心契约 ✅ SEALED（2026-10-09，`bee1224`，CI run 37944766436 attempt 1 三平台 success）**（见 §30.1「M3 T0 实际状态」）；M3.P0 的 CI 为 run 37513609019（`c046260`）；
+6. **M3 T1–T9 NOT STARTED。下一任务：M3 T1 preflight**（打开与解码：codec 入口、main 读取 / 解码 / 往返 / 能力、DecodeFailure、
+   store 迁到 parse façade、Electron 运行时 codec 测试进 CI，见方案 §22），**待用户明确指令再启动**；
    每阶段按方案 §29 的节奏：只读 preflight → 用户裁决 → 实现 → gate → 独立 review → 变异 → /check → 提交 → 三平台 CI → 文档 → 停下。
 ```
 
