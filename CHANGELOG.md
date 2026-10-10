@@ -34,7 +34,12 @@ CRITICAL / HIGH / P0 阻断类 MEDIUM 均为 0。本阶段只产出文档，未�
 **M3 T0 Pure Core Contracts ✅ SEALED（2026-10-09）**：`bee1224`，CI run 37944766436 三平台 success。只新增文件、既有文件零改动：
 文本补丁与选区范围变换、源码投影（受保护开头 U+FEFF、换行与孤立 CR 原样保留）、会话状态合同与源码不变量、持久选区合同、
 最小 shared 文档契约、只接受字符串的 renderer-safe 解析入口 `src/formats/jcxParse.ts`，以及锁定 414 个既有文件
-（raw 105 / norm 309）的冻结哈希清单与 M3 架构守卫；变异 36/36 killed。**M3 T1–T9 尚未开始，下一步是 T1。**
+（raw 105 / norm 309）的冻结哈希清单与 M3 架构守卫；变异 36/36 killed。
+
+**M3 T1a File Codec Boundary ✅ 三平台验证通过（2026-10-10）**：code `cbba29c`，CI run 38035446020 attempt 1，macOS / Ubuntu /
+Windows 全部 success（Electron runtime codec probe 三平台通过，关键编码向量无 skip）。M3 T1 按用户裁决拆为 T1a / T1b / T1c：
+T1a 只建立 main 侧编解码边界的纯 helper 与运行时验证，**尚未接入应用的 Open IPC / preload / renderer**（属 T1b / T1c）；
+本次为 T1a 的 docs-only 封板记录。**T1b、T1c 尚未开始，下一步是 T1b 只读 preflight（先冻结能力激活协议）。**
 
 ### Added
 
@@ -91,6 +96,14 @@ CRITICAL / HIGH / P0 阻断类 MEDIUM 均为 0。本阶段只产出文档，未�
     追加到 `GITHUB_STEP_SUMMARY`。
   - CI（`.github/workflows/ci.yml`）在 macOS / Windows / Ubuntu 三平台矩阵的
     `npm test` 之后新增 fixture 矩阵报告步骤。
+
+- M3 T1a File Codec Boundary（main 纯 helper，尚未接入 IPC / renderer）：main 专用 codec 入口 `src/formats/jcx/codec.ts`
+  （只 re-export 生产 `decodeJcx` / `encodeJcx`，不复制编码算法）；Open 纯管线（只读 fs port、1 MiB 原始字节上限的
+  读前 / 句柄后 / 有界读取三处防护、按字节前缀分类的解码失败、`byteBom` 只取自解码结果、字节往返 exact / unsafe 判定、
+  原始字节 SHA-256 指纹）；读取一致性检测（stat 与 open 之间被替换、读取中被改写都判为 `read-failed`，不签发能力）；
+  文件身份与 `sameFile`（不做大小写折叠，无法确认时为 `unknown`）；进程级 documentId 分配器；pending / active 两态的
+  能力表纯函数（不固化撤销时机）；Open 跨进程契约 `src/shared/openContracts.ts`；在 Electron 运行时
+  （`ELECTRON_RUN_AS_NODE=1`）执行的 codec probe `npm run test:electron-codec`，已进入三平台 CI（M3 T1a）。
 
 ### Changed
 
