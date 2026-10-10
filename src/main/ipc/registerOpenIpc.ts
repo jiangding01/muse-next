@@ -13,13 +13,20 @@
  *   主 frame 跨文档导航**开始**与**提交**时、以及渲染进程退出时，都先 `resetOwner`（作废能力、generation + 1），再用该窗口
  *   进行中的票据 `endDialog` 释放逻辑锁。提交时再失效一次是必要的：导航开始到提交之间旧文档仍然存活，它发出的 Open 会拿到
  *   开始时 reset 之后的新 generation（实测）；提交时的失效把这类请求一并作废，并释放它占用的
- *   **逻辑**锁，使新页面可以继续 Open——这不表示原生对话框已关闭（实测 reload / destroy 时对话框 promise 可能永不结束）。
+ *   **逻辑**锁——这不表示原生对话框已关闭（实测 reload 后 sheet 仍挂在原窗口上，destroy 后 promise 永不结束）。
  *   旧请求之后即使返回，也只会因 generation 不符被判 `superseded`；旧 handler 的 `finally` 只会对旧票据 `endDialog`，
  *   而协调器只在票据仍是最新请求时才清锁，所以不会清掉新请求的锁。
- * - **物理对话框上限**（独立于协调器的 `dialogOpen` 逻辑锁）：进程内同时最多 `MAX_PENDING_NATIVE_DIALOGS` 个尚未 settle 的
- *   `chooseOpenPath` 操作。达到上限时 Open 直接回复 `busy`——**不调用** `beginOpen`、不占请求代次、不丢弃任何 pending。
- *   计数只在 `chooseOpenPath` resolve / reject 时释放；reload、`resetOwner`、`disposeOwner` 与逻辑 `endDialog` 都不释放它，
- *   也没有任何定时强制释放。这样逻辑锁释放（让新页面可以继续 Open）不会导致原生对话框无上限堆积。
+ * - **物理对话框所有权**（T1b-2b preflight 裁决 Q1，独立于协调器的 `dialogOpen` 逻辑锁）：每个登记的**窗口实例**同时最多
+ *   一个尚未 settle 的 `chooseOpenPath` 操作。macOS 实测：同一窗口已有 sheet 时再弹对话框，新面板不会挂成 sheet，而是成为
+ *   用户无法触达的离屏面板，永不结束。所以只要该窗口实例的选择器尚未 settle（即使 reload / 渲染进程退出已释放逻辑锁），
+ *   同窗口的 Open 直接回复 `busy`——**不调用** `beginOpen`、不占请求代次、不丢弃任何 pending。所有权按窗口实例对象登记，
+ *   不按 ownerId：旧实例的迟到 settle 只能删除它自己的记录，不会清掉同一 ownerId 新登记实例的记录。
+ *   所有权只在 `chooseOpenPath` resolve / reject 时释放；reload、`resetOwner`、`disposeWindow` 与逻辑 `endDialog` 都不释放它，
+ *   也没有任何定时强制释放。窗口销毁后仍未 settle 的操作保留为真实的未完成记录，计入 `orphanedNativeDialogs`（诊断），
+ *   它只属于已销毁的实例，不影响其它窗口的 Open。进程级总数只用于诊断，不作为准入条件。
+ *   发起请求的窗口实例在选择器 settle 或读取结束时已不再登记（销毁后同一 ownerId 重新登记、或被替换）：迟到结果直接回复
+ *   `superseded`，不调用 `completeOpen`；逻辑锁也只在票据仍是该窗口登记的进行中票据时才释放——新实例的请求可能与旧票据
+ *   seq / generation 相同，旧请求不得清掉它的锁、消费它的票据或替它登记候选。
  * - **失败不外泄**：选择器异常、相对路径、T1a 管线异常、协调器编程错误都回复 `failed: read-failed`（固定文案），不透传原始错误。
  * - **授权 fail closed**：只有 `authorize`（T1a `lookupActive`）能用于授权；pending 永不授权；TTL 由协调器按注入时钟判定，
  *   定时器只做清理。
@@ -109,12 +116,17 @@ export interface OpenIpcHandle<W> {
   authorize(ownerId: number, token: string): OpenCapabilityRecord | null;
   /** 只读诊断快照（测试与日志）；不是授权入口。 */
   currentState(): OpenCoordinatorState;
-  /** 尚未 settle 的原生对话框操作数（诊断）。 */
+  /** 进程内尚未 settle 的原生对话框操作数（诊断，不是准入条件）。 */
   pendingNativeDialogs(): number;
+  /** 其中所属窗口实例已不再登记（已销毁或被同 ownerId 的新实例替换）的操作数（诊断）；它们仍未 settle，不是已释放。 */
+  orphanedNativeDialogs(): number;
 }
 
-/** 进程内同时尚未 settle 的原生打开对话框上限（用户裁决：2）。 */
-export const MAX_PENDING_NATIVE_DIALOGS = 2;
+/** 一次尚未 settle 的 `chooseOpenPath` 调用；以对象身份区分每次调用。 */
+interface NativeDialogOperation<W> {
+  readonly ownerId: number;
+  readonly window: W;
+}
 
 const REJECTED_MESSAGE = 'Request rejected';
 
@@ -131,8 +143,10 @@ export function registerOpenIpc<S extends SenderLike, W>(deps: OpenIpcDeps<S, W>
   const windows = new Map<number, W>();
   /** 每个窗口当前持有对话框锁的票据（只用于 reload 时释放逻辑锁）。 */
   const dialogTickets = new Map<number, OpenTicket>();
-  /** 尚未 settle 的 `chooseOpenPath` 操作数：进程级，只在选择器 settle 时减少。 */
-  let nativeDialogs = 0;
+  /** 每个窗口实例当前尚未 settle 的选择器操作（按实例对象登记）。 */
+  const dialogByWindow = new Map<W, NativeDialogOperation<W>>();
+  /** 进程内全部尚未 settle 的选择器操作（含孤儿）。 */
+  const unsettledDialogs = new Set<NativeDialogOperation<W>>();
 
   /** 同步段：Electron 事件 → 可信快照 → 校验；通过时返回 owner 与登记窗口。 */
   function authenticate(event: InvokeEventLike<S>): { readonly ownerId: number; readonly window: W } {
@@ -160,6 +174,19 @@ export function registerOpenIpc<S extends SenderLike, W>(deps: OpenIpcDeps<S, W>
     );
     if (!verdict.ok || registered === undefined) throw rejected();
     return { ownerId: verdict.ownerId, window: registered };
+  }
+
+  /**
+   * 选择器已经 settle：只删除这一次操作自己的记录。身份比对是防御性的——同一窗口实例不会同时有两次操作（准入保证），
+   * 旧实例与新实例的隔离靠以实例对象为键，而不是靠这行比对。
+   */
+  function releaseNativeDialog(operation: NativeDialogOperation<W>): void {
+    unsettledDialogs.delete(operation);
+    if (dialogByWindow.get(operation.window) === operation) dialogByWindow.delete(operation.window);
+  }
+
+  function isCurrentWindow(ownerId: number, window: W): boolean {
+    return windows.get(ownerId) === window;
   }
 
   function releaseDialog(ticket: OpenTicket): void {
@@ -205,8 +232,8 @@ export function registerOpenIpc<S extends SenderLike, W>(deps: OpenIpcDeps<S, W>
   async function openDocument(event: InvokeEventLike<S>, payload: unknown): Promise<OpenDocumentReply> {
     const { ownerId, window } = authenticate(event);
     if (parseOpenRequest(payload) === null) throw rejected();
-    // 物理上限先于逻辑锁判定：达到上限时不进入协调器，不占代次、不作废任何 pending。
-    if (nativeDialogs >= MAX_PENDING_NATIVE_DIALOGS) return { kind: 'rejected', reason: 'busy' };
+    // 物理所有权先于逻辑锁判定（鉴权之后）：该窗口实例的选择器尚未 settle 时不进入协调器，不占代次、不作废任何 pending。
+    if (dialogByWindow.has(window)) return { kind: 'rejected', reason: 'busy' };
     const begun = beginOpen(state, ownerId);
     state = begun.state;
     if (begun.result.kind === 'busy') return { kind: 'rejected', reason: 'busy' };
@@ -216,19 +243,26 @@ export function registerOpenIpc<S extends SenderLike, W>(deps: OpenIpcDeps<S, W>
 
     // 选择器结束（含抛错）后先释放对话框锁，再基于最新状态完成请求。
     let chosen: { readonly path: string | null } | null = null;
-    nativeDialogs += 1;
+    const operation: NativeDialogOperation<W> = { ownerId, window };
+    dialogByWindow.set(window, operation);
+    unsettledDialogs.add(operation);
     try {
       chosen = { path: await deps.chooseOpenPath(window) };
     } catch {
       chosen = null;
     } finally {
-      // 这里是物理计数唯一的释放点：选择器已经 settle。
-      nativeDialogs -= 1;
-      releaseDialog(ticket);
+      // 这里是物理所有权唯一的释放点：选择器已经 settle。
+      releaseNativeDialog(operation);
+      // 只释放仍由本请求持有的逻辑锁：窗口销毁后同一 ownerId 重新登记时，新请求可能与旧票据的 seq / generation 相同。
+      if (dialogTickets.get(ownerId) === ticket) releaseDialog(ticket);
     }
+    // 发起请求的窗口实例已不再登记（销毁或被替换）：迟到结果不进入协调器，不影响新实例的逻辑请求。
+    if (!isCurrentWindow(ownerId, window)) return { kind: 'rejected', reason: 'superseded' };
     if (chosen === null) return settle(ticket, readFailed());
     if (chosen.path === null) return settle(ticket, { kind: 'canceled' });
-    return settle(ticket, await runPipeline(ownerId, chosen.path));
+    const completion = await runPipeline(ownerId, chosen.path);
+    if (!isCurrentWindow(ownerId, window)) return { kind: 'rejected', reason: 'superseded' };
+    return settle(ticket, completion);
   }
 
   function activate(event: InvokeEventLike<S>, payload: unknown): ActivateDocumentReply {
@@ -281,6 +315,7 @@ export function registerOpenIpc<S extends SenderLike, W>(deps: OpenIpcDeps<S, W>
     },
     authorize: (ownerId, token) => authorizeCapability(state, ownerId, token),
     currentState: () => state,
-    pendingNativeDialogs: () => nativeDialogs,
+    pendingNativeDialogs: () => unsettledDialogs.size,
+    orphanedNativeDialogs: () => [...unsettledDialogs].filter((operation) => windows.get(operation.ownerId) !== operation.window).length,
   };
 }

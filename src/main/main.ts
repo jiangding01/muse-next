@@ -7,6 +7,7 @@ import iconv from 'iconv-lite';
 import { createNodeReadOnlyFileSystem } from './document/fileSystemPort';
 import { resolvePageEntry } from './ipc/pageIdentity';
 import { registerOpenIpc } from './ipc/registerOpenIpc';
+import { createOpenPathChooser, wireOpenIpcWindow } from './ipc/wireOpenIpcWindow';
 import { matchesPageIdentity } from './open/ipcValidation';
 import { IPC, type OpenedScoreFile } from '../shared/ipc';
 
@@ -22,18 +23,7 @@ const openIpc = registerOpenIpc({
   ipc: ipcMain,
   windowForSender: (sender) => BrowserWindow.fromWebContents(sender),
   pageIdentity: pageEntry.identity,
-  chooseOpenPath: async (parent) => {
-    const result = await dialog.showOpenDialog(parent, {
-      title: 'Open Muse Score',
-      properties: ['openFile'],
-      filters: [
-        { name: 'Muse score', extensions: ['jcx'] },
-        { name: 'Text files', extensions: ['txt', 'abc', 'tab'] },
-        { name: 'All files', extensions: ['*'] },
-      ],
-    });
-    return result.canceled ? null : (result.filePaths[0] ?? null);
-  },
+  chooseOpenPath: createOpenPathChooser((parent: BrowserWindow, options) => dialog.showOpenDialog(parent, options)),
   fs: createNodeReadOnlyFileSystem(),
   platform: process.platform,
   now: () => performance.now(),
@@ -59,25 +49,9 @@ function createWindow(): void {
     },
   });
 
+  // Open 协议的窗口事件接线与真实窗口 smoke 共用同一份实现（M3 T1b-2a′）。
+  wireOpenIpcWindow(openIpc, mainWindow);
   const contents = mainWindow.webContents;
-  const ownerId = contents.id;
-  openIpc.attachWindow(ownerId, mainWindow);
-  contents.on('did-start-navigation', (details) => {
-    openIpc.handleNavigation(ownerId, { isMainFrame: details.isMainFrame, isSameDocument: details.isSameDocument });
-  });
-  // did-navigate 只对主 frame 触发（子 frame 是 did-frame-navigate），且页内导航走 did-navigate-in-page。
-  contents.on('did-navigate', () => {
-    openIpc.handleNavigationCommitted(ownerId);
-  });
-  contents.on('render-process-gone', () => {
-    openIpc.handleRendererGone(ownerId);
-  });
-  contents.once('destroyed', () => {
-    openIpc.disposeWindow(ownerId);
-  });
-  mainWindow.once('closed', () => {
-    openIpc.disposeWindow(ownerId);
-  });
   // 诊断：实际页面地址是否与配置的可信身份一致。只记录，不改变任何信任判断。
   contents.on('did-finish-load', () => {
     if (!matchesPageIdentity(contents.getURL(), pageEntry.identity)) {
