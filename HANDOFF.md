@@ -3200,7 +3200,7 @@ visual debt、T7 第 6 条），按 视觉 / 架构 / 测试 分类，每行注�
   用于拒绝旧 saving phase 的迟到 `SaveResult`；不阻止 P0 冻结。
 - 冻结后规则：不再启动新的 M3.P0 架构审查，不再扩写方案；post-M3 / LOW / robustness debt 保留在方案 §26；
   实现阶段发现的问题按 T0–T9 各阶段 gate 处理，不重新打开 P0。
-- 实施进度：T0 ✅ SEALED（见下方「M3 T0 实际状态」）；T1a ✅ SEALED（见下方「M3 T1a 实际状态」）；T1b-1 纯协议层已实现、本地验收通过、远端 CI 待验证（见下方「M3 T1b-1 实际状态」）；T1b-2 / T1c 与 T2–T9 NOT STARTED。
+- 实施进度：T0 ✅ SEALED（见下方「M3 T0 实际状态」）；T1a ✅ SEALED（见下方「M3 T1a 实际状态」）；T1b-1 纯协议层已提交 `104b8e0`、CI run 38040120314 三平台 success（未单独封板，随 T1b 整体封板）；T1b-2a Electron Open IPC 接线已实现、本地验收通过、远端 CI 待验证（见下方「M3 T1b-2a 实际状态」）；T1b-2b / T1c 与 T2–T9 NOT STARTED。
 
 **M3 T0 实际状态（2026-10-09，✅ SEALED：`bee1224`，CI run 37944766436 attempt 1 三平台 success；npm ci / typecheck / npm test / fixture report 四步均实际执行成功）**：
 - 范围：Pure Core Contracts，只新增文件（32 个），既有文件零改动；未改 renderer / main / preload / `package.json` / `.github/**`。
@@ -3275,7 +3275,35 @@ visual debt、T7 第 6 条），按 视觉 / 架构 / 测试 分类，每行注�
   只返回通用错误；`resetOwner` / `disposeOwner` 的事件挂点与 `unknown-owner` 的回复映射在 T1b-2 preflight 冻结。
 - **T1c 前置条件**：必须裁决激活结果不确定（或重试得到 `capability-invalid`、旧 token 已失效）而旧会话仍 dirty 时的恢复行为
   （例如强制 Save As 或新增查询通道）；不在 T1b-1 扩大。
-- **Next**：T1b-1 三平台 CI 验证；之后 T1b-2 preflight，待用户明确指令。
+- **Next**（已完成）：T1b-1 `104b8e0` 的 CI run 38040120314 attempt 1 三平台 success；T1b-2 preflight 后拆为 T1b-2a / T1b-2b。
+
+**M3 T1b-2a 实际状态（2026-10-10，Electron Open IPC 接线：实现完成，本地 gate / 独立 review / `/check` 通过；远端三平台 CI 尚未验证，未封板）**：
+- 用户裁决（T1b-2 preflight 后）：T1b-2 拆为 T1b-2a（main / preload 接线 + fake harness 测试）/ T1b-2b（真实窗口 smoke + CI）；
+  reload 释放逻辑锁；生产页面改用 `loadURL(pathToFileURL(abs).href)`，同一字符串作为可信页面身份；Windows 只规范盘符；
+  接线依赖全部注入；非法调用只返回通用错误；产品 UI 暂不切换，旧 `muse:open-score` 保留到 T1c。
+- 范围（修改 3 个：`src/main/main.ts`、`src/preload/preload.ts`、`src/shared/ipc.ts`；新增 8 个：`src/main/ipc/registerOpenIpc.ts`、
+  `pageIdentity.ts`，`tests/unit/main/openIpcHarness.ts`、`pageIdentity.test.ts`、`registerOpenIpc.test.ts`、
+  `registerOpenIpc.reload.test.ts`、`registerOpenIpc.dialogLimit.test.ts`，`tests/unit/editor/architecture.m3t1b2.test.ts`）；
+  T1a / T1b-1 已提交文件、renderer、`package.json`、CI 零改动。
+- 新通道 `muse:open-document` / `muse:activate-document` / `muse:reject-document`；sender 校验在第一个 `await` 前同步完成，
+  页面身份来自 main 配置的可信入口（不以 `webContents.getURL()` 自身为基准）；preload 只转发 `{ intent: 'dialog' }` 与票据两字段。
+- **HIGH-1 导航竞态已修复**：旧文档在导航开始与提交之间发出的 Open 会拿到新代次并锁住新页面；现在 `did-start-navigation`
+  与 `did-navigate` 两处都作废该窗口（有回归测试）。
+- **物理对话框上限 = 2**（`MAX_PENDING_NATIVE_DIALOGS`）：进程级计数，与 T1b-1 的 `dialogOpen` 独立；达到上限回复 `rejected: busy`，
+  不调用 `beginOpen`、不占代次、不作废 pending；**只在 `chooseOpenPath` resolve / reject 时释放**，reload、renderer 退出、窗口销毁、
+  逻辑 `endDialog` 都不释放，没有定时强制释放；AST 守卫钉死计数恰好两处写入。
+- 验证：本地 typecheck、137 个测试文件 / 8067 个用例、fixture 105/105、匿名语料 11/11、Electron codec probe 44/44、冻结清单
+  414 / 105 / 309、`git diff --check`；独立 review 与复审（含 sandbox:true 下的 Electron 实测，未使用 `--no-sandbox`），
+  计数相关 17 个变异全部被杀死。T1b-2a **没有**真实窗口 IPC smoke——codec probe 不是新 IPC 的证据。
+- **可用性风险（T1b 整体封板前必须解决或重新裁决，不是已关闭的 LOW）**：macOS 实测（Electron 44.3 / macOS 15）reload 或
+  `destroy()` 后 native dialog Promise 可能长时间不 settle；带着对话框销毁窗口两次即可耗尽进程的两个名额，此后所有 Open 都 busy。
+- **T1b-2b 前置条件（须先只读 preflight）**：native dialog 在 reload / destroy 后的生命周期与名额永久占用的可恢复性；
+  手动取消旧对话框后 Promise 是否 settle（三平台人工冒烟）；三平台真实 Electron 窗口 smoke（`isSameDocument` 转发、`destroyed`
+  回调）；Windows URL / UNC 路径身份实测；Ubuntu 先用 `xvfb-run` + 真实 sandbox，不使用 `--no-sandbox`；新页面早期 IPC 与
+  `did-navigate` 的时序（复审实测 210/210 `did-navigate` 先到，但只是实现细节，须固定成 smoke 用例）。
+- **T1c 前置条件**：仍须裁决 activation 结果不确定与 dirty session 的恢复方案；逻辑 busy 与上限 busy 共用 `reason: 'busy'`，
+  UI 需要区分提示；首次 Open 收到 `superseded` 可重试一次。
+- **Next**：T1b-2a 三平台 CI 验证；之后 T1b-2b 只读 preflight，待用户明确指令。
 
 **M2 seal 与 M3 前置（T9 之后，恢复时从这里继续）**：**2026-09-22 追加裁决：M2 与 UI 目标版式确认之后、M3 之前先做 M2.5 Score System Layout（见 §30 路线表与 `docs/UI_DESIGN_BRIEF.md` §2.7.6、§10.17/10.18）；M2.5 的 System 模型 = overlay layers（chord diagrams）+ ordered voice layers（TAB/Jianpu/Staff 接受外部 system/measure 几何）+ attached layers（lyrics），chord 不是第四种声部 layout，system 高度由内容决定、分页只在 system 边界，`bracket` 只证明视觉分组、需定义 cross-voice measure mismatch policy。**原文：T0–T9 已全部完成并推送，
 下一步不是继续写渲染代码，而是：
@@ -4795,7 +4823,7 @@ JCX
 
 # 69. 当前明确的下一任务
 
-M0–M2.5、M3.P0、M3 T0、M3 T1a 已封板；M3 T1b-1 纯协议层本地验收通过、远端 CI 待验证，详见 §30.1。
+M0–M2.5、M3.P0、M3 T0、M3 T1a 已封板；M3 T1b-1 纯协议层三平台 CI 通过；M3 T1b-2a Electron Open IPC 接线本地验收通过、远端 CI 待验证，详见 §30.1。
 
 恢复时：
 
@@ -4817,10 +4845,12 @@ M0–M2.5、M3.P0、M3 T0、M3 T1a 已封板；M3 T1b-1 纯协议层本地验收
    CI run 38035446020 attempt 1 三平台 success，见 §30.1「M3 T1a 实际状态」）；
    T1a docs seal `2cd118a`（CI run 38037437600）后 **T1a ✅ SEALED**。
    **M3 T1b** 按用户裁决拆为 T1b-1 / T1b-2：**T1b-1 纯协议层**（激活协调器、能力表一致性、sender / payload 校验）实现完成，
-   本地 gate、独立 review、`/check` 通过，**远端三平台 CI 尚待验证，未封板**（见 §30.1「M3 T1b-1 实际状态」）；
-   T1b-2（Electron 接线、preload、真实窗口 IPC smoke）与 T1c 尚未启动。T1b-2 须落实 handler `finally` 清理、基于 main
-   可信入口的页面身份（含 Windows 实测）、异常与 reload 故障注入；T1c 须裁决激活结果不确定且旧会话 dirty 时的恢复行为。
-   **Next = T1b-1 三平台 CI 验证 → T1b-2 preflight**（待用户指令）。
+   已提交 `104b8e0`，CI run 38040120314 三平台 success（见 §30.1「M3 T1b-1 实际状态」）；
+   T1b-2 再拆为 T1b-2a / T1b-2b：**T1b-2a**（main / preload 接线、HIGH-1 双重导航失效、物理对话框上限 2 且只在选择器 settle 时释放）
+   本地 gate、独立 review、`/check` 通过，**远端三平台 CI 尚待验证**（见 §30.1「M3 T1b-2a 实际状态」）；**T1b-2b**（三平台真实窗口
+   IPC smoke）与 T1c 尚未启动。macOS reload / destroy 后对话框可能不 settle、名额可被永久占用，是 **T1b 整体封板前必须解决或重新裁决**
+   的可用性风险；T1c 仍须裁决 activation 不确定状态与 dirty session 的恢复方案。
+   **Next = T1b-2a 三平台 CI 验证 → T1b-2b 只读 preflight**（待用户指令）。
    T1b 启动前须先冻结 capability 激活协议（candidate → renderer accepted → activation ack → old revoked；失败 / 超时清理；
    并发 Open 时序）；之后 T1c，再 T2–T9 按方案 §22。每阶段按方案 §29 的节奏：只读 preflight → 用户裁决 → 实现 → gate →
    独立 review → 变异 → /check → 提交 → 三平台 CI → 文档 → 停下；

@@ -1,8 +1,47 @@
 import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { performance } from 'node:perf_hooks';
 import iconv from 'iconv-lite';
+import { createNodeReadOnlyFileSystem } from './document/fileSystemPort';
+import { resolvePageEntry } from './ipc/pageIdentity';
+import { registerOpenIpc } from './ipc/registerOpenIpc';
+import { matchesPageIdentity } from './open/ipcValidation';
 import { IPC, type OpenedScoreFile } from '../shared/ipc';
+
+/** 应用页面的加载地址与可信页面身份：只由 main 配置构造（M3 T1b-2a）。 */
+const pageEntry = resolvePageEntry({
+  devServerUrl: MAIN_WINDOW_VITE_DEV_SERVER_URL,
+  indexFilePath: path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`),
+  platform: process.platform,
+});
+
+/** M3 Open 协议（新 IPC，产品 UI 在 T1c 切换前仍走旧通道）。进程内只注册一次。 */
+const openIpc = registerOpenIpc({
+  ipc: ipcMain,
+  windowForSender: (sender) => BrowserWindow.fromWebContents(sender),
+  pageIdentity: pageEntry.identity,
+  chooseOpenPath: async (parent) => {
+    const result = await dialog.showOpenDialog(parent, {
+      title: 'Open Muse Score',
+      properties: ['openFile'],
+      filters: [
+        { name: 'Muse score', extensions: ['jcx'] },
+        { name: 'Text files', extensions: ['txt', 'abc', 'tab'] },
+        { name: 'All files', extensions: ['*'] },
+      ],
+    });
+    return result.canceled ? null : (result.filePaths[0] ?? null);
+  },
+  fs: createNodeReadOnlyFileSystem(),
+  platform: process.platform,
+  now: () => performance.now(),
+  issueToken: () => randomUUID(),
+  schedule: (delayMs, task) => {
+    setTimeout(task, delayMs).unref();
+  },
+});
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -20,13 +59,33 @@ function createWindow(): void {
     },
   });
 
-  if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
-    void mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
-  } else {
-    void mainWindow.loadFile(
-      path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`),
-    );
-  }
+  const contents = mainWindow.webContents;
+  const ownerId = contents.id;
+  openIpc.attachWindow(ownerId, mainWindow);
+  contents.on('did-start-navigation', (details) => {
+    openIpc.handleNavigation(ownerId, { isMainFrame: details.isMainFrame, isSameDocument: details.isSameDocument });
+  });
+  // did-navigate 只对主 frame 触发（子 frame 是 did-frame-navigate），且页内导航走 did-navigate-in-page。
+  contents.on('did-navigate', () => {
+    openIpc.handleNavigationCommitted(ownerId);
+  });
+  contents.on('render-process-gone', () => {
+    openIpc.handleRendererGone(ownerId);
+  });
+  contents.once('destroyed', () => {
+    openIpc.disposeWindow(ownerId);
+  });
+  mainWindow.once('closed', () => {
+    openIpc.disposeWindow(ownerId);
+  });
+  // 诊断：实际页面地址是否与配置的可信身份一致。只记录，不改变任何信任判断。
+  contents.on('did-finish-load', () => {
+    if (!matchesPageIdentity(contents.getURL(), pageEntry.identity)) {
+      console.warn('[muse] loaded page does not match the configured page identity; Open requests will be rejected');
+    }
+  });
+
+  void mainWindow.loadURL(pageEntry.loadUrl);
 }
 
 ipcMain.handle(IPC.openScore, async (): Promise<OpenedScoreFile> => {
