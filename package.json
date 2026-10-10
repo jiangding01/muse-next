@@ -14,7 +14,8 @@
     "test:watch": "vitest",
     "jcx:scan": "tsx scripts/jcx/scan-corpus.ts",
     "jcx:corpus-test": "tsx scripts/jcx/corpus-lex-test.ts",
-    "jcx:fixture-report": "tsx scripts/jcx/fixture-report.ts"
+    "jcx:fixture-report": "tsx scripts/jcx/fixture-report.ts",
+    "test:electron-codec": "tsx scripts/m3/electronCodecProbe.ts"
   },
   "engines": {
     "node": ">=22.12"

@@ -4733,55 +4733,34 @@ JCX
 
 # 69. 当前明确的下一任务
 
-M1.3 / M1.4 / M1.5 / M1.6 / M1.7 / M1.8 已完成
-（§30.1 有文件结构、Domain 边界、归一化规则、evidence 策略、Serializer
-模块清单/canonical 规则摘要、语料四级回归结果、以及 M1.8 T0–T4 的 fixture
-矩阵/closure/CI 看板完整现状快照；§55–§60 DoD 已逐条打勾给证据，M1.8 于
-2026-09-16 经 GitHub Actions 三平台全绿封板）。**M2 T0–T9 已全部完成**：
-Chord / Jianpu / TAB / Staff 四种记谱可渲染（T0–T7，T7 Staff + VexFlow 已于
-2026-09-22 封板 ✅）、T8 render matrix 补齐 C1/C2/C3 三条契约的用例、T9 完成
-本轮文档封板；**M2 已于 2026-09-22 封板 ✅（CI run 35700198783）**（§30.1「M2 进行中状态」有 T0–T9 完整
-状态、M2 遗留债务总表与「M2 seal 与 M3 前置」要点）。
+M0–M2.5、M3.P0、M3 T0 已封板，详见 §30.1。
 
 恢复时：
 
 ```text
-0. 2026-09-22：M2 封板、T8.1 收紧、`docs/UI_DESIGN_BRIEF.md` v1.1（§10 十五条已裁决）
-   均已推送后**主动暂停**；不自动启动 M3，也不改 M2 代码。等用户拿 Brief 去
-   Claude Design 出第一轮 8 张核心画面并确认后再继续；
-1. 先阅读 §30.1 的 T0–T9 完整状态与「M2 遗留债务总表」（M2 已封板，
-   T8.1 post-seal 契约收紧亦已三平台全绿，M2 代码不再改动）；
-2. UI 设计目标版式已确认（Brief v1.3 §2.7，Guitar Arrangement System Profile：
-   和弦图 → 六线谱 → 简谱 → 歌词，系统交错）；设计稿第一轮 8 张画面仍在用户侧进行；
-3. 代码侧下一步是 **M2.5 Score System Layout**（用户 2026-09-22 裁决插在 M3 前）：
-   方案已冻结为 `docs/M2.5_SYSTEM_LAYOUT_PLAN.md` v1.0（派发要点见 §30.1）；
-   前置 formats preflight（`TabGroupEvent.stroke` 回填）已完成（`a358760`）；
-   Jianpu Polish Phase A 已完成（`80edda1`）；Phase B 不单独实施（横向 spacing / group width 归 T3.5 / T4）；
-   **M2.5 T0 已完成**（`6e5a532` + 命名修订 `3f5b48c`，均三平台 CI 全绿，见 §30.1「M2.5 T0 实际状态」）；
-   **M2.5 T1 已完成**（`2b9882c`，三平台 CI 全绿，见 §30.1「M2.5 T1 实际状态」）；
-   **M2.5 T2 已完成**（`218d143`，三平台 CI 全绿，见 §30.1「M2.5 T2 实际状态」）；
-   **M2.5 T2.1 已完成**（`9037351`，三平台 CI 全绿，小节错位锁存，见 §30.1「M2.5 T2.1 实际状态」），
-   **M2.5 T3 已完成**（`7ee1e27`，三平台 CI 全绿，共享小节时间轴，见 §30.1「M2.5 T3 实际状态」），
-   **M2.5 T3.5 已完成**（`d2486aa`，三平台 CI 全绿，TAB / 简谱节奏刻印，见 §30.1「M2.5 T3.5 实际状态」），
-   **M2.5 T4 已完成**（`9661810`，三平台 CI 全绿，公共几何编排，见 §30.1「M2.5 T4 实际状态」），
-   **M2.5 T5 已完成**（`ed4ea88`，三平台 CI 全绿，三个 voice layout 的外部几何适配，见 §30.1「M2.5 T5 实际状态」），
-   **M2.5 T5.S 已完成**（VexFlow shared timing spike，`feasible-with-cost` / no adapter merged，M2.5 只承诺 Staff tier 1，见 §30.1「M2.5 T5.S 结论」），
-   **M2.5 T6 已完成**（`c74094e`，三平台 CI 全绿，和弦图层水平规划，见 §30.1「M2.5 T6 实际状态」），
-   **M2.5 T8 已完成**（`b513261`，三平台 CI 全绿，最终系统纵向编排，见 §30.1「M2.5 T8 实际状态」），
-   **M2.5 T9a 已完成**（`49b0e11`，三平台 CI 全绿，页面模型，见 §30.1「M2.5 T9a 实际状态」），
-   **M2.5 T9b 已完成**（`9eb5722`，三平台 CI 全绿，renderer system 化，见 §30.1「M2.5 T9b 实际状态」），
-   **M2.5 T9b.S 已完成**（`17efec3`，三平台 CI 全绿，Staff 纵向需求，T9c 前插入的 pre-seal 阶段，见 §30.1「M2.5 T9b.S 实际状态」），
-   **M2.5 T9c.P 已完成**（`1e7fb1c`，三平台 CI 全绿，简谱歌词 / 弧线横向锚点，T9c Stage A 中断后插入，见 §30.1「M2.5 T9c.P 实际状态」）。
-   **M2.5 T9c Stage A ✅ COMPLETE**（validation base `42fb4df`，docs `9a1fd5d`，CI run 37452773013 三平台全绿，见 §30.1「M2.5 T9c Stage A 实际状态」）。
-   **M2.5 Stage B final seal ✅**（`30395fe`，CI run 37457437828 三平台全绿）——**M2.5 ✅ SEALED（2026-10-06）**。剩余工作按 §30.1「M2.5 债务分类」的 A / B / C 三类处理
-   （post-M2.5 enhancement / polish & robustness / evidence gap），仍**不得**顺手实现 Staff tier 2；新的 architecture 守卫
-   必须新建 `architecture.<stage>.test.ts`，不得再往 `architecture.test.ts` 追加；
+0–3. 历史（2026-09-22 暂停等 Claude Design、M2.5 T0–T9c 逐项完成与 2026-10-06 封板）见 §30.1；
+   长期约束仍有效：新的架构守卫必须新建 `architecture.<stage>.test.ts`，不得往 `architecture.test.ts` 追加；
+   不得顺手实现 Staff tier 2（M2.5 债务按 §30.1「M2.5 债务分类」处理）；
 4. **M3.P0 Editor Core Planning ✅ SEALED（2026-10-07）**：架构冻结方案 `docs/M3_EDITOR_CORE_PLAN.md` v5（见 §30.1「M3.P0 实际状态」）；
    早期的 M3A / M3B / M3C 拆分只是历史分组名，正式阶段为方案 §22 的 T0–T9；
 5. **M3 T0 纯核心契约 ✅ SEALED（2026-10-09，`bee1224`，CI run 37944766436 attempt 1 三平台 success）**（见 §30.1「M3 T0 实际状态」）；M3.P0 的 CI 为 run 37513609019（`c046260`）；
-6. **M3 T1–T9 NOT STARTED。下一任务：M3 T1 preflight**（打开与解码：codec 入口、main 读取 / 解码 / 往返 / 能力、DecodeFailure、
-   store 迁到 parse façade、Electron 运行时 codec 测试进 CI，见方案 §22），**待用户明确指令再启动**；
-   每阶段按方案 §29 的节奏：只读 preflight → 用户裁决 → 实现 → gate → 独立 review → 变异 → /check → 提交 → 三平台 CI → 文档 → 停下。
+6. **M3 T1 已按 T1a / T1b / T1c 拆分**（用户 2026-10-10 裁决：D2 documentId 保持 T0 的 number；启动 demo = 0；main 进程级
+   递增正整数分配器只在 Open 成功后分配，将来 New 也用它（T1 不做 New IPC）；D4 sameFile 不做大小写折叠、realpath 原样比较
+   OR POSIX meaningful dev/ino、Windows 不用 ino、无法确认返回 unknown，T4 / T5 写盘保护遇 unknown 必须 fail closed；
+   D5 原始字节上限 1 MiB（1,048,576），读前 / 句柄后 / 有界读取中三处防护；D7 其余读取失败归 read-failed；
+   D8 SourceInspector 在 T1–T3 暂为 readOnly，接线属 T1c）。
+   **当前 = M3 T1a**（codec 入口 `src/formats/jcx/codec.ts` + main 纯 helper `src/main/document/**` + open 契约
+   `src/shared/openContracts.ts` + Electron runtime codec probe `npm run test:electron-codec` + CI 步骤）：implementation、
+   本地全部 gate 与独立 review（含 TOCTOU 读取一致性复核修复）已通过，**远端三平台 CI 尚待验证，未封板**；
+   T1b / T1c 未开始。
+   T1b 启动前须先冻结 capability 激活协议（candidate → renderer accepted → activation ack → old revoked；失败 / 超时清理；
+   并发 Open 时序）；之后 T1c，再 T2–T9 按方案 §22。每阶段按方案 §29 的节奏：只读 preflight → 用户裁决 → 实现 → gate →
+   独立 review → 变异 → /check → 提交 → 三平台 CI → 文档 → 停下；
+7. **positional-layout cross-stage checkpoint**：新的 legacy 证据显示 `%%skip` 是 voice event 序列中的 positional event，
+   text block 也与 voice event 顺序关联；现有 `Score.directives[]` / `Score.textBlocks[]` + header 渲染不能完整表达原版
+   positional semantics。T1 不处理：不改 Domain / parser / serializer / notation，不预设 Domain 类型。
+   硬门：T5 preflight（Normalize Copy）前必须裁决 canonical positional semantics；T6 / T8 preflight 前必须明确
+   layout / positioning semantics。后续继续追 0x1e / 0x1f layout consumer。
 ```
 
 **M2 入口要求**（§40/§41/§52）：从 `src/domain/` 的 `Score` 出发画谱面，

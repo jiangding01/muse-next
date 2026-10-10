@@ -19,5 +19,7 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      - name: Electron runtime codec probe (M3 T1a)
+        run: npm run test:electron-codec
       - name: JCX fixture matrix report (M1.8 T4, no corpus)
         run: npm run jcx:fixture-report
