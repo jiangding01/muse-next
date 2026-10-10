@@ -3200,7 +3200,7 @@ visual debt、T7 第 6 条），按 视觉 / 架构 / 测试 分类，每行注�
   用于拒绝旧 saving phase 的迟到 `SaveResult`；不阻止 P0 冻结。
 - 冻结后规则：不再启动新的 M3.P0 架构审查，不再扩写方案；post-M3 / LOW / robustness debt 保留在方案 §26；
   实现阶段发现的问题按 T0–T9 各阶段 gate 处理，不重新打开 P0。
-- 实施进度：T0 ✅ SEALED（见下方「M3 T0 实际状态」）；T1a ✅ 代码三平台验证通过（见下方「M3 T1a 实际状态」）；T1b / T1c 与 T2–T9 NOT STARTED。
+- 实施进度：T0 ✅ SEALED（见下方「M3 T0 实际状态」）；T1a ✅ SEALED（见下方「M3 T1a 实际状态」）；T1b-1 纯协议层已实现、本地验收通过、远端 CI 待验证（见下方「M3 T1b-1 实际状态」）；T1b-2 / T1c 与 T2–T9 NOT STARTED。
 
 **M3 T0 实际状态（2026-10-09，✅ SEALED：`bee1224`，CI run 37944766436 attempt 1 三平台 success；npm ci / typecheck / npm test / fixture report 四步均实际执行成功）**：
 - 范围：Pure Core Contracts，只新增文件（32 个），既有文件零改动；未改 renderer / main / preload / `package.json` / `.github/**`。
@@ -3247,7 +3247,35 @@ visual debt、T7 第 6 条），按 视觉 / 架构 / 测试 分类，每行注�
   renderer 拒绝 / 超时 / reload / 窗口销毁时清理 pending；IPC 层拒绝相对路径并校验 sender 为主 frame。
 - 带入 T4 的前置条件：Save As 目标尚不存在时 `resolveFile` 为 unresolved → sameFile `unknown`；T4 preflight 须规定
   不存在目标的规范化方式（如 `realpath(dirname) + basename`），不得自动当作 `different`。
-- **Next = M3 T1b preflight**（只读），待 T1a docs seal 的三平台 CI 通过与用户明确指令。
+- 后续：T1a docs seal `2cd118a`（CI run 38037437600 三平台 success）后 T1a ✅ SEALED；T1b preflight 已完成，见下方「M3 T1b-1 实际状态」。
+
+**M3 T1b-1 实际状态（2026-10-10，纯协议层：实现完成，本地 gate / 独立 review / `/check` 通过；远端三平台 CI 尚未验证，未封板）**：
+- 用户裁决（T1b preflight 后）：方案 C——T1b 建立新 IPC 但产品 UI 暂不切换，旧 `muse:open-score` 在 T1c 一次性删除，绝不伪造
+  renderer acceptance；`OpenDocumentReply` 增加 `rejected: busy | superseded`；新通道 `muse:activate-document` /
+  `muse:reject-document`（复用 `capability-invalid` / `document-mismatch`）；pending TTL 120 s；requestSeq 严格最新；
+  非法 sender 同步拒绝、零状态修改、精确页面身份；T1b 拆为 T1b-1（纯协议层）/ T1b-2（Electron 接线与 smoke）。
+- 范围（9 个新增文件，既有文件零改动；未改 main.ts / preload / `src/shared/ipc.ts` / renderer / CI / package.json）：
+  `src/shared/activationContracts.ts`；`src/main/open/openCoordinator.ts`、`coordinatorInvariants.ts`、`ipcValidation.ts`；
+  `tests/unit/main/openCoordinator.test.ts`、`openCoordinator.activation.test.ts`、`ipcValidation.test.ts`、`coordinatorFixtures.ts`；
+  `tests/unit/editor/architecture.m3t1b.test.ts`。
+- 核心合同：能力事实只在 T1a 的 `CapabilityTable`，协调器只存 generation / latestRequestSeq / dialogOpen / inFlightSeq 与候选的
+  requestSeq / generation / expiresAt，六条不变量（`coordinatorInvariantViolations`）防分叉；`beginOpen` 接受新请求时 seq + 1 并作废
+  该窗口全部 pending，`busy` 不占代次；**OpenTicket 只能完成一次**（`inFlightSeq` 消费，重复完成 → superseded）；只有当前
+  generation 的最新请求能登记与激活，过期请求不能恢复旧 active、不能吊销较新 active；TTL 120 s 从 pending 登记时计时，
+  注入单调时钟，`now >= expiresAt` 即过期，任何调用都不续期；激活成功只吊销同窗口被取代的旧 active，只表示 main 已 active、
+  不表示 renderer 已提交；重复激活幂等（结果不确定时的确定性重试）；已激活后 reject 只吊销该能力、不恢复旧能力；
+  reload / 渲染进程退出 → generation + 1 并清空该窗口能力，窗口销毁 → 移除 owner；sender 校验只消费同步段构造的可信快照，
+  页面身份按解析后的 URL 组成部分精确匹配（无前缀判定），payload 键全集与类型严格校验、取值异常不外传。
+- 验证：本地 132 个测试文件 / 7986 个用例、fixture 105/105、匿名语料 11/11、Electron codec probe 44/44、冻结清单 414 / 105 / 309；
+  独立 review（8 万步随机操作模糊测试、30 个变异、URL 对抗输入）1 条 MEDIUM 缺陷（票据可重复完成）已修复；
+  修复后关键变异全部被杀死。T1b-1 **没有** Electron IPC smoke——T1a 的 codec probe 不是 IPC smoke 的证据。
+- **T1b-2 前置条件**：handler 必须基于最新状态迁移，并在 `finally` 中对最新状态调用 `endDialog`；Windows 页面身份校验
+  （盘符大小写、空格 / 非 ASCII 路径编码）必须实测；**页面 URL 身份必须基于 main 配置的可信入口构造，不得仅以动态读取的
+  `webContents.getURL()` 自身作为可信基准**；异常、reload、窗口销毁的故障注入进入真实窗口 smoke；handler 外层统一 try/catch
+  只返回通用错误；`resetOwner` / `disposeOwner` 的事件挂点与 `unknown-owner` 的回复映射在 T1b-2 preflight 冻结。
+- **T1c 前置条件**：必须裁决激活结果不确定（或重试得到 `capability-invalid`、旧 token 已失效）而旧会话仍 dirty 时的恢复行为
+  （例如强制 Save As 或新增查询通道）；不在 T1b-1 扩大。
+- **Next**：T1b-1 三平台 CI 验证；之后 T1b-2 preflight，待用户明确指令。
 
 **M2 seal 与 M3 前置（T9 之后，恢复时从这里继续）**：**2026-09-22 追加裁决：M2 与 UI 目标版式确认之后、M3 之前先做 M2.5 Score System Layout（见 §30 路线表与 `docs/UI_DESIGN_BRIEF.md` §2.7.6、§10.17/10.18）；M2.5 的 System 模型 = overlay layers（chord diagrams）+ ordered voice layers（TAB/Jianpu/Staff 接受外部 system/measure 几何）+ attached layers（lyrics），chord 不是第四种声部 layout，system 高度由内容决定、分页只在 system 边界，`bracket` 只证明视觉分组、需定义 cross-voice measure mismatch policy。**原文：T0–T9 已全部完成并推送，
 下一步不是继续写渲染代码，而是：
@@ -4767,7 +4795,7 @@ JCX
 
 # 69. 当前明确的下一任务
 
-M0–M2.5、M3.P0、M3 T0 已封板；M3 T1a 代码已完成三平台验证（docs seal 进行中），详见 §30.1。
+M0–M2.5、M3.P0、M3 T0、M3 T1a 已封板；M3 T1b-1 纯协议层本地验收通过、远端 CI 待验证，详见 §30.1。
 
 恢复时：
 
@@ -4786,8 +4814,13 @@ M0–M2.5、M3.P0、M3 T0 已封板；M3 T1a 代码已完成三平台验证（do
    **当前 = M3 T1a**（codec 入口 `src/formats/jcx/codec.ts` + main 纯 helper `src/main/document/**` + open 契约
    `src/shared/openContracts.ts` + Electron runtime codec probe `npm run test:electron-codec` + CI 步骤）：implementation、
    本地全部 gate 与独立 review（含 TOCTOU 读取一致性复核修复）已通过，**代码已完成三平台验证**（`cbba29c`，
-   CI run 38035446020 attempt 1 三平台 success，见 §30.1「M3 T1a 实际状态」），docs seal 进行中；
-   T1b / T1c 未开始。**Next = M3 T1b preflight**（只读，待 docs seal CI 通过与用户指令）。
+   CI run 38035446020 attempt 1 三平台 success，见 §30.1「M3 T1a 实际状态」）；
+   T1a docs seal `2cd118a`（CI run 38037437600）后 **T1a ✅ SEALED**。
+   **M3 T1b** 按用户裁决拆为 T1b-1 / T1b-2：**T1b-1 纯协议层**（激活协调器、能力表一致性、sender / payload 校验）实现完成，
+   本地 gate、独立 review、`/check` 通过，**远端三平台 CI 尚待验证，未封板**（见 §30.1「M3 T1b-1 实际状态」）；
+   T1b-2（Electron 接线、preload、真实窗口 IPC smoke）与 T1c 尚未启动。T1b-2 须落实 handler `finally` 清理、基于 main
+   可信入口的页面身份（含 Windows 实测）、异常与 reload 故障注入；T1c 须裁决激活结果不确定且旧会话 dirty 时的恢复行为。
+   **Next = T1b-1 三平台 CI 验证 → T1b-2 preflight**（待用户指令）。
    T1b 启动前须先冻结 capability 激活协议（candidate → renderer accepted → activation ack → old revoked；失败 / 超时清理；
    并发 Open 时序）；之后 T1c，再 T2–T9 按方案 §22。每阶段按方案 §29 的节奏：只读 preflight → 用户裁决 → 实现 → gate →
    独立 review → 变异 → /check → 提交 → 三平台 CI → 文档 → 停下；
