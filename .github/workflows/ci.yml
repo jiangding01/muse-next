@@ -21,5 +21,17 @@ jobs:
       - run: npm test
       - name: Electron runtime codec probe (M3 T1a)
         run: npm run test:electron-codec
+      # 根 tsconfig 不含 scripts/m3：单独检查 IPC smoke 的 runner 与判定器。
+      - name: Typecheck Electron IPC smoke runner (M3 T1b-2b-1)
+        run: npm run typecheck:electron-ipc
+      # 真实 BrowserWindow + 生产 preload + 默认 sandbox；Linux 只加虚拟显示，不改沙箱 / AppArmor / SUID。
+      - name: Electron real-window IPC smoke (M3 T1b-2b-1)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a npm run test:electron-ipc
+        timeout-minutes: 15
+      - name: Electron real-window IPC smoke (M3 T1b-2b-1)
+        if: runner.os != 'Linux'
+        run: npm run test:electron-ipc
+        timeout-minutes: 15
       - name: JCX fixture matrix report (M1.8 T4, no corpus)
         run: npm run jcx:fixture-report

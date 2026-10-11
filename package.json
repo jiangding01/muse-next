@@ -10,12 +10,14 @@
     "package": "electron-forge package",
     "make": "electron-forge make",
     "typecheck": "tsc --noEmit",
+    "typecheck:electron-ipc": "tsc --noEmit -p tsconfig.electron-ipc.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "jcx:scan": "tsx scripts/jcx/scan-corpus.ts",
     "jcx:corpus-test": "tsx scripts/jcx/corpus-lex-test.ts",
     "jcx:fixture-report": "tsx scripts/jcx/fixture-report.ts",
-    "test:electron-codec": "tsx scripts/m3/electronCodecProbe.ts"
+    "test:electron-codec": "tsx scripts/m3/electronCodecProbe.ts",
+    "test:electron-ipc": "tsx scripts/m3/electronIpcSmoke.ts"
   },
   "engines": {
     "node": ">=22.12"

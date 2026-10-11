@@ -1,0 +1,4 @@
+{
+  "extends": "./tsconfig.json",
+  "include": ["scripts/m3/electronIpcSmoke.ts", "scripts/m3/electronIpcSmokeSummary.ts"]
+}

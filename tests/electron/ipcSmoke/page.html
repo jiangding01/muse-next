@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>muse ipc smoke</title>
+  </head>
+  <body>
+    <p>M3 T1b-2b-1 真实窗口 IPC smoke 测试页（不是产品页面）。</p>
+    <script>
+      // 页面只通过 window.museDesktop（生产 preload 暴露的白名单）发起 IPC；不持有任何路径。
+      window.smokeEarly = null;
+      if (location.hash === '#early' && window.museDesktop) {
+        // nav.early-ipc：新文档脚本解析阶段立即发起 Open，结果留给 main 之后读取。
+        window.smokeEarly = window.museDesktop.openDocument().then(
+          (reply) => ({ ok: true, value: reply }),
+          (error) => ({ ok: false, error: String(error && error.message ? error.message : error) }),
+        );
+      }
+      if (location.hash === '#frame') {
+        // reject.subframe / risk.subframe-parent-bridge：嵌入同一个页面文件作为子 frame（不带 hash）。
+        const frame = document.createElement('iframe');
+        frame.src = location.href.split('#')[0];
+        document.body.appendChild(frame);
+      }
+    </script>
+  </body>
+</html>
