@@ -3200,7 +3200,7 @@ visual debt、T7 第 6 条），按 视觉 / 架构 / 测试 分类，每行注�
   用于拒绝旧 saving phase 的迟到 `SaveResult`；不阻止 P0 冻结。
 - 冻结后规则：不再启动新的 M3.P0 架构审查，不再扩写方案；post-M3 / LOW / robustness debt 保留在方案 §26；
   实现阶段发现的问题按 T0–T9 各阶段 gate 处理，不重新打开 P0。
-- 实施进度：T0 ✅ SEALED（见下方「M3 T0 实际状态」）；T1a ✅ SEALED（见下方「M3 T1a 实际状态」）；T1b-1 纯协议层已提交 `104b8e0`、CI run 38040120314 三平台 success（未单独封板，随 T1b 整体封板）；T1b-2a Electron Open IPC 接线已提交 `b198bb1`、CI run 38044009269 三平台 success；T1b-2a′ 原生对话框所有权定点修复本地实现中、未提交（见下方「M3 T1b-2a′ 实际状态」）；T1b-2b / T1c 与 T2–T9 NOT STARTED；T1b 整体未封板。
+- 实施进度：T0 ✅ SEALED（见下方「M3 T0 实际状态」）；T1a ✅ SEALED（见下方「M3 T1a 实际状态」）；T1b-1 纯协议层已提交 `104b8e0`、CI run 38040120314 三平台 success（未单独封板，随 T1b 整体封板）；T1b-2a Electron Open IPC 接线已提交 `b198bb1`、CI run 38044009269 三平台 success；T1b-2a′ 原生对话框所有权定点修复已提交 `1bb9755`、CI run 38047444068 三平台 success（见下方「M3 T1b-2a′ 实际状态」）；T1b-2b-1 真实窗口 IPC smoke 代码验收通过（`158114d`，CI run 38148415852 三平台 success，见下方「M3 T1b-2b-1 实际状态」）；T1b-2b 后续子阶段（T1b-2b-2，范围待裁决）/ T1c 与 T2–T9 NOT STARTED；T1b 整体 NOT SEALED。
 
 **M3 T0 实际状态（2026-10-09，✅ SEALED：`bee1224`，CI run 37944766436 attempt 1 三平台 success；npm ci / typecheck / npm test / fixture report 四步均实际执行成功）**：
 - 范围：Pure Core Contracts，只新增文件（32 个），既有文件零改动；未改 renderer / main / preload / `package.json` / `.github/**`。
@@ -3305,7 +3305,7 @@ visual debt、T7 第 6 条），按 视觉 / 架构 / 测试 分类，每行注�
   UI 需要区分提示；首次 Open 收到 `superseded` 可重试一次。
 - **Next**（已完成）：T1b-2a `b198bb1` 的 CI run 38044009269 attempt 1 三平台 success；T1b-2b 只读 preflight 已完成，见下方「M3 T1b-2a′ 实际状态」。
 
-**M3 T1b-2a′ 实际状态（2026-10-10，原生对话框所有权定点修复：本地实现、gate、独立 Deep Review 通过，未提交）**：
+**M3 T1b-2a′ 实际状态（2026-10-10，原生对话框所有权定点修复：已提交 `1bb9755`，CI run 38047444068 attempt 1 三平台 success）**：
 - preflight 实测（macOS，Electron 44.3）修正了 T1b-2a 的风险描述：reload / 渲染进程崩溃后 sheet 仍挂在原窗口上，用户取消后 settle
   （可恢复）；`win.close()` 会先 `endSheet` 再关窗，选择器 settle 为 `canceled:false, filePaths:[]`；`win.destroy()`（`CloseImmediately`
   不调 `endSheet`）后面板离屏存活、永不 settle；**同一窗口已有 sheet 时再弹对话框，新面板成为离屏孤儿、永不 settle**——T1b-2a 的
@@ -3324,9 +3324,10 @@ visual debt、T7 第 6 条），按 视觉 / 架构 / 测试 分类，每行注�
   414 / 105 / 309、`git diff --check`；独立 Deep Review 无 HIGH / MEDIUM，4 条 LOW 已处理（其中「销毁后同 ownerId 重新登记，
   旧选择器迟到 settle 污染新请求的逻辑锁 / 票据」按实现约束「迟到 Promise 不得影响新的逻辑请求」修复并加回归测试；守卫改为
   报告集合标识符的别名 / 下标引用；窗口数与对话框选项断言加强）；定点变异 28 个，26 个被行为测试杀死，2 个为等价变异
-  （接线中登记与监听的先后；`releaseDialog` 内已冗余的票据归属判断）。仍然**没有**真实窗口 IPC smoke。
+  （接线中登记与监听的先后；`releaseDialog` 内已冗余的票据归属判断）。仍然**没有**真实窗口 IPC smoke（截至 T1b-2a′；T1b-2b-1 已补，见下方）。
 - 残余风险：窗口带着未 settle 的对话框被 `destroy()` 时，该操作永久计为 orphaned（面板离屏、不可见），但不再影响其它窗口；
-  reload 后旧 sheet 仍可见，用户取消或选择（结果被作废）前该窗口 Open 为 busy。Windows / Linux 行为未实测。
+  reload 后旧 sheet 仍可见，用户取消或选择（结果被作废）前该窗口 Open 为 busy。Windows / Linux 行为未实测（截至 T1b-2a′；T1b-2b-1 已在 CI
+  观测，见下方）。
 - **T5 冲突（未解决，原版 T5 合同仍冻结）**：方案规定 renderer 无响应时强制关闭走 `win.destroy()`，而 macOS 上 destroy 会留下
   永不 settle 的 sheet。用户裁决不在本批改写该规则（`close()` 可能仍被 beforeunload 或窗口生命周期阻塞，不能证明能完成强制关闭）。
   T5 preflight 必须专项验证「unresponsive renderer + native sheet + close / destroy」；候选方案是先经正常 close 结束 sheet、确认
@@ -3334,7 +3335,70 @@ visual debt、T7 第 6 条），按 视觉 / 架构 / 测试 分类，每行注�
 - T1b-2b 保留裁决（Q4–Q7）：Windows / Linux 真实原生对话框首轮可只做完整观测，不得省略执行或虚报 PASS；Windows UNC 环境不可访问
   时可标为未验证，本地路径身份与纯 UNC URL 单测仍必过；Ubuntu 先用 Xvfb + 默认真实 sandbox，不预先批准 SUID / sysctl，禁止
   `--no-sandbox`；`nav.early-ipc` 允许可恢复的 superseded，但不得泄漏能力、错误授权或悬挂状态，重试必须成功。
-- **Next**：用户复核 T1b-2a′ → 提交与三平台 CI → T1b-2b-1（真实窗口 IPC smoke + CI），均待用户明确指令。
+- **Next**（已完成）：T1b-2a′ 已提交 `1bb9755`（CI run 38047444068 三平台 success）；T1b-2b-1 见下方「M3 T1b-2b-1 实际状态」。
+
+**M3 T1b-2b-1 实际状态（2026-10-11，真实 Electron 窗口 IPC smoke + 三平台 CI：✅ 代码验收通过——code `158114d`，CI run 38148415852 attempt 1，macOS / Windows / Ubuntu 全部 success；T1b 整体仍 NOT SEALED）**：
+- 范围：只新增 / 修改测试与 CI 层文件；**产品生产源码零改动**（`src/**`、preload、产品 renderer 未改），T1a / T1b-1 / T1b-2a / T1b-2a′ 已提交文件、冻结文件、`docs/M3_EDITOR_CORE_PLAN.md` 零改动。
+  新增 `tests/electron/ipcSmoke/**`（smoke main 入口、harness、窗口工厂、用例分组、`crashObservation.ts`、`linuxExitExperiments.ts`、
+  `linuxProcessDiagnostics.ts`、测试页）、`scripts/m3/electronIpcSmoke.ts`（runner）与 `electronIpcSmokeSummary.ts`（判定器）、
+  `tsconfig.electron-ipc.json`；单测 `tests/unit/scripts/electronIpcSmokeSummary.test.ts`、`ipcSmokeLinuxDiagnostics.test.ts`；守卫
+  `tests/unit/editor/architecture.m3t1b2b.test.ts` 与 `architecture.m3t1b2b.exit.test.ts`；`package.json` 新增 `test:electron-ipc` /
+  `typecheck:electron-ipc`；CI 新增 runner 类型检查 step、Linux 专用 AppArmor step、smoke step，matrix `fail-fast: false`。
+- 开发分支提交：`b701faa`（smoke 主体）→ `8be8bb1`（AppArmor profile + fail-fast）→ `5fceee2`（AppArmor 进程标签自检、守卫 CRLF 兼容）→
+  `cc8692a`（BigInt 断言、崩溃事件诊断）→ `c0c0d0c`（Linux `/proc` 与信号诊断）→ `158114d`（Linux 退出硬门与风险观测分离）。
+- 运行方式：runner 用 vite 把 smoke main 入口与生产 `src/preload/preload.ts` 源码各打成 CJS（不是 Forge 构建产物），产物 / 页面 / fixture /
+  userData 在 mkdtemp 临时目录；以**完整 Electron** 启动（不设 `ELECTRON_RUN_AS_NODE`，不追加 Chromium 开关），窗口 `sandbox: true` /
+  `contextIsolation: true` / `nodeIntegration: false` + 生产 preload，经生产 `wireOpenIpcWindow` 登记；协议只来自生产 `registerOpenIpc`
+  （main 注入受控选择器 / 可暂停只读 fs / 测试时钟 / token 故障注入）；页面经 `window.museDesktop` 主动 Open / activate / reject。
+  `matrix` 子进程跑自动化用例；`real.*`、`identity.win-unc`、`risk.linux-force-crash-stall` 各占独立子进程。判定器要求带 nonce 的单行结果、
+  用例 id 集合恰为本平台清单（固定清单共 48 个 Case ID，含 3 个平台专属：`identity.win-drive`、`identity.win-unc`、
+  `risk.linux-force-crash-stall`；每个平台取子集：macOS 45 / Windows 47 / Linux 46），`pass` 必须 passed、`observe` 必须 observed 且有事实、仅 UNC 可 unverified、
+  禁止 skipped，并校验 runtime 与 sandbox 证据。
+- **CI run 38148415852（code `158114d`）三平台结果**：
+  - npm test：142 个测试文件；macOS 8171 passed；Windows / Ubuntu 8170 passed + 1 项既有 skip（T1a 平台条件用例）。
+  - Electron codec probe：macOS / Ubuntu 44/44；Windows 43 passed + 1 项既有 skip。fixture 三平台 105/105。runner 类型检查三平台通过。
+  - Electron real-window IPC smoke：**macOS 45 cases（44 passed + 1 observed）；Windows 47（42 passed + 5 observed）；Ubuntu 46（40 passed +
+    6 observed）**；三平台 failed / skipped / unverified 均为 0。observed 不计入 passed：三平台 `risk.subframe-parent-bridge`；Windows / Ubuntu
+    另有 4 个 `real.*`；Ubuntu 另有 `risk.linux-force-crash-stall`。
+- 关键事实：
+  - **HIGH-1 在真实窗口复现并确认已防住**（`nav.race-start-commit`）：旧文档在「导航已开始、未提交」期间的 Open 能 opened 并激活，commit
+    后全部作废；跨 commit 的旧请求不登记候选、不释放新请求的逻辑锁。驱动旧文档须用 `WebFrameMain.executeJavaScript`。
+  - **Windows 路径身份**：空格 / 中文 / 字面 `%41` / `#` 路径与盘符规范化（小写传入）与 Chromium 实际 frame URL 一致；**UNC 实际通过**
+    （`file://127.0.0.1/C$/…` 加载、身份匹配、Open 成功；`\\localhost\C$` 会被 WHATWG URL 规范为空主机，不可用）。
+  - **sandbox 证据**：三平台配置为 sandbox / contextIsolation 开、nodeIntegration 关，无关闭沙箱开关，页面主世界无 require / process；
+    macOS `app.getAppMetrics().sandboxed=true`；Windows `sandboxed=true`、`integrityLevel=untrusted`；Ubuntu renderer `Seccomp=2 NoNewPrivs=1`
+    ——**只证明 seccomp-bpf 层，Linux namespace 层没有独立取证**。
+  - **Ubuntu 专用 AppArmor profile**：ubuntu-24.04（内核 6.17）`kernel.apparmor_restrict_unprivileged_userns=1` 使默认 sandbox 初始化 FATAL
+    （CI run 38135665466）。用户裁决方案 C：CI 只为本次 npm 安装的 Electron 可执行文件加载 `muse-next-electron-ci`（unconfined + `userns`），
+    并以同一可执行文件读取自身 `/proc/self/attr/apparmor/current` 自检（标签 `muse-next-electron-ci (unconfined)`）；不改 sysctl、不设 SUID、
+    不关 AppArmor；smoke 本身仍不设 RunAsNode。
+  - **Linux `crash.renderer-gone` = `trigger=os-sigkill` 硬门**（用户裁决）：对新鲜、正常运行的 renderer（S / `futex_do_wait`）经严格身份校验
+    （启动时刻、`--type=renderer`、可执行文件、祖先链、webContents PID、非共享、非僵尸）后发送一次 SIGKILL；CI 实测 webContents / app
+    事件发送后 4 ms 到达（killed / 9）、20 ms 完成吊销，generation 3→4、能力 1→0、旧 token 失效、不变量成立，之后 reload 恢复。
+    **这只证明「renderer 进程真实退出 ⇒ 吊销」，不代表 `forcefullyCrashRenderer()` 在 Linux 上正常**。macOS / Windows 仍用 forceCrash
+    （本次 CI：macOS 事件 7 ms 到达、23 ms 吊销；Windows 5 ms / 21 ms；均 category ok）。
+  - **`risk.linux-force-crash-stall`（Linux 独立子进程，observed）**：`forcefullyCrashRenderer()` 后 renderer 输出 FATAL 但停在 `do_exit`
+    （State `I`），20 s 内 render-process-gone 不到达，**旧能力一直有效**；无崩溃处理辅助进程；经身份校验的 postKill SIGKILL 后事件
+    7 ms 到达、20 ms 吊销。带 `/proc` 证据的半退出在 run 38145428397、38148415852 中复现（后者在 `risk.linux-force-crash-stall` 与
+    `real.crash-keeps-dialog` 两个用例中各出现一次），run 38143813025 也观测到 forceCrash 后事件不到达；**仍是 Linux 残余风险，未修复**。
+  - **原生对话框观测**：macOS（gate）`close()` 后 settle；reload / 崩溃后 sheet 仍挂窗口、同窗口 Open busy；`destroy()` 留孤儿但不影响其它窗口。
+    **Windows / Linux（observed）关窗后 5 s 内对话框不 settle**（`real.close-settles` 结束时 orphaned = 1；`real.destroy-isolated` 结束时
+    orphaned = 2）。
+  - `risk.subframe-parent-bridge`（三平台 observed）：生产配置下同源子 frame 无桥，但可经 `parent.museDesktop.openDocument()` 发起 Open，main
+    看到主 frame sender 并接受；`reject.subframe` 使用测试专属 `nodeIntegrationInSubFrames`，只证明 main 侧 mainFrame 校验生效。
+- 审查与变异：多轮独立只读 Review（首轮 Deep Review 2 条 MEDIUM、CI 修复轮 1 条 HIGH、崩溃诊断轮 2 条 MEDIUM、最终轮 1 条 MEDIUM）均已修复并复核，
+  `/check` 无阻断。定点变异：首轮 28 个在 Review 修复前的代码上执行（25 杀死；1 个等价、1 个构造无效已改写后杀死、1 个暴露覆盖缺口补用例后杀死），
+  修复后定点补跑 4 个全部杀死；**未在最终代码上整套重跑**。「旧实例迟到结果影响新实例」只能由单测杀死（真实 Electron 不复用 webContents id）。
+- **非阻断改进项（L8）**：forceCrash 后「事件未到但进程已消失 / 僵尸」目前因 `killRefusals` 拒绝而判 failed，理由显示为 postKill 未发送；
+  结论偏保守，可在后续把它单独归类。
+- **带入后续的前置问题**：
+  - **T5**：「renderer 无响应时强制关闭走 `win.destroy()`」与 macOS sheet 冲突仍未解决，原合同仍冻结；本轮新增事实：Windows / Linux 关窗后原生
+    对话框 5 s 内不 settle，T5 关闭策略不能只按 macOS 设计。
+  - **T1c**：同源 iframe / opener 可经 `parent.museDesktop` / `opener.museDesktop` 访问桥（CSP `frame-src 'none'`、`setWindowOpenHandler`
+    拒绝、子 frame 导航限制须在 T1c 前审查）；激活结果不确定、renderer 崩溃后的会话恢复仍待裁决；UI 需区分逻辑 busy 与对话框 busy。
+  - Linux forceCrash 半退出：旧能力保留到下一次 reload / 导航或关窗；真实 Linux 桌面行为未验证。
+  - 打包：Ubuntu 24.04 上正式安装的 Linux 包同样需要 SUID 或 AppArmor profile，属于打包 / 分发阶段。
+- **Next**：用户批准后快进合并到 main；T1b-2b 后续子阶段（T1b-2b-2，范围待裁决）与 T1c 未启动；T1b 整体 NOT SEALED。
 
 **M2 seal 与 M3 前置（T9 之后，恢复时从这里继续）**：**2026-09-22 追加裁决：M2 与 UI 目标版式确认之后、M3 之前先做 M2.5 Score System Layout（见 §30 路线表与 `docs/UI_DESIGN_BRIEF.md` §2.7.6、§10.17/10.18）；M2.5 的 System 模型 = overlay layers（chord diagrams）+ ordered voice layers（TAB/Jianpu/Staff 接受外部 system/measure 几何）+ attached layers（lyrics），chord 不是第四种声部 layout，system 高度由内容决定、分页只在 system 边界，`bracket` 只证明视觉分组、需定义 cross-voice measure mismatch policy。**原文：T0–T9 已全部完成并推送，
 下一步不是继续写渲染代码，而是：
@@ -4854,7 +4918,7 @@ JCX
 
 # 69. 当前明确的下一任务
 
-M0–M2.5、M3.P0、M3 T0、M3 T1a 已封板；M3 T1b-1 纯协议层与 M3 T1b-2a Electron Open IPC 接线三平台 CI 通过；M3 T1b-2a′ 原生对话框所有权定点修复本地实现、未提交；T1b 整体未封板，详见 §30.1。
+M0–M2.5、M3.P0、M3 T0、M3 T1a 已封板；M3 T1b-1 纯协议层与 M3 T1b-2a Electron Open IPC 接线三平台 CI 通过；M3 T1b-2a′ 原生对话框所有权定点修复已提交 `1bb9755`（CI run 38047444068 三平台 success）；M3 T1b-2b-1 真实 Electron 窗口 IPC smoke 代码验收通过（`158114d`，CI run 38148415852 三平台 success）；T1b 整体 NOT SEALED，详见 §30.1。
 
 恢复时：
 
@@ -4870,7 +4934,7 @@ M0–M2.5、M3.P0、M3 T0、M3 T1a 已封板；M3 T1b-1 纯协议层与 M3 T1b-2
    OR POSIX meaningful dev/ino、Windows 不用 ino、无法确认返回 unknown，T4 / T5 写盘保护遇 unknown 必须 fail closed；
    D5 原始字节上限 1 MiB（1,048,576），读前 / 句柄后 / 有界读取中三处防护；D7 其余读取失败归 read-failed；
    D8 SourceInspector 在 T1–T3 暂为 readOnly，接线属 T1c）。
-   **当前 = M3 T1a**（codec 入口 `src/formats/jcx/codec.ts` + main 纯 helper `src/main/document/**` + open 契约
+   **（历史）M3 T1a**（codec 入口 `src/formats/jcx/codec.ts` + main 纯 helper `src/main/document/**` + open 契约
    `src/shared/openContracts.ts` + Electron runtime codec probe `npm run test:electron-codec` + CI 步骤）：implementation、
    本地全部 gate 与独立 review（含 TOCTOU 读取一致性复核修复）已通过，**代码已完成三平台验证**（`cbba29c`，
    CI run 38035446020 attempt 1 三平台 success，见 §30.1「M3 T1a 实际状态」）；
@@ -4879,10 +4943,15 @@ M0–M2.5、M3.P0、M3 T0、M3 T1a 已封板；M3 T1b-1 纯协议层与 M3 T1b-2
    已提交 `104b8e0`，CI run 38040120314 三平台 success（见 §30.1「M3 T1b-1 实际状态」）；
    T1b-2 再拆为 T1b-2a / T1b-2b：**T1b-2a**（main / preload 接线、HIGH-1 双重导航失效）已提交 `b198bb1`，CI run 38044009269
    三平台 success；T1b-2b preflight 实测发现进程级上限 2 允许同窗口叠加离屏孤儿对话框，按裁决做 **T1b-2a′**（每个窗口实例最多一个
-   未 settle 的选择器、orphaned 诊断、共享窗口接线），本地实现与 gate 通过、**未提交**（见 §30.1「M3 T1b-2a′ 实际状态」）；
-   **T1b-2b**（三平台真实窗口 IPC smoke）与 T1c 尚未启动。**T5 冲突未解决**：强制关闭走 `win.destroy()` 与 macOS sheet 不兼容，
-   原版 T5 合同仍冻结，T5 preflight 必须专项验证。T1c 仍须裁决 activation 不确定状态与 dirty session 的恢复方案。
-   **Next = T1b-2a′ 复核与提交 → T1b-2b-1**（均待用户指令）；T1b 整体未 SEALED。
+   未 settle 的选择器、orphaned 诊断、共享窗口接线），已提交 `1bb9755`，CI run 38047444068 三平台 success（见 §30.1「M3 T1b-2a′ 实际状态」）；
+   **T1b-2b-1**（三平台真实 Electron 窗口 IPC smoke）代码验收通过：`158114d`，CI run 38148415852 三平台 success（smoke：macOS 45 cases
+   44 passed + 1 observed、Windows 47 = 42 + 5 observed、Ubuntu 46 = 40 + 6 observed；Windows UNC 实际通过；Linux 的
+   `crash.renderer-gone` 为 `os-sigkill` 硬门，forceCrash 半退出由 `risk.linux-force-crash-stall` 单独观测、仍是残余风险；见 §30.1
+   「M3 T1b-2b-1 实际状态」）；T1b-2b 后续子阶段（T1b-2b-2，范围待裁决）与 T1c 尚未启动。**T5 冲突未解决**：强制关闭走 `win.destroy()` 与 macOS sheet 不兼容，
+   原版 T5 合同仍冻结，T5 preflight 必须专项验证（T1b-2b-1 另观测到 Windows / Linux 关窗后原生对话框 5 s 内不 settle）。T1c 仍须裁决
+   activation 不确定状态与 dirty session 的恢复方案，并在 T1c 前审查同源 iframe / opener 经 `parent.museDesktop` / `opener.museDesktop`
+   访问桥的问题（CSP、`setWindowOpenHandler`、子 frame 导航限制）。
+   **Next = T1b-2b-1 快进合并到 main 后，等待用户对 T1b-2b 后续子阶段（范围待裁决）/ T1c 的指令**；T1b 整体 NOT SEALED。
    T1b 启动前须先冻结 capability 激活协议（candidate → renderer accepted → activation ack → old revoked；失败 / 超时清理；
    并发 Open 时序）；之后 T1c，再 T2–T9 按方案 §22。每阶段按方案 §29 的节奏：只读 preflight → 用户裁决 → 实现 → gate →
    独立 review → 变异 → /check → 提交 → 三平台 CI → 文档 → 停下；
