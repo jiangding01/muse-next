@@ -18,12 +18,66 @@ import { collectTsFiles, parseImports, posixPath, REPO_ROOT, resolveSpecifier } 
 
 const SMOKE_DIR = join(REPO_ROOT, 'tests/electron/ipcSmoke');
 const RUNNER = join(REPO_ROOT, 'scripts/m3/electronIpcSmoke.ts');
-const read = (file: string): string => readFileSync(file, 'utf8');
+/** 统一换行：Windows 检出为 CRLF（CI run 38136213551），守卫一律按 LF 文本检查；其余字符不变。 */
+const normalizeEol = (text: string): string => text.replace(/\r\n/g, '\n');
+const read = (file: string): string => normalizeEol(readFileSync(file, 'utf8'));
 const stripComments = (source: string): string => source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 const count = (source: string, pattern: RegExp): number => source.match(pattern)?.length ?? 0;
 const smokeFiles = collectTsFiles(SMOKE_DIR);
 const smokeSource = (name: string): string => stripComments(read(join(SMOKE_DIR, name)));
 const allSmoke = (): string => smokeFiles.map((file) => stripComments(read(file))).join('\n');
+
+/** `casesIsolated.ts` 中每个独立用例的 `id=realDialog` 声明（输入可以是 LF 或 CRLF 原文）。 */
+function realDialogDeclarations(raw: string): string[] {
+  return [...normalizeEol(raw).matchAll(/id: '([\w.-]+)',\n\s+realDialog: (true|false),/g)].map((m) => `${m[1] ?? ''}=${m[2] ?? ''}`).sort();
+}
+
+const REAL_DIALOG_DECLARATIONS = [
+  'identity.win-unc=false',
+  'real.close-settles=true',
+  'real.crash-keeps-dialog=true',
+  'real.destroy-isolated=true',
+  'real.reload-keeps-dialog=true',
+];
+
+const SELF_CHECK_PREFIX = 'SELF_CHECK="$(ELECTRON_RUN_AS_NODE=1 "${ELECTRON}" -e \'';
+
+/** CI 工作流的结构检查；返回违反项（输入可以是 LF 或 CRLF 原文）。 */
+function ciProblems(raw: string): string[] {
+  const ci = normalizeEol(raw);
+  const problems: string[] = [];
+  const need = (label: string, ok: boolean): void => {
+    if (!ok) problems.push(label);
+  };
+  for (const step of ['run: npm ci', 'run: npm run typecheck', 'run: npm test', 'run: npm run test:electron-codec', 'run: npm run jcx:fixture-report']) {
+    need(`missing gate ${step}`, ci.includes(step));
+  }
+  need('matrix changed', ci.includes('os: [macos-latest, windows-latest, ubuntu-latest]'));
+  need('fail-fast is not false', /strategy:\n(\s+#[^\n]*\n)*\s+fail-fast: false\n\s+matrix:\n/.test(ci));
+  need('smoke step count', count(ci, /- name: Electron real-window IPC smoke \(M3 T1b-2b-1\)/g) === 2);
+  need('Linux smoke step', /if: runner\.os == 'Linux'\n\s+run: xvfb-run -a npm run test:electron-ipc\n/.test(ci));
+  need('non-Linux smoke step', /if: runner\.os != 'Linux'\n\s+run: npm run test:electron-ipc\n/.test(ci));
+  need('smoke command count', count(ci, /test:electron-ipc/g) === 2);
+  const typecheckAt = ci.indexOf('run: npm run typecheck:electron-ipc');
+  const appArmorAt = ci.indexOf('- name: Allow user namespaces for the Electron binary via AppArmor');
+  const linuxSmokeAt = ci.indexOf('run: xvfb-run -a npm run test:electron-ipc');
+  need('runner typecheck before smoke', typecheckAt > 0 && typecheckAt < ci.indexOf('npm run test:electron-ipc'));
+  need('AppArmor step before Linux smoke', appArmorAt > 0 && appArmorAt < linuxSmokeAt);
+  need('AppArmor step is Linux-only', /- name: Allow user namespaces for the Electron binary via AppArmor[^\n]*\n\s+if: runner\.os == 'Linux'\n/.test(ci));
+  // RunAsNode 只允许作为 AppArmor 进程标签自检这一条命令的前缀（不 export，不进入 smoke）。
+  need('RunAsNode only in the self-check command', count(ci, /ELECTRON_RUN_AS_NODE/g) === 1 && count(ci, /SELF_CHECK="\$\(ELECTRON_RUN_AS_NODE=1 "\$\{ELECTRON\}" -e '/g) === 1);
+  need('RunAsNode exported', !/export\s+ELECTRON_RUN_AS_NODE|env:\s*\n\s+ELECTRON_RUN_AS_NODE/.test(ci));
+  need('self-check label must be the exact profile', ci.includes("LABEL_RE='^muse-next-electron-ci( \\([a-z]+\\))?$'"));
+  need('self-check must compare exe', ci.includes('test "${SELF_EXE}" = "${ELECTRON}"'));
+  need('self-check must require Electron', ci.includes('test -n "${SELF_VERSION}" ||'));
+  need('self-check must apply the label pattern', ci.includes('[[ "${SELF_LABEL}" =~ ${LABEL_RE} ]] ||'));
+  // 只读的 `sysctl -n` 允许；任何写入内核参数、改权限、停用 / 卸载 AppArmor 或吞掉失败的写法都报告。
+  need(
+    'forbidden system change',
+    !/\bsysctl\s+(-w|--write|-p|--load|--system)\b|\bsysctl\s+[\w.]+=|\/proc\/sys\/|chmod|chown|aa-teardown|aa-disable|aa-complain|systemctl\s+(stop|disable)\s+apparmor|apparmor_parser\s+-R|continue-on-error/.test(ci),
+  );
+  return problems;
+}
 
 /** 某文件解析后的 `src/**` 导入（相对仓库路径）。 */
 function srcImports(file: string): string[] {
@@ -110,15 +164,7 @@ describe('M3 T1b-2b-1 架构守卫 —— smoke 复用生产实现', () => {
 
 describe('M3 T1b-2b-1 架构守卫 —— 用例构造', () => {
   it('真实原生对话框用例全部声明 realDialog: true（走与产品相同的选择器），其余独立用例不声明', () => {
-    const isolated = smokeSource('casesIsolated.ts');
-    const declared = [...isolated.matchAll(/id: '([\w.-]+)',\n\s+realDialog: (true|false),/g)].map((m) => `${m[1] ?? ''}=${m[2] ?? ''}`);
-    expect(declared.sort()).toEqual([
-      'identity.win-unc=false',
-      'real.close-settles=true',
-      'real.crash-keeps-dialog=true',
-      'real.destroy-isolated=true',
-      'real.reload-keeps-dialog=true',
-    ]);
+    expect(realDialogDeclarations(smokeSource('casesIsolated.ts'))).toEqual(REAL_DIALOG_DECLARATIONS);
     expect(smokeSource('smokeMain.entry.ts')).toContain('chooseOpenPath: isolated?.realDialog === true ? realChooser : (parent) => chooser.choose(parent),');
   });
 
@@ -209,19 +255,60 @@ describe('M3 T1b-2b-1 架构守卫 —— 产品隔离与 CI', () => {
     expect(typecheck).toBe('tsc --noEmit -p tsconfig.electron-ipc.json');
   });
 
-  it('CI：既有 gate 保留；smoke 为独立 step，Ubuntu 经 xvfb-run -a，其它平台直接运行', () => {
-    const ci = read(join(REPO_ROOT, '.github/workflows/ci.yml'));
-    for (const step of ['run: npm ci', 'run: npm run typecheck', 'run: npm test', 'run: npm run test:electron-codec', 'run: npm run jcx:fixture-report']) {
-      expect(ci).toContain(step);
+  it('CI：既有 gate 保留、fail-fast: false；runner 类型检查与 Linux AppArmor 自检在 smoke 之前；Ubuntu 经 xvfb-run -a', () => {
+    expect(ciProblems(read(join(REPO_ROOT, '.github/workflows/ci.yml')))).toEqual([]);
+  });
+});
+
+describe('M3 T1b-2b-1 架构守卫 —— LF / CRLF 等价（Windows 检出为 CRLF）', () => {
+  const crlf = (text: string): string => text.replace(/\n/g, '\r\n');
+  // 基准一律是经 `read` 归一化的 LF 文本（Windows 检出时原文已是 CRLF），再由 `crlf` 构造 CRLF 输入。
+  const isolatedRaw = read(join(SMOKE_DIR, 'casesIsolated.ts'));
+  const ciRaw = read(join(REPO_ROOT, '.github/workflows/ci.yml'));
+
+  it('realDialog 声明：LF 与 CRLF 识别结果完全一致', () => {
+    expect(realDialogDeclarations(crlf(isolatedRaw))).toEqual(REAL_DIALOG_DECLARATIONS);
+    expect(realDialogDeclarations(isolatedRaw)).toEqual(REAL_DIALOG_DECLARATIONS);
+  });
+
+  it('CI 检查：LF 与 CRLF 结果一致（均无违反项）', () => {
+    expect(ciProblems(crlf(ciRaw))).toEqual([]);
+    expect(ciProblems(ciRaw)).toEqual([]);
+  });
+
+  it('反例（CRLF 下仍能检出）：删除 / 改值 realDialog 声明', () => {
+    const removed = crlf(isolatedRaw.replace("  id: 'real.crash-keeps-dialog',\n  realDialog: true,\n", "  id: 'real.crash-keeps-dialog',\n"));
+    expect(removed).not.toBe(crlf(isolatedRaw));
+    expect(realDialogDeclarations(removed)).not.toEqual(REAL_DIALOG_DECLARATIONS);
+    const flipped = crlf(isolatedRaw.replace("  id: 'real.close-settles',\n  realDialog: true,", "  id: 'real.close-settles',\n  realDialog: false,"));
+    expect(flipped).not.toBe(crlf(isolatedRaw));
+    expect(realDialogDeclarations(flipped)).toContain('real.close-settles=false');
+  });
+
+  it('反例（CRLF 下仍能检出）：CI 关键约束被改动', () => {
+    const variants: [string, string, string][] = [
+      ['run: xvfb-run -a npm run test:electron-ipc', 'run: npm run test:electron-ipc', 'Linux smoke step'],
+      ['fail-fast: false', 'fail-fast: true', 'fail-fast is not false'],
+      ["if: runner.os != 'Linux'\n        run: npm run test:electron-ipc", "if: runner.os != 'Linux'\n        run: npm run test:electron-ipc --if-present", 'non-Linux smoke step'],
+      [SELF_CHECK_PREFIX, 'export ELECTRON_RUN_AS_NODE=1\n          SELF_CHECK="$("${ELECTRON}" -e \'', 'RunAsNode only in the self-check command'],
+      ["LABEL_RE='^muse-next-electron-ci( \\([a-z]+\\))?$'", "LABEL_RE='^muse-next-electron-ci'", 'self-check label must be the exact profile'],
+      ['test "${SELF_EXE}" = "${ELECTRON}"', 'true', 'self-check must compare exe'],
+      ['test -n "${SELF_VERSION}" ||', 'true ||', 'self-check must require Electron'],
+      ['[[ "${SELF_LABEL}" =~ ${LABEL_RE} ]] ||', 'true ||', 'self-check must apply the label pattern'],
+    ];
+    for (const injected of [
+      'sudo sysctl -w kernel.x=0',
+      'sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0',
+      'echo 0 | sudo tee /proc/sys/kernel/apparmor_restrict_unprivileged_userns',
+      'sudo systemctl stop apparmor',
+      'sudo apparmor_parser -R /etc/apparmor.d/x',
+      'sudo chmod 4755 x',
+    ]) {
+      variants.push(['      - name: Allow user namespaces', `      - name: Injected\n        run: ${injected}\n      - name: Allow user namespaces`, 'forbidden system change']);
     }
-    expect(ci).toContain('os: [macos-latest, windows-latest, ubuntu-latest]');
-    expect(count(ci, /- name: Electron real-window IPC smoke \(M3 T1b-2b-1\)/g)).toBe(2);
-    expect(ci).toMatch(/if: runner\.os == 'Linux'\n\s+run: xvfb-run -a npm run test:electron-ipc\n/);
-    expect(ci).toMatch(/if: runner\.os != 'Linux'\n\s+run: npm run test:electron-ipc\n/);
-    expect(count(ci, /test:electron-ipc/g)).toBe(2);
-    // runner 不在根 tsconfig 的 include 内：CI 必须在 smoke 之前单独类型检查它。
-    const typecheckAt = ci.indexOf('run: npm run typecheck:electron-ipc');
-    expect(typecheckAt).toBeGreaterThan(0);
-    expect(typecheckAt).toBeLessThan(ci.indexOf('npm run test:electron-ipc'));
+    for (const [from, to, problem] of variants) {
+      expect(ciRaw.includes(from)).toBe(true);
+      expect(ciProblems(crlf(ciRaw.replace(from, to)))).toContain(problem);
+    }
   });
 });

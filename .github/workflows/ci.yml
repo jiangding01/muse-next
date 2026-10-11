@@ -50,12 +50,18 @@ jobs:
           printf 'abi <abi/4.0>,\ninclude <tunables/global>\n\nprofile muse-next-electron-ci "%s" flags=(unconfined) {\n  userns,\n}\n' "${ELECTRON}" | sudo tee "${PROFILE}"
           sudo apparmor_parser -r "${PROFILE}"
           sudo aa-status | grep -F 'muse-next-electron-ci'
-          ATTACH=''
-          for dir in /sys/kernel/security/apparmor/policy/profiles/*/; do
-            if [ "$(sudo cat "${dir}name")" = 'muse-next-electron-ci' ]; then ATTACH="$(sudo cat "${dir}attach")"; fi
-          done
-          echo "loaded profile attach=${ATTACH:-<missing>}"
-          test "${ATTACH}" = "${ELECTRON}"
+          # 进程标签自检：让同一个 Electron 可执行文件读取自己的 AppArmor 标签。RunAsNode 只作为本条命令的前缀
+          # （不 export，不传给后续 smoke），只用于这次身份检查，不替代任何真实窗口测试。
+          SELF_CHECK="$(ELECTRON_RUN_AS_NODE=1 "${ELECTRON}" -e 'const fs = require("fs"); let label = null; let file = null; for (const f of ["/proc/self/attr/apparmor/current", "/proc/self/attr/current"]) { try { label = fs.readFileSync(f, "utf8").replace(/\0/g, "").trim(); file = f; break; } catch (error) { console.error("cannot read " + f + ": " + error.message); } } if (label === null) process.exit(3); console.log("exe=" + fs.readlinkSync("/proc/self/exe")); console.log("electron=" + (process.versions.electron || "")); console.log("file=" + file); console.log("label=" + label);')"
+          echo "${SELF_CHECK}"
+          SELF_EXE="$(printf '%s\n' "${SELF_CHECK}" | sed -n 's/^exe=//p')"
+          SELF_VERSION="$(printf '%s\n' "${SELF_CHECK}" | sed -n 's/^electron=//p')"
+          SELF_LABEL="$(printf '%s\n' "${SELF_CHECK}" | sed -n 's/^label=//p')"
+          test "${SELF_EXE}" = "${ELECTRON}" || { echo "self-check ran ${SELF_EXE}, expected ${ELECTRON}"; exit 1; }
+          test -n "${SELF_VERSION}" || { echo "self-check did not run inside Electron"; exit 1; }
+          LABEL_RE='^muse-next-electron-ci( \([a-z]+\))?$'
+          [[ "${SELF_LABEL}" =~ ${LABEL_RE} ]] || { echo "Electron AppArmor label is '${SELF_LABEL}', expected profile muse-next-electron-ci"; exit 1; }
+          echo "AppArmor self-check OK: ${SELF_EXE} (Electron ${SELF_VERSION}) runs under '${SELF_LABEL}'"
       # 真实 BrowserWindow + 生产 preload + 默认 sandbox；Linux 另加虚拟显示。不加任何关闭沙箱的参数。
       - name: Electron real-window IPC smoke (M3 T1b-2b-1)
         if: runner.os == 'Linux'
