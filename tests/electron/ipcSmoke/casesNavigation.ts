@@ -12,7 +12,7 @@ import { session } from 'electron';
 import { capabilitiesOf, expectEqual, expectTrue, invariantProblems, ownerMeta, verdict } from './context';
 import type { SmokeCase, SmokeContext } from './context';
 import { openActive, openPending } from './casesCapability';
-import { crashAndObserve } from './casesIsolated';
+import { crashAndObserve, linuxPostKillDiagnosis } from './crashObservation';
 import { deferred, delay, waitFor, withTimeout } from './harness';
 import { describeOpen, isRecord, parseOpenReply } from './replies';
 import type { SmokeWindow } from './windows';
@@ -214,7 +214,9 @@ const navEarlyIpc: SmokeCase = {
  */
 const crashRendererGone: SmokeCase = {
   id: 'crash.renderer-gone',
-  timeoutMs: 30_000,
+  // 典型：建窗与 Open < 2 s + forceCrash 观察 ≤ 20 s + Linux 诊断（有界 /proc 读取共 5 次，各 ≤ 3 s，正常为毫秒级；SIGKILL 后 ≤ 5 s）
+  // + reload 恢复。病态 /proc 卡顿时可能超出预算，判失败；超时后窗口已关闭，诊断的发送前同步检查会拒绝发送信号。
+  timeoutMs: 45_000,
   run: async (ctx) => {
     const window = await ctx.windows.create();
     const ticket = await openActive(ctx, window, ctx.fixtures.utf8);
@@ -227,11 +229,15 @@ const crashRendererGone: SmokeCase = {
     expectTrue(problems, 'old token still authorized after the crash', crash.oldTokenAuthorizedAfter === false);
     // macOS / Windows 保持原有 5 s 内生效的 gate；Linux 在 20 s 诊断窗口内生效即可，迟到如实记为 D-late-cleanup。
     if (process.platform !== 'linux') expectEqual(problems, 'crash cleanup within 5 s', crash.category, 'ok');
-    if (problems.length === 0) {
+    // forceCrash 的判定到此冻结。Linux 未收到事件时进入独立诊断阶段（同一轮微任务内重新注册监听，不留空档）；
+    // 诊断结果（含 SIGKILL 后的事件与清理）只写进 detail，不会把上面的失败改成通过。
+    const forceCrashProblems = [...problems];
+    const postKill = process.platform === 'linux' && crash.contentsEvent === null ? await linuxPostKillDiagnosis(ctx, window, ticket.capabilityId, crash) : null;
+    if (forceCrashProblems.length === 0) {
       await reload(window);
       problems.push(...(await recoveryProblems(ctx, window, ticket)));
     }
-    return verdict(problems, { crash });
+    return verdict(problems, { forceCrash: crash, postKill });
   },
 };
 

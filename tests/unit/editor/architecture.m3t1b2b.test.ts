@@ -108,8 +108,10 @@ describe('M3 T1b-2b-1 架构守卫 —— smoke 复用生产实现', () => {
         'casesNavigation.ts',
         'casesSender.ts',
         'context.ts',
+        'crashObservation.ts',
         'evidence.ts',
         'harness.ts',
+        'linuxProcessDiagnostics.ts',
         'replies.ts',
         'smokeMain.entry.ts',
         'windows.ts',
@@ -151,18 +153,27 @@ describe('M3 T1b-2b-1 架构守卫 —— smoke 复用生产实现', () => {
   it('窗口事件只经生产 wireOpenIpcWindow：smoke 不登记 Open 生命周期事件、不直接调用 handle 的生命周期方法、不注册 IPC', () => {
     const source = allSmoke();
     expect(count(source, /wireOpenIpcWindow\(deps\.openIpc, win\)/g)).toBe(1);
-    // 唯一例外：casesIsolated.ts 的 crashAndObserve 只读监听 render-process-gone（诊断事件时间线，不调用任何 handle 方法）。
-    const isolated = smokeSource('casesIsolated.ts');
+    // 唯一例外：crashObservation.ts 的 watchRendererGone 只读监听 render-process-gone（诊断事件时间线，不调用任何 handle 方法）。
+    const isolated = smokeSource('crashObservation.ts');
     for (const diagnostic of CRASH_DIAGNOSTIC_LISTENERS) {
       expect(count(source, new RegExp(diagnostic.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'))).toBe(1);
       expect(isolated).toContain(diagnostic);
     }
     const withoutDiagnostics = CRASH_DIAGNOSTIC_LISTENERS.reduce((text, diagnostic) => text.replace(diagnostic, ''), source);
-    // crashAndObserve 只能观测：不得 reload / 加载 / 关闭 / 销毁窗口（会经导航重置掩盖崩溃事件失效），openIpc 只读 authorize / currentState。
+    // 崩溃观测与 Linux 诊断只能观测：不得 reload / 加载 / 关闭 / 销毁窗口（会经导航重置掩盖崩溃事件失效），openIpc 只读 authorize / currentState。
     const observer = /export async function crashAndObserve\([\s\S]*?\n\}\n/.exec(isolated)?.[0] ?? '';
+    const postKill = /export async function linuxPostKillDiagnosis\([\s\S]*?\n\}\n/.exec(isolated)?.[0] ?? '';
     expect(observer).toContain('contents.forcefullyCrashRenderer();');
-    expect(/\.(reload|reloadIgnoringCache|loadURL|loadFile|close|destroy)\(|\bwindows\.|navigationHistory/.test(observer)).toBe(false);
-    expect([...observer.matchAll(/openIpc\.(\w+)/g)].map((m) => m[1]).every((name) => name === 'authorize' || name === 'currentState')).toBe(true);
+    for (const body of [observer, postKill]) {
+      expect(body).not.toBe('');
+      expect(/\.(reload|reloadIgnoringCache|loadURL|loadFile|close|destroy)\(|\bwindows\.|navigationHistory/.test(body)).toBe(false);
+    }
+    expect([...isolated.matchAll(/openIpc\.(\w+)/g)].map((m) => m[1]).every((name) => name === 'authorize' || name === 'currentState')).toBe(true);
+    // SIGKILL 全部 smoke 只此一处：在 linuxPostKillDiagnosis 中、killRefusals 全部通过的分支里；不得 sudo / killall / pkill / 按名称批量终止。
+    expect(count(source, /SIGKILL/g)).toBe(1);
+    expect(/const refusals = killRefusals\(\{[\s\S]*?if \(refusals\.length === 0\) \{[\s\S]*?process\.kill\(pid, 'SIGKILL'\);/.test(postKill)).toBe(true);
+    expect(/\bsudo\b|killall|pkill|process\.kill\(\s*-/.test(source)).toBe(false);
+    expect([...source.matchAll(/process\.kill\(([^,]+),/g)].map((m) => (m[1] ?? '').trim()).sort()).toEqual(['pid', 'pid']);
     expect(/['"`](did-start-navigation|did-navigate|render-process-gone|destroyed)['"`]/.test(withoutDiagnostics)).toBe(false);
     expect(/\.(attachWindow|handleNavigation|handleNavigationCommitted|handleRendererGone|disposeWindow)\s*\(/.test(source)).toBe(false);
     expect(/\[\s*['"`](attachWindow|handleNavigation|handleNavigationCommitted|handleRendererGone|disposeWindow)['"`]\s*\]/.test(source)).toBe(false);
