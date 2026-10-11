@@ -40,6 +40,14 @@ const REAL_DIALOG_DECLARATIONS = [
   'real.reload-keeps-dialog=true',
 ];
 
+/** smoke 中唯一允许出现的 Open 生命周期事件名：崩溃诊断的只读监听（注册与移除各一处）。 */
+const CRASH_DIAGNOSTIC_LISTENERS = [
+  "contents.on('render-process-gone', onContentsGone)",
+  "app.on('render-process-gone', onAppGone)",
+  "contents.off('render-process-gone', onContentsGone)",
+  "app.off('render-process-gone', onAppGone)",
+];
+
 const SELF_CHECK_PREFIX = 'SELF_CHECK="$(ELECTRON_RUN_AS_NODE=1 "${ELECTRON}" -e \'';
 
 /** CI 工作流的结构检查；返回违反项（输入可以是 LF 或 CRLF 原文）。 */
@@ -143,7 +151,19 @@ describe('M3 T1b-2b-1 架构守卫 —— smoke 复用生产实现', () => {
   it('窗口事件只经生产 wireOpenIpcWindow：smoke 不登记 Open 生命周期事件、不直接调用 handle 的生命周期方法、不注册 IPC', () => {
     const source = allSmoke();
     expect(count(source, /wireOpenIpcWindow\(deps\.openIpc, win\)/g)).toBe(1);
-    expect(/['"`](did-start-navigation|did-navigate|render-process-gone|destroyed)['"`]/.test(source)).toBe(false);
+    // 唯一例外：casesIsolated.ts 的 crashAndObserve 只读监听 render-process-gone（诊断事件时间线，不调用任何 handle 方法）。
+    const isolated = smokeSource('casesIsolated.ts');
+    for (const diagnostic of CRASH_DIAGNOSTIC_LISTENERS) {
+      expect(count(source, new RegExp(diagnostic.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'))).toBe(1);
+      expect(isolated).toContain(diagnostic);
+    }
+    const withoutDiagnostics = CRASH_DIAGNOSTIC_LISTENERS.reduce((text, diagnostic) => text.replace(diagnostic, ''), source);
+    // crashAndObserve 只能观测：不得 reload / 加载 / 关闭 / 销毁窗口（会经导航重置掩盖崩溃事件失效），openIpc 只读 authorize / currentState。
+    const observer = /export async function crashAndObserve\([\s\S]*?\n\}\n/.exec(isolated)?.[0] ?? '';
+    expect(observer).toContain('contents.forcefullyCrashRenderer();');
+    expect(/\.(reload|reloadIgnoringCache|loadURL|loadFile|close|destroy)\(|\bwindows\.|navigationHistory/.test(observer)).toBe(false);
+    expect([...observer.matchAll(/openIpc\.(\w+)/g)].map((m) => m[1]).every((name) => name === 'authorize' || name === 'currentState')).toBe(true);
+    expect(/['"`](did-start-navigation|did-navigate|render-process-gone|destroyed)['"`]/.test(withoutDiagnostics)).toBe(false);
     expect(/\.(attachWindow|handleNavigation|handleNavigationCommitted|handleRendererGone|disposeWindow)\s*\(/.test(source)).toBe(false);
     expect(/\[\s*['"`](attachWindow|handleNavigation|handleNavigationCommitted|handleRendererGone|disposeWindow)['"`]\s*\]/.test(source)).toBe(false);
     expect(/ipcMain\s*(\.|\[)|\.ipc\.(handle|on|once|handleOnce)\b|\.emit\(\s*['"`]muse:/.test(source.replace('ipc: ipcMain,', ''))).toBe(false);

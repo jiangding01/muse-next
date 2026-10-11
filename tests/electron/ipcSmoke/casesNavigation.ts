@@ -12,6 +12,7 @@ import { session } from 'electron';
 import { capabilitiesOf, expectEqual, expectTrue, invariantProblems, ownerMeta, verdict } from './context';
 import type { SmokeCase, SmokeContext } from './context';
 import { openActive, openPending } from './casesCapability';
+import { crashAndObserve } from './casesIsolated';
 import { deferred, delay, waitFor, withTimeout } from './harness';
 import { describeOpen, isRecord, parseOpenReply } from './replies';
 import type { SmokeWindow } from './windows';
@@ -46,7 +47,7 @@ const navReloadClears: SmokeCase = {
     const problems: string[] = [];
     expectEqual(problems, 'capabilities after reload', capabilitiesOf(ctx, window.ownerId), []);
     expectTrue(problems, 'generation did not advance', generation(ctx, window) > before);
-    expectEqual(problems, 'authorize old', ctx.openIpc.authorize(window.ownerId, ticket.capabilityId), null);
+    expectTrue(problems, 'old token still authorized', ctx.openIpc.authorize(window.ownerId, ticket.capabilityId) === null);
     problems.push(...(await recoveryProblems(ctx, window, ticket)));
     return verdict(problems, { generationDelta: generation(ctx, window) - before });
   },
@@ -207,20 +208,30 @@ const navEarlyIpc: SmokeCase = {
   },
 };
 
+/**
+ * 崩溃后旧能力必须被生产接线清理（generation 前进、能力清空、旧 token 不授权）。观察窗口最多 `CRASH_OBSERVE_MS`；
+ * 先判定再 reload：reload 本身也会重置能力，不能用它掩盖崩溃事件没有生效。时间线一律写入 detail。
+ */
 const crashRendererGone: SmokeCase = {
   id: 'crash.renderer-gone',
+  timeoutMs: 30_000,
   run: async (ctx) => {
     const window = await ctx.windows.create();
     const ticket = await openActive(ctx, window, ctx.fixtures.utf8);
-    const before = generation(ctx, window);
-    window.win.webContents.forcefullyCrashRenderer();
+    const crash = await crashAndObserve(ctx, window, ticket.capabilityId);
     const problems: string[] = [];
-    expectTrue(problems, 'render-process-gone did not clear capabilities', await waitFor(() => capabilitiesOf(ctx, window.ownerId).length === 0, 5_000));
-    expectTrue(problems, 'generation did not advance', generation(ctx, window) > before);
-    expectEqual(problems, 'authorize old', ctx.openIpc.authorize(window.ownerId, ticket.capabilityId), null);
-    await reload(window);
-    problems.push(...(await recoveryProblems(ctx, window, ticket)));
-    return verdict(problems);
+    expectTrue(problems, 'old token was not authorized before the crash', crash.oldTokenAuthorizedBefore === true);
+    expectTrue(problems, 'webContents render-process-gone not observed', crash.contentsEvent !== null);
+    expectTrue(problems, 'capabilities not cleared after the crash', crash.clearedAtMs !== null && crash.capabilitiesAfter === 0);
+    expectTrue(problems, 'generation did not advance', crash.generationAfter > crash.generationBefore);
+    expectTrue(problems, 'old token still authorized after the crash', crash.oldTokenAuthorizedAfter === false);
+    // macOS / Windows 保持原有 5 s 内生效的 gate；Linux 在 20 s 诊断窗口内生效即可，迟到如实记为 D-late-cleanup。
+    if (process.platform !== 'linux') expectEqual(problems, 'crash cleanup within 5 s', crash.category, 'ok');
+    if (problems.length === 0) {
+      await reload(window);
+      problems.push(...(await recoveryProblems(ctx, window, ticket)));
+    }
+    return verdict(problems, { crash });
   },
 };
 
@@ -237,7 +248,7 @@ const closeDisposesOwner: SmokeCase = {
     const problems: string[] = [];
     expectEqual(problems, 'owner removed', ownerMeta(ctx, closing.ownerId), undefined);
     expectEqual(problems, 'capabilities removed', capabilitiesOf(ctx, closing.ownerId), []);
-    expectEqual(problems, 'authorize closed', ctx.openIpc.authorize(closing.ownerId, ticket.capabilityId), null);
+    expectTrue(problems, 'closed window token still authorized', ctx.openIpc.authorize(closing.ownerId, ticket.capabilityId) === null);
     expectTrue(problems, 'other window lost its active', ctx.openIpc.authorize(other.ownerId, kept.capabilityId) !== null);
     return verdict(problems);
   },

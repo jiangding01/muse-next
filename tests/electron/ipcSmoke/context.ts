@@ -5,6 +5,8 @@
  * 不改动协调器状态；一致性用生产 `coordinatorInvariantViolations` 判定。
  */
 
+import { isDeepStrictEqual } from 'node:util';
+
 import type { BrowserWindow } from 'electron';
 
 import type { PageEntry } from '../../../src/main/ipc/pageIdentity';
@@ -63,6 +65,8 @@ export interface SmokeContext {
 
 export interface SmokeCase {
   readonly id: string;
+  /** 该用例的总时间预算（毫秒）；未设置时用 `smokeMain.entry.ts` 的默认值。只给需要更长观察窗口的用例（renderer 崩溃）设置。 */
+  readonly timeoutMs?: number;
   run(ctx: SmokeContext): Promise<CaseOutcome>;
 }
 
@@ -73,10 +77,32 @@ export function verdict(problems: readonly string[], facts?: Record<string, unkn
   return factText === '' ? { status: 'passed' } : { status: 'passed', detail: factText };
 }
 
+/** 失败信息中不输出的字段：能力 token、本地路径与内容指纹。 */
+const REDACTED_KEYS: ReadonlySet<string> = new Set(['token', 'capabilityId', 'realpath', 'displayPath', 'lastKnownDiskFingerprint']);
+const MAX_DESCRIBED_LENGTH = 300;
+
+/**
+ * 只用于失败信息的安全格式化：BigInt 写成 `123n`，敏感字段脱敏，超长截断；格式化本身出错时退回到类型描述，
+ * 不抛出、不影响断言结论。
+ */
+export function describeValue(value: unknown): string {
+  try {
+    const text = JSON.stringify(value, (key, item: unknown) => {
+      if (typeof item === 'bigint') return `${item.toString()}n`;
+      if (REDACTED_KEYS.has(key)) return '<redacted>';
+      return item;
+    });
+    const described = text === undefined ? String(value) : text;
+    return described.length > MAX_DESCRIBED_LENGTH ? `${described.slice(0, MAX_DESCRIBED_LENGTH)}…` : described;
+  } catch {
+    return `<unprintable ${typeof value}>`;
+  }
+}
+
+/** 深度严格相等（`util.isDeepStrictEqual`，支持 BigInt）；只在不相等时格式化失败信息。 */
 export function expectEqual(problems: string[], label: string, actual: unknown, expected: unknown): void {
-  const a = JSON.stringify(actual);
-  const e = JSON.stringify(expected);
-  if (a !== e) problems.push(`${label}: expected ${e ?? 'undefined'}, got ${a ?? 'undefined'}`);
+  if (isDeepStrictEqual(actual, expected)) return;
+  problems.push(`${label}: expected ${describeValue(expected)}, got ${describeValue(actual)}`);
 }
 
 export function expectTrue(problems: string[], label: string, condition: boolean): void {

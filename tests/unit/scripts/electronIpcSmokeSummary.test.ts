@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { expectedModes, judgeIpcSmoke, RESULT_PREFIX, SMOKE_CASES } from '../../../scripts/m3/electronIpcSmokeSummary';
+import { describeValue, expectEqual } from '../../electron/ipcSmoke/context';
 import type { ChildOutcome, SmokePlatform, SmokeStatus } from '../../../scripts/m3/electronIpcSmokeSummary';
 
 const NONCE = 'nonce-1';
@@ -218,5 +219,45 @@ describe('electronIpcSmokeSummary —— 反例（必须失败）', () => {
     const problems = problemsOf(goodOutcomes('darwin').filter((o) => o.mode !== 'matrix'));
     const matrixIds = SMOKE_CASES.filter((s) => s.mode === 'matrix' && s.expect.darwin !== undefined).map((s) => s.id);
     for (const id of matrixIds) expect(problems).toContain(`expected case missing: ${id}`);
+  });
+});
+
+describe('smoke 断言 expectEqual —— BigInt 与失败信息（CI run 38142547427 回归）', () => {
+  const check = (actual: unknown, expected: unknown): string[] => {
+    const problems: string[] = [];
+    expectEqual(problems, 'v', actual, expected);
+    return problems;
+  };
+
+  it('含 BigInt 的相同对象判相等', () => {
+    expect(check({ dev: 1n, ino: 2n, nested: [3n] }, { dev: 1n, ino: 2n, nested: [3n] })).toEqual([]);
+  });
+
+  it('BigInt 不同 → 明确失败且不抛出', () => {
+    expect(check({ dev: 1n }, { dev: 2n })).toEqual(['v: expected {"dev":"2n"}, got {"dev":"1n"}']);
+  });
+
+  it('actual 为含 BigInt 的能力记录、expected 为 null → 明确报告不相等，且 token / 路径被脱敏', () => {
+    const record = { token: 'secret-token', realpath: '/Users/x/a.jcx', displayPath: '/Users/x/a.jcx', lastKnownDiskFingerprint: 'abc', identity: { dev: 5n, ino: 6n } };
+    const problems = check(record, null);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('expected null, got');
+    expect(problems[0]).toContain('"dev":"5n"');
+    expect(problems[0]).not.toMatch(/secret-token|\/Users\/x|abc/);
+  });
+
+  it('普通对象、数组、undefined 的比较不受影响', () => {
+    expect(check({ a: 1, b: [1, 2] }, { a: 1, b: [1, 2] })).toEqual([]);
+    expect(check([1, 2], [2, 1])).toHaveLength(1);
+    expect(check(undefined, undefined)).toEqual([]);
+    expect(check(undefined, null)).toEqual(['v: expected null, got undefined']);
+    expect(check({ a: undefined }, {})).toHaveLength(1);
+  });
+
+  it('无法格式化的值不会被当成相等，格式化失败也不抛出', () => {
+    const cyclic: Record<string, unknown> = {};
+    cyclic.self = cyclic;
+    expect(check(cyclic, null)).toEqual(['v: expected null, got <unprintable object>']);
+    expect(describeValue(10n)).toBe('"10n"');
   });
 });

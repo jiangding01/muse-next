@@ -97,7 +97,8 @@ async function runCase(ctx: SmokeContext, smokeCase: SmokeCase, checkResidue: bo
   ctx.scheduler.clear();
   let outcome: CaseOutcome;
   try {
-    outcome = await withTimeout(smokeCase.run(ctx), CASE_TIMEOUT_MS, smokeCase.id);
+    // 只有 renderer 崩溃用例声明了更长的预算（诊断观察窗口）；其余用例仍为默认值。
+    outcome = await withTimeout(smokeCase.run(ctx), smokeCase.timeoutMs ?? CASE_TIMEOUT_MS, smokeCase.id);
   } catch (error) {
     outcome = { status: 'failed', detail: `threw ${describeError(error)}` };
   }

@@ -11,6 +11,9 @@
 import { stat } from 'node:fs/promises';
 import { performance } from 'node:perf_hooks';
 
+import { app } from 'electron';
+import type { RenderProcessGoneDetails, WebContents } from 'electron';
+
 import { matchesPageIdentity } from '../../../src/main/open/ipcValidation';
 import { capabilitiesOf, ownerMeta } from './context';
 import type { CaseOutcome, SmokeCase, SmokeContext } from './context';
@@ -24,6 +27,123 @@ export interface IsolatedCase extends SmokeCase {
 
 const SHOW_WAIT_MS = 5_000;
 const SETTLE_WAIT_MS = 5_000;
+
+/**
+ * renderer 崩溃的诊断观察窗口（CI run 38142547427：Ubuntu 上 5 s 内未见 `render-process-gone` 的效果）。只用于判断
+ * 平台 / CI 延迟，不是产品的实时失效合同；超过 5 s 的到达会如实记为 `D-late-cleanup`。
+ */
+export const CRASH_OBSERVE_MS = 20_000;
+const CRASH_PROMPT_MS = 5_000;
+
+export interface CrashEvent {
+  readonly ms: number;
+  readonly reason: string;
+  readonly exitCode: number;
+}
+
+export interface CrashTimeline {
+  readonly webContentsId: number;
+  readonly rendererPid: number;
+  readonly generationBefore: number;
+  readonly generationAfter: number;
+  readonly capabilitiesBefore: number;
+  readonly capabilitiesAfter: number;
+  /** 旧 token 崩溃前 / 后能否授权（没有 token 时为 null）。 */
+  readonly oldTokenAuthorizedBefore: boolean | null;
+  readonly oldTokenAuthorizedAfter: boolean | null;
+  /** 目标 webContents 的 `render-process-gone`（生产接线监听的就是它）。 */
+  readonly contentsEvent: CrashEvent | null;
+  /** `app` 的 `render-process-gone`；`matchesTarget` 表示事件属于目标 webContents。 */
+  readonly appEvent: (CrashEvent & { readonly matchesTarget: boolean }) | null;
+  /** 首次观察到「generation 前进、能力清空、旧 token 不再授权」的时刻（自调用崩溃起，毫秒）。 */
+  readonly clearedAtMs: number | null;
+  /** webContents 已销毁时为 null。 */
+  readonly isCrashed: boolean | null;
+  /** 观察结束时崩溃前的 renderer PID 是否仍存在（`process.kill(pid, 0)`；区分「没被杀掉」与「杀掉了但事件未送达」）。 */
+  readonly rendererAliveAfter: boolean | null;
+  /**
+   * A：目标 webContents 的事件没到（app 也没有目标事件；若 app 只收到其它 webContents 的事件同样归 A，原始事件保留在 appEvent）；
+   * B：只有 app 收到目标事件；C：webContents 收到但状态未清理；D：已清理但超过 5 s；ok：5 s 内清理。
+   */
+  readonly category: 'A-no-event' | 'B-app-only' | 'C-event-without-cleanup' | 'D-late-cleanup' | 'ok';
+}
+
+/**
+ * 只读的崩溃观测：监听在调用 `forcefullyCrashRenderer()` 之前注册，只记录事件与状态快照，不调用任何协调器 / handle 方法
+ * （清理只能由生产 `wireOpenIpcWindow` 转发的事件完成）。最多观察 `CRASH_OBSERVE_MS`。
+ */
+export async function crashAndObserve(ctx: SmokeContext, window: SmokeWindow, token: string | null): Promise<CrashTimeline> {
+  const contents = window.win.webContents;
+  const webContentsId = contents.id;
+  const rendererPid = contents.getOSProcessId();
+  const gen = (): number => ownerMeta(ctx, window.ownerId)?.generation ?? -1;
+  const caps = (): number => capabilitiesOf(ctx, window.ownerId).length;
+  const authorized = (): boolean | null => (token === null ? null : ctx.openIpc.authorize(window.ownerId, token) !== null);
+  const generationBefore = gen();
+  const capabilitiesBefore = caps();
+  const oldTokenAuthorizedBefore = authorized();
+  // 事件回调异步写入；用记录对象而不是 let，避免控制流收窄把它们当成永远为 null。
+  const seen: { contents: CrashEvent | null; app: (CrashEvent & { readonly matchesTarget: boolean }) | null; clearedAtMs: number | null } = {
+    contents: null,
+    app: null,
+    clearedAtMs: null,
+  };
+  const start = performance.now();
+  const since = (): number => Math.round(performance.now() - start);
+  const onContentsGone = (_event: unknown, details: RenderProcessGoneDetails): void => {
+    seen.contents ??= { ms: since(), reason: details.reason, exitCode: details.exitCode };
+  };
+  const onAppGone = (_event: unknown, gone: WebContents, details: RenderProcessGoneDetails): void => {
+    const matchesTarget = gone.id === webContentsId;
+    if (seen.app === null || (matchesTarget && !seen.app.matchesTarget)) seen.app = { ms: since(), reason: details.reason, exitCode: details.exitCode, matchesTarget };
+  };
+  const cleared = (): boolean => gen() > generationBefore && caps() === 0 && authorized() !== true;
+  contents.on('render-process-gone', onContentsGone);
+  app.on('render-process-gone', onAppGone);
+  try {
+    contents.forcefullyCrashRenderer();
+    await waitFor(() => {
+      if (seen.clearedAtMs === null && cleared()) seen.clearedAtMs = since();
+      return seen.clearedAtMs !== null && seen.contents !== null;
+    }, CRASH_OBSERVE_MS);
+  } finally {
+    if (!contents.isDestroyed()) contents.off('render-process-gone', onContentsGone);
+    app.off('render-process-gone', onAppGone);
+  }
+  const contentsSeen = seen.contents;
+  const appSeen = seen.app;
+  const clearedSeen = seen.clearedAtMs;
+  let rendererAliveAfter: boolean | null = null;
+  try {
+    process.kill(rendererPid, 0);
+    rendererAliveAfter = true;
+  } catch (error) {
+    rendererAliveAfter = error instanceof Error && 'code' in error && error.code === 'EPERM' ? true : error instanceof Error && 'code' in error && error.code === 'ESRCH' ? false : null;
+  }
+  let category: CrashTimeline['category'] = 'ok';
+  if (contentsSeen === null) category = appSeen?.matchesTarget === true ? 'B-app-only' : 'A-no-event';
+  else if (clearedSeen === null) category = 'C-event-without-cleanup';
+  else if (clearedSeen > CRASH_PROMPT_MS) category = 'D-late-cleanup';
+  const timeline: CrashTimeline = {
+    webContentsId,
+    rendererPid,
+    generationBefore,
+    generationAfter: gen(),
+    capabilitiesBefore,
+    capabilitiesAfter: caps(),
+    oldTokenAuthorizedBefore,
+    oldTokenAuthorizedAfter: authorized(),
+    contentsEvent: contentsSeen,
+    appEvent: appSeen,
+    clearedAtMs: clearedSeen,
+    isCrashed: contents.isDestroyed() ? null : contents.isCrashed(),
+    rendererAliveAfter,
+    category,
+  };
+  // 立即写到 stderr：即使之后外层超时，诊断时间线也保留在 CI 日志里。
+  process.stderr.write(`[ipc-smoke] crash timeline ${JSON.stringify(timeline)}\n`);
+  return timeline;
+}
 
 /** 页面发起 Open（真实对话框），等待 main 侧出现未 settle 的选择器。页面调用本身可能永不返回，不 await。 */
 async function showRealDialog(ctx: SmokeContext, window: SmokeWindow, expectedPending: number): Promise<boolean> {
@@ -112,18 +232,21 @@ const realReloadKeepsDialog: IsolatedCase = {
 const realCrashKeepsDialog: IsolatedCase = {
   id: 'real.crash-keeps-dialog',
   realDialog: true,
+  // 典型：建窗 < 1 s + 显示对话框 ≤ 5.6 s + 崩溃观察 ≤ 20 s + 0.8 s + 关闭 / settle ≤ 10 s ≈ 37 s；理论最坏（建窗 8 s）约 44 s，
+  // 届时用例或 runner 超时判失败（不会假通过），崩溃时间线已先写到 stderr。runner 的独立子进程上限为 45 s。
+  timeoutMs: 38_000,
   run: async (ctx) => {
     const window = await ctx.windows.create({ show: true });
     const shown = await showRealDialog(ctx, window, 1);
-    const before = ownerMeta(ctx, window.ownerId)?.generation ?? -1;
-    window.win.webContents.forcefullyCrashRenderer();
-    const crashed = await waitFor(() => (ownerMeta(ctx, window.ownerId)?.generation ?? -1) > before, SETTLE_WAIT_MS);
+    const crash = await crashAndObserve(ctx, window, null);
+    const crashed = crash.contentsEvent !== null && crash.generationAfter > crash.generationBefore;
     await delay(800);
     const pendingAfterCrash = ctx.openIpc.pendingNativeDialogs();
     const closed = await closeWindow(window);
     const settle = await timed(() => waitFor(() => ctx.openIpc.pendingNativeDialogs() === 0, SETTLE_WAIT_MS));
-    const facts = { shown, rendererGoneHandled: crashed, pendingAfterCrash, closed, settledAfterClose: settle.ok, settleMs: settle.ms };
-    return realOutcome(facts, { shown: true, rendererGoneHandled: true, pendingAfterCrash: 1, closed: true, settledAfterClose: true }, shown);
+    const facts = { shown, rendererGoneHandled: crashed, crashCategory: crash.category, pendingAfterCrash, closed, settledAfterClose: settle.ok, settleMs: settle.ms, crash };
+    // macOS gate 保持原有 5 s 内生效（category 必须为 ok）；20 s 只是诊断观察窗口。
+    return realOutcome(facts, { shown: true, rendererGoneHandled: true, crashCategory: 'ok', pendingAfterCrash: 1, closed: true, settledAfterClose: true }, shown);
   },
 };
 
