@@ -183,18 +183,24 @@ export async function scanCrashHelpers(reader: ProcReader, mainPid: number): Pro
   return helpers;
 }
 
+/**
+ * 发送 SIGKILL 的用途，前置条件分别定义：
+ * - `direct-exit-gate`：Linux 正式硬门。目标必须是**从未被 forceCrash、正常运行**的 renderer（运行 / 睡眠，不在 `do_exit`）。
+ * - `post-force-crash-diagnostic`：forceCrash 观察结束后的诊断清理；要求观察窗口已结束且原始结果已独立保存。
+ */
+export type KillPurpose =
+  | { readonly kind: 'direct-exit-gate'; readonly forceCrashInvoked: boolean }
+  | { readonly kind: 'post-force-crash-diagnostic'; readonly observationEnded: boolean; readonly forceCrashRecorded: boolean };
+
 export interface KillPreconditions {
   readonly platform: string;
-  /** 原始 forceCrash 观察窗口已结束。 */
-  readonly observationEnded: boolean;
-  /** 原始 forceCrash 结果已独立保存。 */
-  readonly forceCrashRecorded: boolean;
-  /** 观察窗口结束后、发送信号前，目标事件是否已经（迟到）到达。 */
+  readonly purpose: KillPurpose;
+  /** 发送信号前，目标的 `render-process-gone` 是否已经到达。 */
   readonly eventAlreadyArrived: boolean;
   readonly pid: number;
   readonly mainPid: number;
   readonly mainExecutableName: string;
-  /** 崩溃前采集的快照（经同一窗口的 `getOSProcessId()` 取得的 PID）。 */
+  /** 基准快照（硬门：注册监听前；诊断：崩溃前），经同一窗口的 `getOSProcessId()` 取得的 PID。 */
   readonly before: ProcessSnapshot | null;
   readonly now: ProcessSnapshot;
   readonly ancestors: readonly number[] | null;
@@ -211,20 +217,26 @@ export function unavailableSnapshot(pid: number): ProcessSnapshot {
   return { pid, available: false, state: null, stateLabel: 'unavailable', ppid: null, tracerPid: null, wchan: null, startTime: null, argv0Name: null, processType: null };
 }
 
-/** SIGKILL 的全部前置条件；返回拒绝原因，空数组才允许发送。 */
+/** SIGKILL 的全部前置条件；返回拒绝原因，空数组才允许发送。身份校验对两种用途完全相同。 */
 export function killRefusals(p: KillPreconditions): string[] {
   const refusals: string[] = [];
   const refuse = (reason: string, ok: boolean): void => {
     if (!ok) refusals.push(reason);
   };
   refuse('not linux', p.platform === 'linux');
-  refuse('forceCrash observation not ended', p.observationEnded);
-  refuse('forceCrash result not recorded', p.forceCrashRecorded);
+  if (p.purpose.kind === 'post-force-crash-diagnostic') {
+    refuse('forceCrash observation not ended', p.purpose.observationEnded);
+    refuse('forceCrash result not recorded', p.purpose.forceCrashRecorded);
+  } else {
+    refuse('forceCrash was invoked on this renderer', !p.purpose.forceCrashInvoked);
+    // wchan 读不到时无法确认不在退出路径上，同样拒绝。
+    refuse('renderer is not running normally', (p.now.stateLabel === 'running' || p.now.stateLabel === 'sleeping') && p.now.wchan !== null && p.now.wchan !== 'do_exit');
+  }
   refuse('render-process-gone already arrived', !p.eventAlreadyArrived);
   refuse('pid is not a positive safe integer', Number.isSafeInteger(p.pid) && p.pid > 1);
   refuse('pid is the main process', p.pid !== p.mainPid);
   refuse('/proc snapshot unavailable', p.now.available);
-  refuse('pre-crash identity unavailable', p.before !== null && p.before.startTime !== null);
+  refuse('baseline identity unavailable', p.before !== null && p.before.startTime !== null);
   refuse('start time differs (pid reuse)', p.before !== null && p.before.startTime !== null && p.before.startTime === p.now.startTime);
   refuse('not a renderer process', p.now.processType === 'renderer');
   refuse('not the Electron executable', p.now.argv0Name === p.mainExecutableName);

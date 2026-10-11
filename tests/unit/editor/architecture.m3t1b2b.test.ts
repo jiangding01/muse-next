@@ -38,6 +38,7 @@ const REAL_DIALOG_DECLARATIONS = [
   'real.crash-keeps-dialog=true',
   'real.destroy-isolated=true',
   'real.reload-keeps-dialog=true',
+  'risk.linux-force-crash-stall=false',
 ];
 
 /** smoke 中唯一允许出现的 Open 生命周期事件名：崩溃诊断的只读监听（注册与移除各一处）。 */
@@ -111,6 +112,7 @@ describe('M3 T1b-2b-1 架构守卫 —— smoke 复用生产实现', () => {
         'crashObservation.ts',
         'evidence.ts',
         'harness.ts',
+        'linuxExitExperiments.ts',
         'linuxProcessDiagnostics.ts',
         'replies.ts',
         'smokeMain.entry.ts',
@@ -160,20 +162,7 @@ describe('M3 T1b-2b-1 架构守卫 —— smoke 复用生产实现', () => {
       expect(isolated).toContain(diagnostic);
     }
     const withoutDiagnostics = CRASH_DIAGNOSTIC_LISTENERS.reduce((text, diagnostic) => text.replace(diagnostic, ''), source);
-    // 崩溃观测与 Linux 诊断只能观测：不得 reload / 加载 / 关闭 / 销毁窗口（会经导航重置掩盖崩溃事件失效），openIpc 只读 authorize / currentState。
-    const observer = /export async function crashAndObserve\([\s\S]*?\n\}\n/.exec(isolated)?.[0] ?? '';
-    const postKill = /export async function linuxPostKillDiagnosis\([\s\S]*?\n\}\n/.exec(isolated)?.[0] ?? '';
-    expect(observer).toContain('contents.forcefullyCrashRenderer();');
-    for (const body of [observer, postKill]) {
-      expect(body).not.toBe('');
-      expect(/\.(reload|reloadIgnoringCache|loadURL|loadFile|close|destroy)\(|\bwindows\.|navigationHistory/.test(body)).toBe(false);
-    }
-    expect([...isolated.matchAll(/openIpc\.(\w+)/g)].map((m) => m[1]).every((name) => name === 'authorize' || name === 'currentState')).toBe(true);
-    // SIGKILL 全部 smoke 只此一处：在 linuxPostKillDiagnosis 中、killRefusals 全部通过的分支里；不得 sudo / killall / pkill / 按名称批量终止。
-    expect(count(source, /SIGKILL/g)).toBe(1);
-    expect(/const refusals = killRefusals\(\{[\s\S]*?if \(refusals\.length === 0\) \{[\s\S]*?process\.kill\(pid, 'SIGKILL'\);/.test(postKill)).toBe(true);
-    expect(/\bsudo\b|killall|pkill|process\.kill\(\s*-/.test(source)).toBe(false);
-    expect([...source.matchAll(/process\.kill\(([^,]+),/g)].map((m) => (m[1] ?? '').trim()).sort()).toEqual(['pid', 'pid']);
+    // 退出观测与 Linux 信号实验（含唯一的 SIGKILL 发送点）的约束见 architecture.m3t1b2b.exit.test.ts。
     expect(/['"`](did-start-navigation|did-navigate|render-process-gone|destroyed)['"`]/.test(withoutDiagnostics)).toBe(false);
     expect(/\.(attachWindow|handleNavigation|handleNavigationCommitted|handleRendererGone|disposeWindow)\s*\(/.test(source)).toBe(false);
     expect(/\[\s*['"`](attachWindow|handleNavigation|handleNavigationCommitted|handleRendererGone|disposeWindow)['"`]\s*\]/.test(source)).toBe(false);

@@ -111,8 +111,7 @@ describe('linuxProcessDiagnostics —— SIGKILL 前置校验', () => {
   });
   const base: KillPreconditions = {
     platform: 'linux',
-    observationEnded: true,
-    forceCrashRecorded: true,
+    purpose: { kind: 'post-force-crash-diagnostic', observationEnded: true, forceCrashRecorded: true },
     eventAlreadyArrived: false,
     pid: RENDERER,
     mainPid: MAIN,
@@ -131,21 +130,42 @@ describe('linuxProcessDiagnostics —— SIGKILL 前置校验', () => {
     );
   });
 
-  it('全部条件满足时允许发送', () => {
+  const gate: KillPreconditions = { ...base, purpose: { kind: 'direct-exit-gate', forceCrashInvoked: false } };
+
+  it('全部条件满足时允许发送（两种用途）', () => {
     expect(killRefusals(base)).toEqual([]);
+    expect(killRefusals(gate)).toEqual([]);
+  });
+
+  it.each<[string, Partial<KillPreconditions>, string]>([
+    ['硬门目标曾被 forceCrash', { purpose: { kind: 'direct-exit-gate', forceCrashInvoked: true } }, 'forceCrash was invoked on this renderer'],
+    ['硬门目标停在 do_exit（半退出）', { now: snapshot({ state: 'I', stateLabel: 'sleeping', wchan: 'do_exit' }) }, 'renderer is not running normally'],
+    ['硬门目标不可中断睡眠', { now: snapshot({ state: 'D', stateLabel: 'uninterruptible' }) }, 'renderer is not running normally'],
+    ['硬门目标 wchan 读不到（无法确认不在退出路径）', { now: snapshot({ wchan: null }) }, 'renderer is not running normally'],
+    ['硬门目标为僵尸', { now: snapshot({ state: 'Z', stateLabel: 'zombie' }) }, 'process is a zombie or unavailable'],
+    ['硬门 PID 复用', { now: snapshot({ startTime: '999' }) }, 'start time differs (pid reuse)'],
+    ['硬门目标为主进程', { pid: MAIN, currentWebContentsPid: MAIN }, 'pid is the main process'],
+    ['硬门目标不是 renderer', { now: snapshot({ processType: 'utility' }) }, 'not a renderer process'],
+  ])('direct-exit-gate：%s → 拒绝', (_label, patch, reason) => {
+    expect(killRefusals({ ...gate, ...patch })).toContain(reason);
+  });
+
+  it('诊断用途不受「正常运行」限制（半退出的 renderer 正是诊断对象），但仍做全部身份校验', () => {
+    expect(killRefusals({ ...base, now: snapshot({ state: 'I', wchan: 'do_exit' }) })).toEqual([]);
+    expect(killRefusals({ ...base, now: snapshot({ state: 'I', wchan: 'do_exit', startTime: '999' }) })).toContain('start time differs (pid reuse)');
   });
 
   it.each<[string, Partial<KillPreconditions>, string]>([
     ['非 Linux', { platform: 'darwin' }, 'not linux'],
-    ['观察窗口未结束', { observationEnded: false }, 'forceCrash observation not ended'],
-    ['原始结果未保存', { forceCrashRecorded: false }, 'forceCrash result not recorded'],
+    ['观察窗口未结束', { purpose: { kind: 'post-force-crash-diagnostic', observationEnded: false, forceCrashRecorded: true } }, 'forceCrash observation not ended'],
+    ['原始结果未保存', { purpose: { kind: 'post-force-crash-diagnostic', observationEnded: true, forceCrashRecorded: false } }, 'forceCrash result not recorded'],
     ['事件已迟到', { eventAlreadyArrived: true }, 'render-process-gone already arrived'],
     ['PID 为 0', { pid: 0 }, 'pid is not a positive safe integer'],
     ['PID 为 1（init）', { pid: 1 }, 'pid is not a positive safe integer'],
     ['PID 非整数', { pid: 4169.5 }, 'pid is not a positive safe integer'],
     ['PID 为主进程', { pid: MAIN, currentWebContentsPid: MAIN }, 'pid is the main process'],
     ['/proc 不可读', { now: snapshot({ available: false, stateLabel: 'unavailable', startTime: null }) }, '/proc snapshot unavailable'],
-    ['崩溃前身份缺失', { before: null }, 'pre-crash identity unavailable'],
+    ['基准身份缺失', { before: null }, 'baseline identity unavailable'],
     ['PID 复用（启动时刻不同）', { now: snapshot({ startTime: '999' }) }, 'start time differs (pid reuse)'],
     ['不是 renderer', { now: snapshot({ processType: 'gpu-process' }) }, 'not a renderer process'],
     ['不是 Electron 可执行文件', { now: snapshot({ argv0Name: 'bash' }) }, 'not the Electron executable'],

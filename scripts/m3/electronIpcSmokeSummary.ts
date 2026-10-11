@@ -80,6 +80,8 @@ export const SMOKE_CASES: readonly CaseSpec[] = [
   isolated('real.reload-keeps-dialog', REAL_DIALOG),
   isolated('real.crash-keeps-dialog', REAL_DIALOG),
   isolated('real.destroy-isolated', REAL_DIALOG),
+  // Linux 残余风险：forcefullyCrashRenderer() 的半退出（CI run 38145428397）；只在 Linux 的独立子进程中观测，不计入 passed。
+  isolated('risk.linux-force-crash-stall', { linux: 'observe' }),
 ];
 
 export const RESULT_PREFIX = 'MUSE_IPC_SMOKE_RESULT ';

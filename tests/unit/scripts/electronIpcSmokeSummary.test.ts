@@ -75,6 +75,24 @@ describe('electronIpcSmokeSummary —— 清单', () => {
     }
   });
 
+  it('Linux forceCrash 风险：只在 Linux 的独立子进程、只观测；crash.renderer-gone 三平台仍为 pass；各平台用例数固定', () => {
+    expect(SMOKE_CASES.find((s) => s.id === 'risk.linux-force-crash-stall')).toEqual({ id: 'risk.linux-force-crash-stall', mode: 'isolated', expect: { linux: 'observe' } });
+    expect(SMOKE_CASES.find((s) => s.id === 'crash.renderer-gone')?.expect).toEqual({ darwin: 'pass', win32: 'pass', linux: 'pass' });
+    expect(expectedModes('linux')).toContain('risk.linux-force-crash-stall');
+    expect(expectedModes('darwin')).not.toContain('risk.linux-force-crash-stall');
+    expect(expectedModes('win32')).not.toContain('risk.linux-force-crash-stall');
+    const count = (platform: SmokePlatform): number => SMOKE_CASES.filter((s) => s.expect[platform] !== undefined).length;
+    expect([count('darwin'), count('win32'), count('linux')]).toEqual([45, 47, 46]);
+  });
+
+  it('Linux forceCrash 风险：缺失、以 passed 冒充、或出现在非 Linux 平台都失败', () => {
+    expect(problemsOf(goodOutcomes('linux').filter((o) => o.mode !== 'risk.linux-force-crash-stall'), 'linux')).toContain('expected case missing: risk.linux-force-crash-stall');
+    const asPassed = withChild('linux', 'risk.linux-force-crash-stall', (child) => outcome(child.mode, [{ id: 'risk.linux-force-crash-stall', status: 'passed' }], 'linux'));
+    expect(problemsOf(asPassed, 'linux')).toContain('case is observation-only, got passed: risk.linux-force-crash-stall');
+    const onDarwin = [...goodOutcomes('darwin'), outcome('risk.linux-force-crash-stall', [{ id: 'risk.linux-force-crash-stall', status: 'observed', detail: '{}' }], 'darwin')];
+    expect(problemsOf(onDarwin)).toContain('unexpected child mode risk.linux-force-crash-stall');
+  });
+
   it('真实原生对话框：macOS 为 gate，Windows / Linux 只观测；UNC 只在 Windows，允许 unverified', () => {
     for (const spec of SMOKE_CASES.filter((s) => s.id.startsWith('real.'))) expect(spec.expect).toEqual({ darwin: 'pass', win32: 'observe', linux: 'observe' });
     expect(SMOKE_CASES.find((s) => s.id === 'identity.win-unc')?.expect).toEqual({ win32: 'pass-or-unverified' });

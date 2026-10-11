@@ -13,7 +13,9 @@ import { performance } from 'node:perf_hooks';
 
 import { matchesPageIdentity } from '../../../src/main/open/ipcValidation';
 import { capabilitiesOf, ownerMeta } from './context';
-import { crashAndObserve, linuxProcessFacts } from './crashObservation';
+import { openActive } from './casesCapability';
+import { crashAndObserve } from './crashObservation';
+import { linuxPostKillDiagnosis, linuxProcessFacts } from './linuxExitExperiments';
 import type { CaseOutcome, SmokeCase, SmokeContext } from './context';
 import { delay, waitFor, withTimeout } from './harness';
 import { describeOpen } from './replies';
@@ -210,4 +212,63 @@ const identityWinUnc: IsolatedCase = {
   },
 };
 
-export const ISOLATED_CASES: readonly IsolatedCase[] = [identityWinUnc, realCloseSettles, realReloadKeepsDialog, realCrashKeepsDialog, realDestroyIsolated];
+/**
+ * Linux 残余风险观测（独立子进程，避免半退出的 renderer 污染 matrix）：真实调用 `forcefullyCrashRenderer()` 并观察 20 s。
+ * 若再次出现「事件不到达、旧能力保留」，执行经身份校验的 postKill 清理并分别记录 forceCrash 与 postKill。结果为 observed，
+ * 不计入 passed；但测试基础设施问题（未真正调用 forceCrash、目标身份未确认、没有有效能力、需要清理却未能发送或目标未退出）判 failed。
+ */
+const riskLinuxForceCrashStall: IsolatedCase = {
+  id: 'risk.linux-force-crash-stall',
+  realDialog: false,
+  // 建窗与 Open < 2 s + 崩溃前快照 ≤ 3 s + 观察 ≤ 20 s + 诊断（有界 /proc 读取：事实 3 次 + 发送前 1 次 + 发送后 1 次，各 ≤ 3 s，
+  // 正常为毫秒级）+ SIGKILL 后 ≤ 5 s；CI 正常 stall 路径约 23 s。病态 /proc 卡顿可超过 40 s 与 runner 子进程上限 45 s，届时判失败。
+  timeoutMs: 40_000,
+  run: async (ctx) => {
+    if (process.platform !== 'linux') return { status: 'failed', detail: `linux-only case ran on ${process.platform}` };
+    const window = await ctx.windows.create();
+    const ticket = await openActive(ctx, window, ctx.fixtures.utf8);
+    const forceCrash = await crashAndObserve(ctx, window, ticket.capabilityId);
+    const stalled = forceCrash.contentsEvent === null;
+    const postKill = stalled ? await linuxPostKillDiagnosis(ctx, window, ticket.capabilityId, forceCrash) : null;
+    const infrastructure: string[] = [];
+    if (!forceCrash.forceCrashInvoked) infrastructure.push('forcefullyCrashRenderer() was not invoked');
+    if (forceCrash.oldTokenAuthorizedBefore !== true) infrastructure.push('no active capability before forceCrash');
+    if (forceCrash.linuxBefore?.processType !== 'renderer') infrastructure.push('target renderer identity not confirmed');
+    const proc = postKill?.facts.proc ?? null;
+    if (postKill !== null && (proc === null || !proc.available || proc.state === null || proc.wchan === null)) {
+      infrastructure.push('key diagnostics missing: renderer state / wchan after the observation window could not be read');
+    }
+    if (postKill !== null && !postKill.signalSent) infrastructure.push(`postKill cleanup not sent: ${postKill.refusals.join(', ') || postKill.signalError || 'unknown'}`);
+    if (postKill !== null && postKill.signalSent && postKill.pidExited !== true) infrastructure.push('postKill target did not exit');
+    // 结论按实测事实逐项给出，不预设半退出，也不把杀掉之后的清理当成 forceCrash 的结果。
+    const risk =
+      postKill === null
+        ? { forceCrashEvent: 'arrived', cleanedWithinWindow: forceCrash.clearedAtMs !== null, category: forceCrash.category }
+        : {
+            forceCrashEvent: 'none within 20 s',
+            stateAfterObservation: proc?.state ?? null,
+            wchanAfterObservation: proc?.wchan ?? null,
+            halfExited: proc?.wchan === 'do_exit',
+            oldCapabilityRetainedAfterForceCrash: forceCrash.oldTokenAuthorizedAfter === true,
+            postKillSignalSent: postKill.signalSent,
+            postKillPidExited: postKill.pidExited,
+            postKillEventArrived: postKill.contentsEvent !== null,
+            postKillCleaned: postKill.clearedAtMs !== null && postKill.oldTokenAuthorizedAfter === false,
+            residualRisk:
+              forceCrash.oldTokenAuthorizedAfter === true
+                ? 'Linux: after forcefullyCrashRenderer() no render-process-gone arrived within 20 s and the old capability stayed authorized; see postKill for what the OS-level kill changed'
+                : 'Linux: after forcefullyCrashRenderer() no render-process-gone arrived within 20 s; the old capability was no longer authorized at the end of the window',
+          };
+    const detail = JSON.stringify({ trigger: 'force-crash', forceCrash, postKill, risk });
+    return infrastructure.length > 0 ? { status: 'failed', detail: `${infrastructure.join('; ')} | ${detail}` } : { status: 'observed', detail };
+  },
+};
+
+export const ISOLATED_CASES: readonly IsolatedCase[] = [
+  identityWinUnc,
+  realCloseSettles,
+  realReloadKeepsDialog,
+  realCrashKeepsDialog,
+  realDestroyIsolated,
+  riskLinuxForceCrashStall,
+];

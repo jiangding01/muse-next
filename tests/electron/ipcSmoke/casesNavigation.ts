@@ -12,7 +12,8 @@ import { session } from 'electron';
 import { capabilitiesOf, expectEqual, expectTrue, invariantProblems, ownerMeta, verdict } from './context';
 import type { SmokeCase, SmokeContext } from './context';
 import { openActive, openPending } from './casesCapability';
-import { crashAndObserve, linuxPostKillDiagnosis } from './crashObservation';
+import { crashAndObserve } from './crashObservation';
+import { EXIT_OBSERVE_MS, linuxSigkillExitGate } from './linuxExitExperiments';
 import { deferred, delay, waitFor, withTimeout } from './harness';
 import { describeOpen, isRecord, parseOpenReply } from './replies';
 import type { SmokeWindow } from './windows';
@@ -209,35 +210,54 @@ const navEarlyIpc: SmokeCase = {
 };
 
 /**
- * 崩溃后旧能力必须被生产接线清理（generation 前进、能力清空、旧 token 不授权）。观察窗口最多 `CRASH_OBSERVE_MS`；
- * 先判定再 reload：reload 本身也会重置能力，不能用它掩盖崩溃事件没有生效。时间线一律写入 detail。
+ * renderer 进程退出后旧能力必须被生产接线吊销（generation 前进、能力清空、旧 token 不授权），状态检查全部在 reload 之前完成。
+ * - macOS / Windows：`trigger=force-crash`，5 s 内生效（category = ok）。
+ * - Linux：`trigger=os-sigkill`（用户裁决）——对新鲜、正常运行的 renderer 直接发送经身份校验的 SIGKILL，5 s 内生效。
+ *   这只证明「进程真实退出 ⇒ 吊销」，不代表 `forcefullyCrashRenderer()` 在 Linux 上能完成退出；后者由
+ *   `risk.linux-force-crash-stall` 单独观测。
  */
 const crashRendererGone: SmokeCase = {
   id: 'crash.renderer-gone',
-  // 典型：建窗与 Open < 2 s + forceCrash 观察 ≤ 20 s + Linux 诊断（有界 /proc 读取共 5 次，各 ≤ 3 s，正常为毫秒级；SIGKILL 后 ≤ 5 s）
-  // + reload 恢复。病态 /proc 卡顿时可能超出预算，判失败；超时后窗口已关闭，诊断的发送前同步检查会拒绝发送信号。
+  // 典型：建窗与 Open < 2 s + 观察（forceCrash ≤ 20 s / SIGKILL ≤ 5 s，Linux 另有有界 /proc 读取）+ reload 恢复。
   timeoutMs: 45_000,
   run: async (ctx) => {
     const window = await ctx.windows.create();
     const ticket = await openActive(ctx, window, ctx.fixtures.utf8);
-    const crash = await crashAndObserve(ctx, window, ticket.capabilityId);
     const problems: string[] = [];
+    if (process.platform === 'linux') {
+      const gate = await linuxSigkillExitGate(ctx, window, ticket.capabilityId);
+      expectTrue(problems, 'old token was not authorized before the signal', gate.oldTokenAuthorizedBefore === true);
+      expectEqual(problems, 'kill refusals', gate.refusals, []);
+      expectTrue(problems, 'kill signal not sent', gate.signalSent);
+      expectTrue(problems, 'renderer pid did not exit', gate.pidExited === true);
+      expectTrue(problems, 'webContents render-process-gone not observed within 5 s', gate.contentsEvent !== null);
+      expectTrue(problems, 'app render-process-gone for the target not observed within 5 s', gate.appEvent?.matchesTarget === true);
+      expectTrue(problems, 'capabilities not cleared after the exit', gate.clearedAtMs !== null && gate.capabilitiesAfter === 0);
+      expectTrue(problems, 'generation did not advance', gate.generationAfter > gate.generationBefore);
+      expectTrue(problems, 'old token still authorized after the exit', gate.oldTokenAuthorizedAfter === false);
+      expectTrue(problems, 'coordinator invariants violated', gate.invariantsHold);
+      // 显式的 5 s 期限（监听在观察窗口结束后仍挂到收尾，迟到的事件会被记录，但不得算作硬门通过）；100 ms 为轮询容差。
+      const withinWindow = (ms: number | null | undefined): boolean => ms !== null && ms !== undefined && ms <= EXIT_OBSERVE_MS + 100;
+      expectEqual(problems, 'event timing base', gate.eventsBase, 'signal-sent');
+      expectTrue(problems, 'exit events or cleanup later than 5 s', withinWindow(gate.contentsEvent?.ms) && withinWindow(gate.appEvent?.ms) && withinWindow(gate.clearedAtMs));
+      if (problems.length === 0) {
+        await reload(window);
+        problems.push(...(await recoveryProblems(ctx, window, ticket)));
+      }
+      return verdict(problems, { trigger: 'os-sigkill', gate });
+    }
+    const crash = await crashAndObserve(ctx, window, ticket.capabilityId);
     expectTrue(problems, 'old token was not authorized before the crash', crash.oldTokenAuthorizedBefore === true);
     expectTrue(problems, 'webContents render-process-gone not observed', crash.contentsEvent !== null);
     expectTrue(problems, 'capabilities not cleared after the crash', crash.clearedAtMs !== null && crash.capabilitiesAfter === 0);
     expectTrue(problems, 'generation did not advance', crash.generationAfter > crash.generationBefore);
     expectTrue(problems, 'old token still authorized after the crash', crash.oldTokenAuthorizedAfter === false);
-    // macOS / Windows 保持原有 5 s 内生效的 gate；Linux 在 20 s 诊断窗口内生效即可，迟到如实记为 D-late-cleanup。
-    if (process.platform !== 'linux') expectEqual(problems, 'crash cleanup within 5 s', crash.category, 'ok');
-    // forceCrash 的判定到此冻结。Linux 未收到事件时进入独立诊断阶段（同一轮微任务内重新注册监听，不留空档）；
-    // 诊断结果（含 SIGKILL 后的事件与清理）只写进 detail，不会把上面的失败改成通过。
-    const forceCrashProblems = [...problems];
-    const postKill = process.platform === 'linux' && crash.contentsEvent === null ? await linuxPostKillDiagnosis(ctx, window, ticket.capabilityId, crash) : null;
-    if (forceCrashProblems.length === 0) {
+    expectEqual(problems, 'crash cleanup within 5 s', crash.category, 'ok');
+    if (problems.length === 0) {
       await reload(window);
       problems.push(...(await recoveryProblems(ctx, window, ticket)));
     }
-    return verdict(problems, { forceCrash: crash, postKill });
+    return verdict(problems, { trigger: 'force-crash', forceCrash: crash });
   },
 };
 

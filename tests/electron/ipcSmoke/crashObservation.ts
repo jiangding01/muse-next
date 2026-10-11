@@ -1,21 +1,21 @@
 /**
- * renderer 崩溃的只读观测与 Linux 诊断（M3 T1b-2b-1；`crashAndObserve` 自 `casesIsolated.ts` 原样迁入）。
+ * renderer 退出的只读观测（M3 T1b-2b-1）：`render-process-gone` 监听、owner 状态探针与 forceCrash 观测 `crashAndObserve`。
  *
  * - 所有监听只记录事件，不调用协调器 / handle 方法；清理只能由生产 `wireOpenIpcWindow` 转发的事件完成。
- * - `linuxPostKillDiagnosis` 是独立的诊断阶段：只在 Linux、forceCrash 观察窗口结束且未收到目标事件时运行；
- *   它的结果单独记录，**不改变** forceCrash 的判定。SIGKILL 只在 `killRefusals` 全部通过后发送一次。
+ * - smoke 中唯一注册 `render-process-gone` 监听的地方是 `watchRendererGone`（架构守卫锁定）。
+ * - Linux 的信号实验（硬门与 forceCrash 后诊断）在 `linuxExitExperiments.ts`。
  */
 
 import { performance } from 'node:perf_hooks';
 
-import { app, webContents } from 'electron';
+import { app } from 'electron';
 import type { RenderProcessGoneDetails, WebContents } from 'electron';
 
-import { capabilitiesOf, invariantProblems, ownerMeta } from './context';
+import { capabilitiesOf, ownerMeta } from './context';
 import type { SmokeContext } from './context';
 import { waitFor, withTimeout } from './harness';
-import { ancestorsOf, killRefusals, nodeProcReader, scanCrashHelpers, snapshotProcess, unavailableSnapshot } from './linuxProcessDiagnostics';
-import type { CrashHelper, ProcessSnapshot } from './linuxProcessDiagnostics';
+import { nodeProcReader, snapshotProcess } from './linuxProcessDiagnostics';
+import type { ProcessSnapshot } from './linuxProcessDiagnostics';
 import type { SmokeWindow } from './windows';
 
 /**
@@ -24,8 +24,6 @@ import type { SmokeWindow } from './windows';
  */
 export const CRASH_OBSERVE_MS = 20_000;
 const CRASH_PROMPT_MS = 5_000;
-/** SIGKILL 之后的额外观察窗口。 */
-const POST_KILL_OBSERVE_MS = 5_000;
 /** 单次 `/proc` 诊断读取的上限。 */
 const PROC_READ_LIMIT_MS = 3_000;
 
@@ -35,9 +33,28 @@ export interface CrashEvent {
   readonly exitCode: number;
 }
 
-type AppCrashEvent = CrashEvent & { readonly matchesTarget: boolean };
+export type AppCrashEvent = CrashEvent & { readonly matchesTarget: boolean };
+
+/** 监听器记录的绝对时刻（`performance.now()`）；由调用方按各自的基准换算成 `CrashEvent.ms`。 */
+interface SeenEvent {
+  readonly at: number;
+  readonly reason: string;
+  readonly exitCode: number;
+}
+
+export function relativeEvent(event: SeenEvent | null, base: number): CrashEvent | null {
+  return event === null ? null : { ms: Math.round(event.at - base), reason: event.reason, exitCode: event.exitCode };
+}
+
+export function relativeAppEvent(event: (SeenEvent & { readonly matchesTarget: boolean }) | null, base: number): AppCrashEvent | null {
+  return event === null ? null : { ms: Math.round(event.at - base), reason: event.reason, exitCode: event.exitCode, matchesTarget: event.matchesTarget };
+}
 
 export interface CrashTimeline {
+  /** 已调用 `forcefullyCrashRenderer()`：调用抛错会使 `crashAndObserve` 直接抛出（用例判失败），所以返回的时间线中恒为 true。 */
+  readonly forceCrashInvoked: boolean;
+  /** 观察窗口已经结束：`crashAndObserve` 只在观察结束后返回时间线，此字段记录这一事实供后续诊断的前置条件使用。 */
+  readonly observationEnded: boolean;
   readonly webContentsId: number;
   readonly rendererPid: number;
   readonly generationBefore: number;
@@ -66,27 +83,29 @@ export interface CrashTimeline {
   readonly category: 'A-no-event' | 'B-app-only' | 'C-event-without-cleanup' | 'D-late-cleanup' | 'ok';
 }
 
-interface GoneWatcher {
-  readonly seen: { contents: CrashEvent | null; app: AppCrashEvent | null };
+export interface GoneWatcher {
+  /** 注册时刻（`performance.now()`）。 */
+  readonly registeredAt: number;
+  readonly seen: { contents: SeenEvent | null; app: (SeenEvent & { readonly matchesTarget: boolean }) | null };
   stop(): void;
 }
 
 /** 只读监听目标 webContents 与 app 的 `render-process-gone`（同步注册，调用方须在触发前调用）。 */
-function watchRendererGone(contents: WebContents, start: number): GoneWatcher {
+export function watchRendererGone(contents: WebContents): GoneWatcher {
   const webContentsId = contents.id;
   // 事件回调异步写入；用记录对象而不是 let，避免控制流收窄把它们当成永远为 null。
   const seen: GoneWatcher['seen'] = { contents: null, app: null };
-  const since = (): number => Math.round(performance.now() - start);
   const onContentsGone = (_event: unknown, details: RenderProcessGoneDetails): void => {
-    seen.contents ??= { ms: since(), reason: details.reason, exitCode: details.exitCode };
+    seen.contents ??= { at: performance.now(), reason: details.reason, exitCode: details.exitCode };
   };
   const onAppGone = (_event: unknown, gone: WebContents, details: RenderProcessGoneDetails): void => {
     const matchesTarget = gone.id === webContentsId;
-    if (seen.app === null || (matchesTarget && !seen.app.matchesTarget)) seen.app = { ms: since(), reason: details.reason, exitCode: details.exitCode, matchesTarget };
+    if (seen.app === null || (matchesTarget && !seen.app.matchesTarget)) seen.app = { at: performance.now(), reason: details.reason, exitCode: details.exitCode, matchesTarget };
   };
   contents.on('render-process-gone', onContentsGone);
   app.on('render-process-gone', onAppGone);
   return {
+    registeredAt: performance.now(),
     seen,
     stop: () => {
       if (!contents.isDestroyed()) contents.off('render-process-gone', onContentsGone);
@@ -95,13 +114,13 @@ function watchRendererGone(contents: WebContents, start: number): GoneWatcher {
   };
 }
 
-interface OwnerProbe {
+export interface OwnerProbe {
   gen(): number;
   caps(): number;
   authorized(): boolean | null;
 }
 
-function ownerProbe(ctx: SmokeContext, window: SmokeWindow, token: string | null): OwnerProbe {
+export function ownerProbe(ctx: SmokeContext, window: SmokeWindow, token: string | null): OwnerProbe {
   return {
     gen: () => ownerMeta(ctx, window.ownerId)?.generation ?? -1,
     caps: () => capabilitiesOf(ctx, window.ownerId).length,
@@ -109,7 +128,7 @@ function ownerProbe(ctx: SmokeContext, window: SmokeWindow, token: string | null
   };
 }
 
-function isAlive(pid: number): boolean | null {
+export function isAlive(pid: number): boolean | null {
   try {
     process.kill(pid, 0);
     return true;
@@ -120,7 +139,7 @@ function isAlive(pid: number): boolean | null {
 }
 
 /** 有界的 `/proc` 读取；超时或异常记为 null（unavailable），不当成通过。 */
-function bounded<T>(task: Promise<T>): Promise<T | null> {
+export function bounded<T>(task: Promise<T>): Promise<T | null> {
   return withTimeout(task, PROC_READ_LIMIT_MS, 'proc diagnostics').catch(() => null);
 }
 
@@ -141,9 +160,11 @@ export async function crashAndObserve(ctx: SmokeContext, window: SmokeWindow, to
   const start = performance.now();
   const cleared = (): boolean => probe.gen() > generationBefore && probe.caps() === 0 && probe.authorized() !== true;
   const mark: { clearedAtMs: number | null } = { clearedAtMs: null };
-  const watcher = watchRendererGone(contents, start);
+  const watcher = watchRendererGone(contents);
+  let forceCrashInvoked = false;
   try {
     contents.forcefullyCrashRenderer();
+    forceCrashInvoked = true;
     await waitFor(() => {
       if (mark.clearedAtMs === null && cleared()) mark.clearedAtMs = Math.round(performance.now() - start);
       return mark.clearedAtMs !== null && watcher.seen.contents !== null;
@@ -152,13 +173,15 @@ export async function crashAndObserve(ctx: SmokeContext, window: SmokeWindow, to
     watcher.stop();
   }
   const clearedAtMs = mark.clearedAtMs;
-  const contentsSeen = watcher.seen.contents;
-  const appSeen = watcher.seen.app;
+  const contentsSeen = relativeEvent(watcher.seen.contents, start);
+  const appSeen = relativeAppEvent(watcher.seen.app, start);
   let category: CrashTimeline['category'] = 'ok';
   if (contentsSeen === null) category = appSeen?.matchesTarget === true ? 'B-app-only' : 'A-no-event';
   else if (clearedAtMs === null) category = 'C-event-without-cleanup';
   else if (clearedAtMs > CRASH_PROMPT_MS) category = 'D-late-cleanup';
   const timeline: CrashTimeline = {
+    forceCrashInvoked,
+    observationEnded: true,
     webContentsId,
     rendererPid,
     generationBefore,
@@ -178,128 +201,4 @@ export async function crashAndObserve(ctx: SmokeContext, window: SmokeWindow, to
   // 立即写到 stderr：即使之后外层超时，诊断时间线也保留在 CI 日志里。
   process.stderr.write(`[ipc-smoke] crash timeline ${JSON.stringify(timeline)}\n`);
   return timeline;
-}
-
-export interface LinuxProcessFacts {
-  readonly windowAlive: boolean;
-  readonly currentWebContentsPid: number | null;
-  readonly isCrashed: boolean | null;
-  readonly proc: ProcessSnapshot | null;
-  readonly ancestors: readonly number[] | null;
-  readonly underSmokeMain: boolean | null;
-  readonly crashHelpers: readonly CrashHelper[] | null;
-}
-
-/** 只读采集崩溃观察结束后的进程事实（不发送任何信号）。窗口相关字段在第一个 await 之前同步取得。 */
-export async function linuxProcessFacts(window: SmokeWindow, pid: number): Promise<LinuxProcessFacts> {
-  const alive = !window.win.isDestroyed();
-  const currentWebContentsPid = alive ? window.win.webContents.getOSProcessId() : null;
-  const isCrashed = alive ? window.win.webContents.isCrashed() : null;
-  const proc = await bounded(snapshotProcess(nodeProcReader, pid));
-  const ancestors = await bounded(ancestorsOf(nodeProcReader, pid));
-  return {
-    windowAlive: alive,
-    currentWebContentsPid,
-    isCrashed,
-    proc,
-    ancestors,
-    underSmokeMain: ancestors === null ? null : ancestors.includes(process.pid),
-    crashHelpers: await bounded(scanCrashHelpers(nodeProcReader, process.pid)),
-  };
-}
-
-export interface PostKillDiagnosis {
-  readonly facts: LinuxProcessFacts;
-  /** 发送信号前的拒绝原因（非空即未发送）。 */
-  readonly refusals: readonly string[];
-  readonly signalSent: boolean;
-  readonly signalError: string | null;
-  readonly procAfterKill: ProcessSnapshot | null;
-  /** `process.kill(pid, 0)`：未被回收的僵尸进程同样为 true，须结合 `procAfterKill.stateLabel` 解读。 */
-  readonly aliveAfterKill: boolean | null;
-  readonly contentsEvent: CrashEvent | null;
-  readonly appEvent: AppCrashEvent | null;
-  readonly generationBefore: number;
-  readonly generationAfter: number;
-  readonly capabilitiesAfter: number;
-  readonly oldTokenAuthorizedAfter: boolean | null;
-  /** 自发送信号起，首次观察到清理完成的时刻（毫秒）。 */
-  readonly clearedAtMs: number | null;
-  readonly invariantsHold: boolean;
-}
-
-/**
- * Linux 诊断阶段（独立于 forceCrash 判定）：先**同步**重新注册只读监听（不漏掉观察窗口之后迟到的事件），再采集 `/proc` 事实；
- * `killRefusals` 全部通过才对该 renderer PID 发送一次 SIGKILL，并在 `POST_KILL_OBSERVE_MS` 内观察事件与清理。
- */
-export async function linuxPostKillDiagnosis(ctx: SmokeContext, window: SmokeWindow, token: string | null, crash: CrashTimeline): Promise<PostKillDiagnosis> {
-  const contents = window.win.webContents;
-  const watcher = watchRendererGone(contents, performance.now());
-  const probe = ownerProbe(ctx, window, token);
-  const generationBefore = probe.gen();
-  try {
-    const pid = crash.rendererPid;
-    const facts = await linuxProcessFacts(window, pid);
-    // 发送前的最后一次有界快照；之后的窗口 / PID / 事件检查与发送都在同一段同步代码里完成，中间没有 await。
-    const now = (await bounded(snapshotProcess(nodeProcReader, pid))) ?? unavailableSnapshot(pid);
-    const windowAlive = !window.win.isDestroyed();
-    const targetId = crash.webContentsId;
-    const refusals = killRefusals({
-      platform: process.platform,
-      observationEnded: true,
-      forceCrashRecorded: true,
-      eventAlreadyArrived: watcher.seen.contents !== null || watcher.seen.app?.matchesTarget === true,
-      pid,
-      mainPid: process.pid,
-      mainExecutableName: process.execPath.split(/[\\/]/).pop() ?? '',
-      before: crash.linuxBefore,
-      now,
-      ancestors: facts.ancestors,
-      windowAlive,
-      currentWebContentsPid: windowAlive ? window.win.webContents.getOSProcessId() : -1,
-      otherWindowPids: webContents
-        .getAllWebContents()
-        .filter((other) => other.id !== targetId && !other.isDestroyed())
-        .map((other) => other.getOSProcessId()),
-    });
-    let signalSent = false;
-    let signalError: string | null = null;
-    const mark: { clearedAtMs: number | null } = { clearedAtMs: null };
-    if (refusals.length === 0) {
-      const start = performance.now();
-      try {
-        process.kill(pid, 'SIGKILL');
-        signalSent = true;
-      } catch (error) {
-        signalError = error instanceof Error && 'code' in error ? String(error.code) : 'unknown';
-      }
-      const cleared = (): boolean => probe.gen() > generationBefore && probe.caps() === 0 && probe.authorized() !== true;
-      if (signalSent) {
-        await waitFor(() => {
-          if (mark.clearedAtMs === null && cleared()) mark.clearedAtMs = Math.round(performance.now() - start);
-          return mark.clearedAtMs !== null && watcher.seen.contents !== null;
-        }, POST_KILL_OBSERVE_MS);
-      }
-    }
-    const diagnosis: PostKillDiagnosis = {
-      facts,
-      refusals,
-      signalSent,
-      signalError,
-      procAfterKill: signalSent ? await bounded(snapshotProcess(nodeProcReader, pid)) : null,
-      aliveAfterKill: signalSent ? isAlive(pid) : null,
-      contentsEvent: watcher.seen.contents,
-      appEvent: watcher.seen.app,
-      generationBefore,
-      generationAfter: probe.gen(),
-      capabilitiesAfter: probe.caps(),
-      oldTokenAuthorizedAfter: probe.authorized(),
-      clearedAtMs: mark.clearedAtMs,
-      invariantsHold: invariantProblems(ctx).length === 0,
-    };
-    process.stderr.write(`[ipc-smoke] linux post-kill diagnosis ${JSON.stringify(diagnosis)}\n`);
-    return diagnosis;
-  } finally {
-    watcher.stop();
-  }
 }
