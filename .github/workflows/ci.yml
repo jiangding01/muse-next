@@ -7,6 +7,8 @@ on:
 jobs:
   test:
     strategy:
+      # 一个平台失败时其余平台仍跑完，各自留下证据。
+      fail-fast: false
       matrix:
         os: [macos-latest, windows-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
@@ -24,7 +26,37 @@ jobs:
       # 根 tsconfig 不含 scripts/m3：单独检查 IPC smoke 的 runner 与判定器。
       - name: Typecheck Electron IPC smoke runner (M3 T1b-2b-1)
         run: npm run typecheck:electron-ipc
-      # 真实 BrowserWindow + 生产 preload + 默认 sandbox；Linux 只加虚拟显示，不改沙箱 / AppArmor / SUID。
+      # ubuntu-24.04 限制非特权 user namespace，Chromium 的 namespace 沙箱无法初始化（CI run 38135665466）。
+      # 只为本次 npm 安装的那一个 Electron 可执行文件加载 unconfined + userns 的专用 profile（Ubuntu 官方机制）；
+      # 不改 sysctl、不动 chrome-sandbox 属主 / 权限、不关闭 AppArmor。
+      - name: Allow user namespaces for the Electron binary via AppArmor (M3 T1b-2b-1, Linux only)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "::group::环境诊断（只读）"
+          . /etc/os-release && echo "os=${PRETTY_NAME}"
+          echo "kernel=$(uname -r)"
+          echo "apparmor_enabled=$(cat /sys/module/apparmor/parameters/enabled)"
+          echo "kernel.apparmor_restrict_unprivileged_userns=$(sysctl -n kernel.apparmor_restrict_unprivileged_userns)"
+          echo "apparmor_parser=$(command -v apparmor_parser)"
+          echo "::endgroup::"
+          ELECTRON="$(readlink -f "$(node -p "require('electron')")")"
+          test -f "${ELECTRON}" && test -x "${ELECTRON}"
+          case "${ELECTRON}" in *[\*\?\[\]\{\}\^\"]*) echo "Electron path contains AppArmor glob characters: ${ELECTRON}"; exit 1 ;; esac
+          echo "electron=${ELECTRON}"
+          stat -c 'chrome-sandbox owner=%U:%G mode=%a (诊断，不修改)' "$(dirname "${ELECTRON}")/chrome-sandbox"
+          PROFILE=/etc/apparmor.d/muse-next-electron-ci
+          printf 'abi <abi/4.0>,\ninclude <tunables/global>\n\nprofile muse-next-electron-ci "%s" flags=(unconfined) {\n  userns,\n}\n' "${ELECTRON}" | sudo tee "${PROFILE}"
+          sudo apparmor_parser -r "${PROFILE}"
+          sudo aa-status | grep -F 'muse-next-electron-ci'
+          ATTACH=''
+          for dir in /sys/kernel/security/apparmor/policy/profiles/*/; do
+            if [ "$(sudo cat "${dir}name")" = 'muse-next-electron-ci' ]; then ATTACH="$(sudo cat "${dir}attach")"; fi
+          done
+          echo "loaded profile attach=${ATTACH:-<missing>}"
+          test "${ATTACH}" = "${ELECTRON}"
+      # 真实 BrowserWindow + 生产 preload + 默认 sandbox；Linux 另加虚拟显示。不加任何关闭沙箱的参数。
       - name: Electron real-window IPC smoke (M3 T1b-2b-1)
         if: runner.os == 'Linux'
         run: xvfb-run -a npm run test:electron-ipc
