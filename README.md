@@ -23,7 +23,10 @@ Layout 的实现已全部完成**，**T9c Stage A ✅ COMPLETE**（2026-10-06：
 success），**M2.5 ✅ SEALED**（2026-10-06，Stage B seal `30395fe`，CI run 37457437828 三平台 success）。
 **M3.P0 Editor Core Planning ✅ SEALED**（2026-10-07，架构冻结方案 [`docs/M3_EDITOR_CORE_PLAN.md`](docs/M3_EDITOR_CORE_PLAN.md) v5，CI run 37513609019）；
 **M3 T0 ✅ SEALED**（2026-10-09，Editor Core 纯核心契约，`bee1224`，CI run 37944766436）；
-**M3 T1a ✅ 三平台验证通过**（2026-10-10，main 侧文件编解码边界，`cbba29c`，CI run 38035446020）；**M3 T1b / T1c = NOT STARTED，Next = T1b preflight**。详见 §5「路线图」。
+**M3 T1a ✅ SEALED**（2026-10-10，main 侧文件编解码边界，`cbba29c`，CI run 38035446020）；
+**M3 T1b：Seal candidate**（2026-10-11，Open 能力激活协议、Electron IPC 接线与三平台真实窗口 IPC smoke；code `158114d` / CI run 38148415852，
+main `1eb2289` / CI run 38149886220；docs-only seal 提交三平台 CI success 后正式 ✅ SEALED）；
+**M3 T1 整体未封板，T1c（产品 UI 接入）= NOT STARTED，Next = T1c 只读 preflight（待批准）**。详见 §5「路线图」。
 
 ## 2. 核心发现与设计原则
 
@@ -209,10 +212,15 @@ projectionEquals(before, after); // true 表示语义往返无损
   源码权威编辑 + 版本化语义快照、统一撤销重做、精确保留字节的保存、选区与源码 ↔ 谱面联动、第一条可视化编辑竖切；
   按 T0–T9 分阶段实施。**T0 ✅ SEALED**（2026-10-09）：已建立 Editor Core 的纯核心契约（文本补丁、源码投影、会话状态、
   持久选区合同与只接受字符串的解析入口）。T1（打开与解码）拆为 T1a / T1b / T1c：
-  **T1a ✅ 三平台验证通过**（2026-10-10）：main 侧 codec 入口、Open 纯管线（有界读取、解码失败分类、字节往返判定、
+  **T1a ✅ SEALED**（2026-10-10）：main 侧 codec 入口、Open 纯管线（有界读取、解码失败分类、字节往返判定、
   读取一致性检测、文件身份与指纹）、能力表纯数据模型，以及在 Electron 运行时执行的 codec probe。
-  **T1a 还没有接到应用里**：界面上的 Open 仍走旧的 IPC 与 renderer 状态，新的 Open IPC / preload / 窗口能力生命周期
-  属于 T1b，renderer 会话接入属于 T1c。**T1b、T1c 与 T2–T9 尚未开始，下一步是 T1b 只读 preflight。**
+  **T1b：Seal candidate**（2026-10-11，docs-only seal 提交三平台 CI success 后正式 ✅ SEALED）：main 侧 Open 能力激活协议（pending / active、请求代次、TTL、busy / superseded）、
+  sender / 主 frame / 页面身份校验、新的 open / activate / reject IPC 与 preload 白名单、每个窗口实例的原生对话框所有权，
+  以及在 macOS / Windows / Ubuntu 真实 Electron 窗口上运行的 IPC smoke（Ubuntu 为 CI 的 Xvfb 环境，不代表真实 Linux 桌面）。
+  **界面上的 Open 仍走旧的 IPC 与 renderer 状态**：产品 UI 接入新 IPC、删除旧通道、renderer 构建产物不含 iconv-lite，
+  以及三平台人工 Open 冒烟都属于 **T1c**；T1 整体在 T1c 完成后才封板。已知残余风险（Windows / Linux 关窗后原生对话框
+  不结束、macOS `destroy()` 留下孤儿对话框、Linux 上 `forcefullyCrashRenderer()` 后 renderer 半退出）带入 T5，详见 `HANDOFF.md` §30.1「M3 T1b 整体实际状态」。
+  **T1c 与 T2–T9 尚未开始，下一步是 T1c 只读 preflight（待批准）。**
 - **M4 及以后 — Playback / Import-Export / Layout**：播放、MIDI 导入导出、页面布局
   与打包分发。以 `HANDOFF.md` §61 的规划为准，本文档不重复展开、不提前承诺细节。
 
@@ -238,6 +246,8 @@ npm ci
 | `npm run jcx:corpus-test` | 对本地 legacy `.jcx` 语料跑 Lexer / AST / Parse / Round-trip 四级回归，另含 GB18030 encoding composition 检查 | 是（仅作为本地 validation evidence；当前 GitHub Actions workflow 不执行该命令；本地语料缺失时脚本打印跳过提示并以 exit 0 结束） |
 | `npm run jcx:fixture-report` | 对 `tests/fixtures/jcx/**` 跑同一套 fixture 矩阵检查，输出显式分母的六项指标 | 否（不含真实语料内容） |
 | `npm run test:electron-codec` | 用 vite 打包 codec probe，交给开发依赖中的 Electron 以 `ELECTRON_RUN_AS_NODE=1` 执行，验证 main 运行时的 UTF-8 / GB18030 编解码与 Open 管线（44 个固定用例；普通 Node 的 codec 结果不能代替它） | 否 |
+| `npm run typecheck:electron-ipc` | 用 `tsconfig.electron-ipc.json` 类型检查真实窗口 IPC smoke 的 runner 与判定器（根 `tsconfig.json` 不含 `scripts/m3`） | 否 |
+| `npm run test:electron-ipc` | 在真实 Electron 窗口（默认 sandbox + 生产 preload，完整 Electron 而非 RunAsNode）中跑 Open IPC smoke；每个平台有固定 Case 清单（macOS 45 / Windows 47 / Linux 46），observed 用例只记录事实、不计入 passed。Linux 需要 X 显示（CI 用 `xvfb-run -a`） | 否 |
 | `npm run jcx:scan` | 本地语料发现扫描器，生成 `docs/generated/` 下的统计报告 | 是 |
 | `npm run dev` | 启动 Electron + Vite 开发环境 | 否 |
 | `npm run make` | 打包本地可分发产物 | 否 |
@@ -245,10 +255,16 @@ npm ci
 **CI**：`.github/workflows/ci.yml` 在 `macOS-latest` / `windows-latest` /
 `ubuntu-latest` 三平台矩阵上依次跑 `npm ci` → `npm run typecheck` → `npm test` →
 `npm run test:electron-codec`（Electron runtime codec probe：用例 id 清单、计数、关键向量不得 skip、确实在 Electron 中运行，
-任一不满足即失败）→ `npm run jcx:fixture-report`；最后一步在 GitHub Actions 环境下会把 fixture 矩阵的
+任一不满足即失败）→ `npm run typecheck:electron-ipc` →（仅 Ubuntu）为本次安装的 Electron 可执行文件加载专用 AppArmor profile 并做进程
+标签自检 → `npm run test:electron-ipc`（Ubuntu 经 `xvfb-run -a`）→ `npm run jcx:fixture-report`；最后一步在 GitHub Actions 环境下会把 fixture 矩阵的
 Markdown 表格追加到该次 run 的 Step Summary，便于直接在 CI 页面查看六项指标而不必
 下载日志。当前 workflow 不执行 `npm run jcx:corpus-test` 与 `npm run jcx:scan`：真实语料被 `.gitignore` 排除，
 `jcx:corpus-test` 只作为本地 validation evidence。
+
+矩阵设置 `fail-fast: false`，一个平台失败时其它平台仍跑完。Ubuntu 24.04 runner 限制非特权 user namespace，Electron 默认
+sandbox 无法初始化，因此 CI 只为这一个 Electron 可执行文件加载 unconfined + `userns` 的专用 AppArmor profile；不修改 sysctl、
+不设置 `chrome-sandbox` 的 SUID、不关闭 AppArmor，也不使用关闭 sandbox 的参数。Linux 上的 sandbox 证据只覆盖 seccomp 层，
+且来自 CI 的 Xvfb 环境，不等同于真实 Linux 桌面的运行证据。
 
 ## 7. 质量护栏
 

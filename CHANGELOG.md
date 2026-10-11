@@ -41,6 +41,17 @@ Windows 全部 success（Electron runtime codec probe 三平台通过，关键�
 T1a 只建立 main 侧编解码边界的纯 helper 与运行时验证，**尚未接入应用的 Open IPC / preload / renderer**（属 T1b / T1c）；
 本次为 T1a 的 docs-only 封板记录。**T1b、T1c 尚未开始，下一步是 T1b 只读 preflight（先冻结能力激活协议）。**
 
+**M3 T1b Open Capability Activation & Real-window IPC：Seal candidate（2026-10-11，docs-only seal；本提交三平台 CI success 后正式 ✅ SEALED）**：子阶段 T1b-1 `104b8e0`（CI run 38040120314）、
+T1b-2a `b198bb1`（38044009269）、T1b-2a′ `1bb9755`（38047444068）、T1b-2b-1 code `158114d`（38148415852），docs `1eb2289` 合并 main
+（38149886220），均为 macOS / Windows / Ubuntu 三平台 success。内容：main 侧 Open 能力激活协议（pending / active、请求代次、TTL、
+busy / superseded、一致性不变量）；sender / 主 frame / payload / 可信页面身份校验；新的 open / activate / reject IPC 与 preload 白名单
+（页面不能提交路径，main / preload 不自动确认）；按窗口实例的原生对话框所有权与迟到结果隔离；三平台真实 Electron 窗口 IPC smoke
+（macOS 45 cases = 44 passed + 1 observed、Windows 47 = 42 + 5、Ubuntu 46 = 40 + 6，observed 不计入 passed），覆盖 HIGH-1 导航竞态、
+Windows 路径与 UNC、Ubuntu 默认 sandbox（CI 专用 AppArmor profile；Linux 只证明 seccomp 层）。**产品 UI 尚未接入新 IPC**，旧 Open 保留，
+这属于 T1c；三平台人工 Open 冒烟是 M3 T1 整体封板的必过硬门。已接受、带入 T5 的残余风险：Windows / Linux 关窗后原生对话框 5 s 内
+不结束、macOS `destroy()` 留孤儿、Linux 上 `forcefullyCrashRenderer()` 后 renderer 半退出（Linux 的「进程退出 ⇒ 吊销」由 SIGKILL 硬门
+验证，半退出由风险观测用例持续记录，未修复）。**下一步是 T1c 只读 preflight（待批准）。**
+
 ### Added
 
 - Legacy `.jcx` 语料发现扫描器：逐行分类、编码探测、生成统计报告（M0–M1.2）。
@@ -104,6 +115,11 @@ T1a 只建立 main 侧编解码边界的纯 helper 与运行时验证，**尚未
   文件身份与 `sameFile`（不做大小写折叠，无法确认时为 `unknown`）；进程级 documentId 分配器；pending / active 两态的
   能力表纯函数（不固化撤销时机）；Open 跨进程契约 `src/shared/openContracts.ts`；在 Electron 运行时
   （`ELECTRON_RUN_AS_NODE=1`）执行的 codec probe `npm run test:electron-codec`，已进入三平台 CI（M3 T1a）。
+- M3 T1b Open 能力激活与 Electron IPC（产品 UI 尚未接入）：激活协调器与一致性不变量（`src/main/open/**`）、sender / payload /
+  页面身份校验、`registerOpenIpc` 与共享窗口接线 `wireOpenIpcWindow`（`src/main/ipc/**`）、新通道 `muse:open-document` /
+  `muse:activate-document` / `muse:reject-document` 与 preload 白名单、按窗口实例的原生对话框所有权；真实 Electron 窗口 IPC smoke
+  `npm run test:electron-ipc`（防假阳性判定器、固定 Case 清单、runner 类型检查 `npm run typecheck:electron-ipc`），已进入三平台 CI，
+  Ubuntu 经 Xvfb 与专用 AppArmor profile 运行（M3 T1b）。
 
 ### Changed
 
