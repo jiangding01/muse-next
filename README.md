@@ -24,9 +24,12 @@ success），**M2.5 ✅ SEALED**（2026-10-06，Stage B seal `30395fe`，CI run 
 **M3.P0 Editor Core Planning ✅ SEALED**（2026-10-07，架构冻结方案 [`docs/M3_EDITOR_CORE_PLAN.md`](docs/M3_EDITOR_CORE_PLAN.md) v5，CI run 37513609019）；
 **M3 T0 ✅ SEALED**（2026-10-09，Editor Core 纯核心契约，`bee1224`，CI run 37944766436）；
 **M3 T1a ✅ SEALED**（2026-10-10，main 侧文件编解码边界，`cbba29c`，CI run 38035446020）；
-**M3 T1b：Seal candidate**（2026-10-11，Open 能力激活协议、Electron IPC 接线与三平台真实窗口 IPC smoke；code `158114d` / CI run 38148415852，
-main `1eb2289` / CI run 38149886220；docs-only seal 提交三平台 CI success 后正式 ✅ SEALED）；
-**M3 T1 整体未封板，T1c（产品 UI 接入）= NOT STARTED，Next = T1c 只读 preflight（待批准）**。详见 §5「路线图」。
+**M3 T1b ✅ SEALED**（2026-10-11，Open 能力激活协议、Electron IPC 接线与三平台真实窗口 IPC smoke；docs-only seal `bb9231d`，CI run 38151844787）；
+**M3 T1c（产品 UI 接入）**：T1c-1 窗口安全加固（`b79172e`，CI run 38215803880）与 T1c-2 会话迁移和新 Open 切换（`d8cb04e`，CI run 38220816649）
+已验收，旧 Open 通道已删除；T1c-3 按 2026-10-12 用户批准的修订后阶段 Seal Gate 完成——macOS 真实 GUI 人工辅助验收（Claude 经 Computer Use 操作真实窗口、只读 CDP 读取状态，用户接受为验收证据），
+Windows / Ubuntu 以三平台 CI 为阶段依据（**这两个平台的真实 GUI 人工验收尚未执行**，是对应平台产品发布前的强制硬门，须在真实打包应用上执行，
+CI 不得永久替代）；**T1c 与 M3 T1 整体：Seal candidate**（2026-10-12 docs-only seal，该 seal 提交的三平台 CI success 后正式 ✅ SEALED）。
+M3 T2–T9 尚未开始，整个 M3 未封板，产品正式发布未批准。详见 §5「路线图」。
 
 ## 2. 核心发现与设计原则
 
@@ -214,13 +217,19 @@ projectionEquals(before, after); // true 表示语义往返无损
   持久选区合同与只接受字符串的解析入口）。T1（打开与解码）拆为 T1a / T1b / T1c：
   **T1a ✅ SEALED**（2026-10-10）：main 侧 codec 入口、Open 纯管线（有界读取、解码失败分类、字节往返判定、
   读取一致性检测、文件身份与指纹）、能力表纯数据模型，以及在 Electron 运行时执行的 codec probe。
-  **T1b：Seal candidate**（2026-10-11，docs-only seal 提交三平台 CI success 后正式 ✅ SEALED）：main 侧 Open 能力激活协议（pending / active、请求代次、TTL、busy / superseded）、
+  **T1b ✅ SEALED**（2026-10-11，`bb9231d`）：main 侧 Open 能力激活协议（pending / active、请求代次、TTL、busy / superseded）、
   sender / 主 frame / 页面身份校验、新的 open / activate / reject IPC 与 preload 白名单、每个窗口实例的原生对话框所有权，
   以及在 macOS / Windows / Ubuntu 真实 Electron 窗口上运行的 IPC smoke（Ubuntu 为 CI 的 Xvfb 环境，不代表真实 Linux 桌面）。
-  **界面上的 Open 仍走旧的 IPC 与 renderer 状态**：产品 UI 接入新 IPC、删除旧通道、renderer 构建产物不含 iconv-lite，
-  以及三平台人工 Open 冒烟都属于 **T1c**；T1 整体在 T1c 完成后才封板。已知残余风险（Windows / Linux 关窗后原生对话框
-  不结束、macOS `destroy()` 留下孤儿对话框、Linux 上 `forcefullyCrashRenderer()` 后 renderer 半退出）带入 T5，详见 `HANDOFF.md` §30.1「M3 T1b 整体实际状态」。
-  **T1c 与 T2–T9 尚未开始，下一步是 T1c 只读 preflight（待批准）。**
+  已知残余风险（Windows / Linux 关窗后原生对话框不结束、macOS `destroy()` 留下孤儿对话框、Linux 上 `forcefullyCrashRenderer()` 后
+  renderer 半退出）带入 T5，详见 `HANDOFF.md` §30.1「M3 T1b 整体实际状态」。
+  **T1c**（产品 UI 接入，Seal candidate）分三段：**T1c-1** 窗口安全加固（拒绝弹窗、拦截非可信导航 / 子 frame / webview，生产 CSP）；
+  **T1c-2** renderer 会话迁移到 `DocumentSession`，产品 Open 切换到新 IPC（main 明确确认激活后才切换文档，确认不了时保留当前文档并标记
+  「授权未确认」），删除旧 `muse:open-score`，renderer 生产产物检查进入 CI；**T1c-3** 人工验收按修订后的阶段 Seal Gate 完成：macOS 真实
+  GUI 人工辅助验收（Claude 经 Computer Use 操作真实窗口、只读 CDP 读取状态，用户接受为验收证据）（M1–M6、M8 通过，M7 被系统模态阻止记为 N/A，M9 不适用），Windows / Ubuntu 只以三平台 CI
+  为阶段依据，真实 GUI 人工验收未执行，是对应平台产品发布前的强制硬门（须在真实打包应用上执行，CI 不得永久替代）。已接受的残余风险：页面导航被拦截时打开授权会被提前吊销。**构建 / 打包尚未解决**：生产 renderer 输出目录与
+  main 加载路径错位（F1），`npm run package` 退出码 0 却没有产出应用（F2），asar / Fuses / 打包应用均未验证，须在 M3 整体 package smoke 与
+  Seal 前解决。详见 `HANDOFF.md` §30.1「M3 T1c-1 / T1c-2 / T1c-3 实际状态」。
+  **T2–T9 尚未开始；M3 T1 正式封板后，下一步是 T2 History 核心（撤销 / 重做，待用户授权）。**
 - **M4 及以后 — Playback / Import-Export / Layout**：播放、MIDI 导入导出、页面布局
   与打包分发。以 `HANDOFF.md` §61 的规划为准，本文档不重复展开、不提前承诺细节。
 
@@ -243,17 +252,19 @@ npm ci
 |---|---|---|
 | `npm run typecheck` | `tsc --noEmit` 严格类型检查 | 否 |
 | `npm test` | `vitest run` 全量单元测试 | 否 |
+| `npm run check:renderer-bundle` | 真实生产构建 renderer 后按模块清单与产物文本检查：不得含 iconv-lite、Node builtin、格式层总入口 / serializer / codec、main / preload 代码；生产 HTML 必须带 CSP 且无开发放宽 | 否 |
 | `npm run jcx:corpus-test` | 对本地 legacy `.jcx` 语料跑 Lexer / AST / Parse / Round-trip 四级回归，另含 GB18030 encoding composition 检查 | 是（仅作为本地 validation evidence；当前 GitHub Actions workflow 不执行该命令；本地语料缺失时脚本打印跳过提示并以 exit 0 结束） |
 | `npm run jcx:fixture-report` | 对 `tests/fixtures/jcx/**` 跑同一套 fixture 矩阵检查，输出显式分母的六项指标 | 否（不含真实语料内容） |
 | `npm run test:electron-codec` | 用 vite 打包 codec probe，交给开发依赖中的 Electron 以 `ELECTRON_RUN_AS_NODE=1` 执行，验证 main 运行时的 UTF-8 / GB18030 编解码与 Open 管线（44 个固定用例；普通 Node 的 codec 结果不能代替它） | 否 |
 | `npm run typecheck:electron-ipc` | 用 `tsconfig.electron-ipc.json` 类型检查真实窗口 IPC smoke 的 runner 与判定器（根 `tsconfig.json` 不含 `scripts/m3`） | 否 |
-| `npm run test:electron-ipc` | 在真实 Electron 窗口（默认 sandbox + 生产 preload，完整 Electron 而非 RunAsNode）中跑 Open IPC smoke；每个平台有固定 Case 清单（macOS 45 / Windows 47 / Linux 46），observed 用例只记录事实、不计入 passed。Linux 需要 X 显示（CI 用 `xvfb-run -a`） | 否 |
+| `npm run test:electron-ipc` | 在真实 Electron 窗口（默认 sandbox + 生产 preload，完整 Electron 而非 RunAsNode）中跑 Open IPC smoke；每个平台有固定 Case 清单（macOS 58 / Windows 61 / Linux 59；生产 UI 用例 `ui.*` 在 macOS / Linux 各 7 个、Windows 8 个），observed 用例只记录事实、不计入 passed。Linux 需要 X 显示（CI 用 `xvfb-run -a`） | 否 |
 | `npm run jcx:scan` | 本地语料发现扫描器，生成 `docs/generated/` 下的统计报告 | 是 |
 | `npm run dev` | 启动 Electron + Vite 开发环境 | 否 |
-| `npm run make` | 打包本地可分发产物 | 否 |
+| `npm run make` | 打包本地可分发产物（当前打包流程未验证：`npm run package` 未产出应用、renderer 输出路径与 main 加载路径错位，见 `HANDOFF.md` §30.1「M3 T1c-3 实际状态」） | 否 |
 
 **CI**：`.github/workflows/ci.yml` 在 `macOS-latest` / `windows-latest` /
 `ubuntu-latest` 三平台矩阵上依次跑 `npm ci` → `npm run typecheck` → `npm test` →
+`npm run check:renderer-bundle`（renderer 生产产物检查）→
 `npm run test:electron-codec`（Electron runtime codec probe：用例 id 清单、计数、关键向量不得 skip、确实在 Electron 中运行，
 任一不满足即失败）→ `npm run typecheck:electron-ipc` →（仅 Ubuntu）为本次安装的 Electron 可执行文件加载专用 AppArmor profile 并做进程
 标签自检 → `npm run test:electron-ipc`（Ubuntu 经 `xvfb-run -a`）→ `npm run jcx:fixture-report`；最后一步在 GitHub Actions 环境下会把 fixture 矩阵的

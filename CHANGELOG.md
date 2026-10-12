@@ -39,9 +39,9 @@ CRITICAL / HIGH / P0 阻断类 MEDIUM 均为 0。本阶段只产出文档，未�
 **M3 T1a File Codec Boundary ✅ 三平台验证通过（2026-10-10）**：code `cbba29c`，CI run 38035446020 attempt 1，macOS / Ubuntu /
 Windows 全部 success（Electron runtime codec probe 三平台通过，关键编码向量无 skip）。M3 T1 按用户裁决拆为 T1a / T1b / T1c：
 T1a 只建立 main 侧编解码边界的纯 helper 与运行时验证，**尚未接入应用的 Open IPC / preload / renderer**（属 T1b / T1c）；
-本次为 T1a 的 docs-only 封板记录。**T1b、T1c 尚未开始，下一步是 T1b 只读 preflight（先冻结能力激活协议）。**
+本次为 T1a 的 docs-only 封板记录。**T1b、T1c 尚未开始，下一步是 T1b 只读 preflight（先冻结能力激活协议）。**（以上为 T1a 封板时的状态。）
 
-**M3 T1b Open Capability Activation & Real-window IPC：Seal candidate（2026-10-11，docs-only seal；本提交三平台 CI success 后正式 ✅ SEALED）**：子阶段 T1b-1 `104b8e0`（CI run 38040120314）、
+**M3 T1b Open Capability Activation & Real-window IPC ✅ SEALED（2026-10-11，docs-only seal `bb9231d`，CI run 38151844787 三平台 success）**：子阶段 T1b-1 `104b8e0`（CI run 38040120314）、
 T1b-2a `b198bb1`（38044009269）、T1b-2a′ `1bb9755`（38047444068）、T1b-2b-1 code `158114d`（38148415852），docs `1eb2289` 合并 main
 （38149886220），均为 macOS / Windows / Ubuntu 三平台 success。内容：main 侧 Open 能力激活协议（pending / active、请求代次、TTL、
 busy / superseded、一致性不变量）；sender / 主 frame / payload / 可信页面身份校验；新的 open / activate / reject IPC 与 preload 白名单
@@ -50,7 +50,17 @@ busy / superseded、一致性不变量）；sender / 主 frame / payload / 可�
 Windows 路径与 UNC、Ubuntu 默认 sandbox（CI 专用 AppArmor profile；Linux 只证明 seccomp 层）。**产品 UI 尚未接入新 IPC**，旧 Open 保留，
 这属于 T1c；三平台人工 Open 冒烟是 M3 T1 整体封板的必过硬门。已接受、带入 T5 的残余风险：Windows / Linux 关窗后原生对话框 5 s 内
 不结束、macOS `destroy()` 留孤儿、Linux 上 `forcefullyCrashRenderer()` 后 renderer 半退出（Linux 的「进程退出 ⇒ 吊销」由 SIGKILL 硬门
-验证，半退出由风险观测用例持续记录，未修复）。**下一步是 T1c 只读 preflight（待批准）。**
+验证，半退出由风险观测用例持续记录，未修复）。（以上为 T1b 封板时的状态；T1c 的结果与验收范围修订见下一段。）
+
+**M3 T1c Product Open UI：Seal candidate（2026-10-12，docs-only seal；该 seal 提交的三平台 CI success 后 T1c 与 M3 T1 整体正式 ✅ SEALED）**：
+T1c-1 窗口安全加固 `b79172e`（CI run 38215803880）；T1c-2 会话迁移与新 Open 切换 `d8cb04e`（CI run 38220816649），docs `1cb10dc`（38221319092）；
+均为 macOS / Windows / Ubuntu 三平台 success（真实窗口 smoke：macOS 58 passed、Windows 57 passed + 4 个已裁决 observed、Ubuntu 54 passed + 5 个已裁决 observed）。
+产品 Open 现在只走 main 签发授权的新协议：界面在 main 明确确认激活后才切换文档，确认不了时保留当前文档并标记「授权未确认」；旧 Open 通道已删除，
+renderer 生产产物不再包含 iconv-lite。T1c-3 人工验收按 **2026-10-12 用户批准的修订后阶段 Seal Gate** 完成：macOS 真实 GUI 人工辅助验收
+（Claude 经 Computer Use 操作真实窗口、只读 CDP 读取状态，用户接受为验收证据）（M1–M6、M8 通过，M7 被系统模态阻止记为 N/A，M9 不适用）；Windows / Ubuntu 只以上述三平台 CI
+为阶段依据，**真实 GUI 人工验收尚未执行**，是对应平台产品发布前的强制硬门（须在真实打包应用上执行，CI 不得永久替代）。已接受风险：页面发起的导航被拦截时打开授权会被提前吊销（页面无信号）；T4 普通 Save 必须由 main 重新验证授权；
+旧 dirty 会话在激活不确定时的恢复由 T4 负责。构建 / 打包问题见 Known limitations。整个 M3 未封板，产品正式发布未批准；
+M3 T1 正式封板后下一步是 T2 History 核心（撤销 / 重做，待用户授权）。
 
 ### Added
 
@@ -120,8 +130,16 @@ Windows 路径与 UNC、Ubuntu 默认 sandbox（CI 专用 AppArmor profile；Lin
   `muse:activate-document` / `muse:reject-document` 与 preload 白名单、按窗口实例的原生对话框所有权；真实 Electron 窗口 IPC smoke
   `npm run test:electron-ipc`（防假阳性判定器、固定 Case 清单、runner 类型检查 `npm run typecheck:electron-ipc`），已进入三平台 CI，
   Ubuntu 经 Xvfb 与专用 AppArmor profile 运行（M3 T1b）。
+- M3 T1c-1 窗口安全：生产 main 与真实窗口 smoke 共用的 `wireWindowSecurity`（拒绝弹窗、拦截页面发起的非可信导航、子 frame 导航与 webview），
+  以及按构建模式注入的 renderer CSP（生产不含 `'unsafe-inline'` 与 WebSocket）；在真实生产 renderer 上运行的 `prod.*` smoke（M3 T1c-1）。
+- M3 T1c-2 renderer Open 事务：纯状态机 `openTransaction`（激活每次 5 s、最多 3 次尝试（含首次，重试使用同一张票），只有明确确认才提交）与模块级控制器 `openController`；
+  `npm run check:renderer-bundle` 生产产物检查进入三平台 CI；8 个生产 UI 真实窗口用例 `ui.*`（M3 T1c-2）。
 
 ### Changed
+
+- M3 T1c-2（2026-10-12，`d8cb04e`）：产品 Open 切换到新 IPC（`openDocument → activateDocument`），renderer store 以 T0 `DocumentSession` 为唯一数据源；
+  状态栏显示文件名、编码、BOM、往返安全与「授权未确认」；SourceInspector 改为只读，Reparse 暂时隐藏。删除旧 Open 通道 `muse:open-score`、旧的
+  renderer 读取路径与 main 中的旧解码函数，preload 白名单只剩 3 个方法。
 
 - M2.5 Score System Layout T9b.S（2026-10-06，`17efec3`）：五线谱每一行的高度改为**按这一行实际画出的内容自动决定**——很高或很低的音（多条加线）、符干与短时值符尾、升降号、附点、延音线越出基础谱表区时，该行的五线谱层会在上方或下方加高，谱表随之下移，不再压到相邻的行；每个声部、每一行分别计算，普通音域的行高度不变。五线谱线距统一为 10 个单位，并由程序明确交给五线谱绘制组件（原先自绘的三连音括号与点击热区按 8 计算，现在一致；三连音括号因此略高于原来）。占位文本（例如倚音、无法绘制的时值）的点击区域覆盖整段基础谱表区。PageModel 的分页数据会自然反映更高的行。仅屏幕成品谱路径生效；单声部旧布局路径仍保持固定高度。
 
@@ -210,6 +228,16 @@ Canonical 序列化原记录四条已知限制，其中第 2 条已回填，**�
 3. 组级时值后缀（如 `[CEG]2`）的写回形态与源文本不同（往返一致，但排版不同）。
 4. `w:` 歌词行绑定到零事件声部时，canonical 序列化会丢弃整条歌词行并发出诊断
    （Domain 语义级、不可逆，非排版细节丢失）。
+
+构建 / 打包（M3 T1c-3 登记，须在 M3 整体 package smoke 与 Seal 前解决，根因均未确认）：
+
+- F1：Forge 生产构建把 renderer 输出到 `src/renderer/.vite/renderer/main_window/`，与生产 main 加载的 `.vite/renderer/main_window/` 不一致；
+  未打包运行需手工复制产物，这不是产品的运行方式。
+- F2：`npm run package` 退出码为 0，但没有产出应用。asar、Fuses 与打包应用启动均未验证；各平台发布前必须通过真实打包应用的启动与 GUI 验收。
+
+已接受风险（M3 T1c-1）：
+
+- 页面发起的导航被策略拦截时，该窗口的打开授权会被提前吊销且页面无信号（裁决 A）。
 
 ### Quality
 
