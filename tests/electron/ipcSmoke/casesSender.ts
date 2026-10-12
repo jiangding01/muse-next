@@ -4,7 +4,10 @@
  * 生产 sandbox 下子 frame 没有 preload，单靠它无法证明 main 侧的 mainFrame 校验。`reject.subframe` 因此使用**测试专属**
  * 配置 `nodeIntegrationInSubFrames: true`（仍是 sandbox / contextIsolation / 无 nodeIntegration），让子 frame 加载与主 frame
  * 完全相同的可信页面 URL 并拿到桥：此时只有 main 侧 `senderFrame === mainFrame` 一项能拒绝它。这不是生产配置的安全证明。
- * 生产配置下同源子 frame 经 `parent.museDesktop` 访问桥的残余风险由 `risk.subframe-parent-bridge` 如实观测记录。
+ * M3 T1c-1 起子 frame 导航由生产安全接线拦截，所以该用例显式关闭安全接线（`off-for-sender-check`），只为单独观测 main 侧鉴权；
+ * `wireOpenIpcWindow` 与 main 的 IPC 鉴权照常生效，断言与 T1b 相同。
+ * `risk.subframe-parent-bridge`（T1b 为 observe，M3 T1c-1 起为 pass 硬门）：在默认的生产安全接线下，同源子 frame 加载不了可信页面，
+ * 也就不能经 `parent.museDesktop` 调用桥；不加固时风险确实存在由 `security.subframe-control`（`casesSecurity.ts`）对照证明。
  */
 
 import { randomUUID } from 'node:crypto';
@@ -24,19 +27,20 @@ import type { SmokeWindow } from './windows';
 const REJECTED = 'Error: Request rejected';
 const isRejected = (result: PageResult): boolean => !result.ok && result.error.endsWith(REJECTED);
 
-async function childFrame(window: SmokeWindow, url: string): Promise<WebFrameMain | null> {
-  const ready = await waitFor(() => window.win.webContents.mainFrame.frames.some((frame) => frame.url === url), 5_000);
+/** 等待主 frame 下出现已加载 `url` 的子 frame；超时返回 null。 */
+export async function childFrame(window: SmokeWindow, url: string, timeoutMs = 5_000): Promise<WebFrameMain | null> {
+  const ready = await waitFor(() => window.win.webContents.mainFrame.frames.some((frame) => frame.url === url), timeoutMs);
   if (!ready) return null;
   return window.win.webContents.mainFrame.frames.find((frame) => frame.url === url) ?? null;
 }
 
-const frameCall = (frame: WebFrameMain, expression: string): Promise<PageResult> =>
+export const frameCall = (frame: WebFrameMain, expression: string): Promise<PageResult> =>
   evaluate((code) => frame.executeJavaScript(code, true), expression, 5_000);
 
 const rejectSubframe: SmokeCase = {
   id: 'reject.subframe',
   run: async (ctx) => {
-    const window = await ctx.windows.create({ subframePreload: true, url: `${ctx.entry.loadUrl}#frame` });
+    const window = await ctx.windows.create({ subframePreload: true, security: 'off-for-sender-check', url: `${ctx.entry.loadUrl}#frame` });
     const frame = await childFrame(window, ctx.entry.loadUrl);
     if (frame === null) return verdict(['child frame did not load the trusted page URL']);
     const problems: string[] = [];
@@ -56,26 +60,36 @@ const rejectSubframe: SmokeCase = {
   },
 };
 
-/** 观测（生产配置）：同源子 frame 有没有桥、能否经 parent 访问主 frame 的桥。只记录事实，不判通过。 */
+/** 等多久确认可信页面子 frame 没有加载出来（子 frame 在测试页脚本解析阶段创建，首次加载完成时导航早已发生）。 */
+const SUBFRAME_ABSENT_MS = 3_000;
+
+/**
+ * 生产安全接线下（默认窗口配置）：同源子 frame 的导航被 `will-frame-navigate` 拦截，没有子 frame 加载出可信页面，因此没有任何
+ * 子 frame 能经 `parent.museDesktop` 发起 Open；未导航成功的空白 frame 允许存在（不对它执行任何脚本）。主 frame 自己的 IPC 照常。
+ */
 const riskSubframeParentBridge: SmokeCase = {
   id: 'risk.subframe-parent-bridge',
   run: async (ctx) => {
     const window = await ctx.windows.create({ url: `${ctx.entry.loadUrl}#frame` });
-    const frame = await childFrame(window, ctx.entry.loadUrl);
-    if (frame === null) return verdict(['child frame did not load']);
-    ctx.chooser.enqueue({ kind: 'cancel' });
-    const own = await frameCall(frame, 'typeof window.museDesktop');
-    const parentAccess = await frameCall(frame, `(() => { try { return typeof parent.museDesktop; } catch (error) { return 'blocked:' + error.name; } })()`);
-    const viaParent = await frameCall(frame, `(() => { try { return parent.museDesktop.openDocument(); } catch (error) { return 'blocked:' + error.name; } })()`);
+    const problems: string[] = [];
+    const loaded = await childFrame(window, ctx.entry.loadUrl, SUBFRAME_ABSENT_MS);
+    const blocks = ctx.security.events(window.ownerId).filter((block) => block.kind === 'subframe-navigation');
     const facts = {
-      productionConfig: true,
-      frameOwnBridge: own.ok ? own.value : own.error,
-      parentBridgeAccess: parentAccess.ok ? parentAccess.value : parentAccess.error,
-      openViaParent: viaParent.ok ? viaParent.value : viaParent.error,
-      chooserCalledViaParent: ctx.chooser.calls.length > 0,
+      productionWiring: true,
+      frames: window.win.webContents.mainFrame.frames.map((frame) => (frame.url === '' ? '<empty>' : frame.url === ctx.entry.loadUrl ? '<trusted>' : '<other>')),
+      subframeBlocks: blocks.map((block) => ({ event: block.event, trustedUrl: block.url === ctx.entry.loadUrl })),
     };
-    ctx.chooser.reset();
-    return { status: 'observed', detail: JSON.stringify(facts) };
+    expectTrue(problems, 'a child frame loaded the trusted page despite window security', loaded === null);
+    expectTrue(problems, 'will-frame-navigate did not block the trusted-page subframe', blocks.some((block) => block.event === 'will-frame-navigate' && block.url === ctx.entry.loadUrl));
+    expectEqual(problems, 'chooser called through a subframe', ctx.chooser.calls.length, 0);
+    expectEqual(problems, 'an Open request reached main before the main frame asked', ownerMeta(ctx, window.ownerId)?.latestRequestSeq, 0);
+    try {
+      await openActive(ctx, window, ctx.fixtures.utf8);
+    } catch (error) {
+      problems.push(`main frame IPC broken: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    expectEqual(problems, 'main frame Open reached the chooser exactly once', ctx.chooser.calls.length, 1);
+    return verdict(problems, facts);
   },
 };
 

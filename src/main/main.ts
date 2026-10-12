@@ -9,6 +9,7 @@ import { resolvePageEntry } from './ipc/pageIdentity';
 import { registerOpenIpc } from './ipc/registerOpenIpc';
 import { createOpenPathChooser, wireOpenIpcWindow } from './ipc/wireOpenIpcWindow';
 import { matchesPageIdentity } from './open/ipcValidation';
+import { wireWindowSecurity } from './security/windowSecurity';
 import { IPC, type OpenedScoreFile } from '../shared/ipc';
 
 /** 应用页面的加载地址与可信页面身份：只由 main 配置构造（M3 T1b-2a）。 */
@@ -49,6 +50,10 @@ function createWindow(): void {
     },
   });
 
+  // 窗口安全接线（M3 T1c-1）：每个窗口无条件注册，在加载页面之前；与真实窗口 smoke 共用同一份实现。
+  wireWindowSecurity(mainWindow.webContents, pageEntry.identity, (block) => {
+    console.warn(`[muse] blocked ${block.kind} (${block.event})`);
+  });
   // Open 协议的窗口事件接线与真实窗口 smoke 共用同一份实现（M3 T1b-2a′）。
   wireOpenIpcWindow(openIpc, mainWindow);
   const contents = mainWindow.webContents;

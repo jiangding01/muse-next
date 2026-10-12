@@ -6,6 +6,9 @@
  * 1. 用 vite JS API 把 smoke main 入口 `tests/electron/ipcSmoke/smokeMain.entry.ts` 与**生产** `src/preload/preload.ts`
  *    各打成单文件 CJS（`electron` 保持 external）；输出与缓存都在 `os.tmpdir()` 下的 mkdtemp 目录。
  * 2. 在临时目录生成测试页面：可信页面路径含空格、中文、字面 `%`、`#`（POSIX 另含 `?`）；同目录另一文件作为不可信页面。
+ *    另用 vite JS API 按 `vite.renderer.config.ts` 构建**真实生产 renderer**（与 Forge 一致的部分：同一配置文件、build 命令注入生产 CSP、
+ *    `base: './'`；不同的部分：关闭 sourcemap、`envDir: false`、没有 Forge 的 expose 插件，均不影响 CSP 与页面加载），
+ *    复制到同样含特殊字符的目录；`prod.*` 模式的可信页面指向它（M3 T1c-1）。
  * 3. 逐个启动**完整 Electron** 子进程（不设 `ELECTRON_RUN_AS_NODE`，不加任何关闭沙箱的参数）：`matrix` 跑全部自动化用例；
  *    真实原生对话框与 UNC 身份各在独立子进程中运行，互不污染。每个子进程有独立的总超时，超时即杀掉并判失败。
  * 4. 用 `judgeIpcSmoke` 严格判定并打印逐用例结果与汇总；不通过时退出码非零。
@@ -14,7 +17,7 @@
 
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { copyFile, mkdir, mkdtemp, rm, stat } from 'node:fs/promises';
+import { copyFile, cp, mkdir, mkdtemp, rm, stat } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -27,6 +30,10 @@ const REPO_ROOT = resolve(import.meta.dirname, '../..');
 const SMOKE_ENTRY = join(REPO_ROOT, 'tests/electron/ipcSmoke/smokeMain.entry.ts');
 const PRELOAD_ENTRY = join(REPO_ROOT, 'src/preload/preload.ts');
 const PAGE_SOURCE = join(REPO_ROOT, 'tests/electron/ipcSmoke/page.html');
+const RENDERER_CONFIG = join(REPO_ROOT, 'vite.renderer.config.ts');
+const RENDERER_ROOT = join(REPO_ROOT, 'src/renderer');
+/** 以此前缀命名的模式在真实生产 renderer 上运行（与 `casesSecurity.ts` 的 `PRODUCTION_CASES` 一致，由架构守卫钉住）。 */
+const PRODUCTION_MODE_PREFIX = 'prod.';
 /** `matrix` 子进程的总超时（全部自动化用例；本地 macOS 实测见 HANDOFF）。 */
 const MATRIX_TIMEOUT_MS = 180_000;
 /** 每个独立用例子进程的总超时。 */
@@ -55,6 +62,38 @@ async function bundle(entry: string, workDir: string, name: string): Promise<str
   const file = join(outDir, `${name}.cjs`);
   await stat(file);
   return file;
+}
+
+/**
+ * 生产 renderer 的构建脚本（ESM，在独立的系统 Node 子进程中执行）。runner 本身经 tsx 运行，tsx 的模块钩子会让 vite 内部
+ * 解析 `vite/modulepreload-polyfill` 失败（实测）；放到不带钩子的 `node` 子进程里构建，不为绕过而改动 renderer 配置。
+ */
+const RENDERER_BUILD_SCRIPT = [
+  "import { build } from 'vite';",
+  'const options = JSON.parse(process.env.MUSE_RENDERER_BUILD);',
+  'await build({ configFile: options.configFile, root: options.root, base: \'./\', mode: \'production\', envDir: false, cacheDir: options.cacheDir,',
+  "  logLevel: 'warn', build: { outDir: options.outDir, emptyOutDir: true, sourcemap: false } });",
+].join('\n');
+
+function runRendererBuild(options: Record<string, string>): Promise<void> {
+  return new Promise((done, fail) => {
+    const env: NodeJS.ProcessEnv = { ...process.env, MUSE_RENDERER_BUILD: JSON.stringify(options) };
+    delete env.NODE_OPTIONS;
+    const child = spawn(process.execPath, ['--input-type=module', '-e', RENDERER_BUILD_SCRIPT], { cwd: REPO_ROOT, env, stdio: ['ignore', 'inherit', 'inherit'] });
+    child.on('error', fail);
+    child.on('exit', (code, signal) => (code === 0 ? done() : fail(new Error(`renderer build failed: code=${String(code)} signal=${String(signal)}`))));
+  });
+}
+
+/** 生产 renderer：按 `vite.renderer.config.ts` 做生产构建（`base: './'`），再复制到含特殊字符的目录；返回其中的 `index.html`。 */
+async function buildProductionRenderer(workDir: string, platform: SmokePlatform): Promise<string> {
+  const outDir = join(workDir, 'out', 'renderer');
+  await runRendererBuild({ configFile: RENDERER_CONFIG, root: RENDERER_ROOT, cacheDir: join(workDir, 'vite-cache', 'renderer'), outDir });
+  const dir = join(workDir, platform === 'win32' ? 'renderer 中文 %41 #1' : 'renderer 中文 %41 #1 ?q');
+  await cp(outDir, dir, { recursive: true });
+  const index = join(dir, 'index.html');
+  await stat(index);
+  return index;
 }
 
 function electronBinary(): string {
@@ -180,13 +219,14 @@ async function main(): Promise<number> {
   try {
     const [mainBundle, preloadPath] = [await bundle(SMOKE_ENTRY, workDir, 'smokeMain'), await bundle(PRELOAD_ENTRY, workDir, 'preload')];
     const pages = await preparePages(workDir, platform);
+    const productionPage = await buildProductionRenderer(workDir, platform);
     const nonce = randomUUID();
     const local = platform === 'win32' ? lowercaseDrive(pages.trusted) : pages.trusted;
     const base = { nonce, workDir, preloadPath, foreignPagePath: pages.foreign, localPagePath: pages.trusted, pathChars: pages.chars };
     const binary = electronBinary();
     const outcomes: ChildOutcome[] = [];
     for (const mode of expectedModes(platform)) {
-      const trustedPagePath = mode === 'identity.win-unc' ? uncPath(pages.trusted) : local;
+      const trustedPagePath = mode === 'identity.win-unc' ? uncPath(pages.trusted) : mode.startsWith(PRODUCTION_MODE_PREFIX) ? productionPage : local;
       const timeout = mode === 'matrix' ? MATRIX_TIMEOUT_MS : ISOLATED_TIMEOUT_MS;
       process.stderr.write(`[electron-ipc] starting child ${mode}\n`);
       outcomes.push(await runChild(binary, mainBundle, { ...base, trustedPagePath }, mode, timeout));

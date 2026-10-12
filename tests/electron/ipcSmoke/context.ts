@@ -3,6 +3,7 @@
  *
  * 状态观测只读生产 handle 的诊断出口（`currentState` / `authorize` / `pendingNativeDialogs` / `orphanedNativeDialogs`），
  * 不改动协调器状态；一致性用生产 `coordinatorInvariantViolations` 判定。
+ * M3 T1c-1 增加：生产安全接线的拦截记录（`SecurityLog`），以及生产 renderer 用例的控制台记录与 CSP 消息分类。
  */
 
 import { isDeepStrictEqual } from 'node:util';
@@ -13,6 +14,7 @@ import type { PageEntry } from '../../../src/main/ipc/pageIdentity';
 import type { OpenIpcHandle } from '../../../src/main/ipc/registerOpenIpc';
 import { coordinatorInvariantViolations } from '../../../src/main/open/coordinatorInvariants';
 import type { OwnerMeta } from '../../../src/main/open/openCoordinator';
+import type { WindowSecurityBlock } from '../../../src/main/security/windowSecurity';
 import type { GatedFileSystem, ManualScheduler, ScriptedChooser, TestClock, TokenFaults } from './harness';
 import type { WindowFactory } from './windows';
 
@@ -61,6 +63,31 @@ export interface SmokeContext {
   readonly pathChars: readonly string[];
   /** 驱动传入的可信页面原始路径（Windows 上盘符为小写，用于盘符规范化用例）。 */
   readonly trustedPagePath: string;
+  /** 生产安全接线（`wireWindowSecurity`）的拦截记录（M3 T1c-1）。 */
+  readonly security: SecurityLog;
+}
+
+/** 一次拦截及其发生时该窗口的页面代次（用于判断 `did-start-navigation` 是否先于拦截发生）。 */
+export interface SecurityRecord extends WindowSecurityBlock {
+  readonly ownerId: number;
+  /** 拦截回调触发时协调器中该 owner 的 generation；未登记的窗口为 null。 */
+  readonly generationAtBlock: number | null;
+}
+
+export interface SecurityLog {
+  record(ownerId: number, block: WindowSecurityBlock): void;
+  events(ownerId: number): readonly SecurityRecord[];
+}
+
+/** 拦截记录：只读协调器状态取 generation，不改动任何状态。 */
+export function createSecurityLog(generationOf: (ownerId: number) => number | null): SecurityLog {
+  const records: SecurityRecord[] = [];
+  return {
+    record: (ownerId, block) => {
+      records.push({ ...block, ownerId, generationAtBlock: generationOf(ownerId) });
+    },
+    events: (ownerId) => records.filter((item) => item.ownerId === ownerId),
+  };
 }
 
 export interface SmokeCase {
@@ -146,4 +173,56 @@ export function residueProblems(ctx: SmokeContext): string[] {
 /** 文本里是否出现本次运行的任何本地路径片段（错误信息不得泄露路径）。 */
 export function leaksPath(ctx: SmokeContext, text: string): boolean {
   return text.includes(ctx.fixtures.dir) || text.includes(ctx.trustedPagePath) || /[\\/](tmp|var|Users|home)[\\/]/i.test(text);
+}
+
+export interface ConsoleEntry {
+  readonly level: string;
+  readonly message: string;
+}
+
+/** 在加载页面之前挂上的控制台记录（只读，M3 T1c-1 生产 renderer 用例）。 */
+export function consoleRecorder(): { readonly entries: ConsoleEntry[]; readonly attach: (win: BrowserWindow) => void } {
+  const entries: ConsoleEntry[] = [];
+  return {
+    entries,
+    attach: (win) => {
+      win.webContents.on('console-message', (event) => {
+        entries.push({ level: event.level, message: event.message });
+      });
+    },
+  };
+}
+
+const CSP_REFUSAL = /Content Security Policy/i;
+
+/** CSP 拒绝消息中被违反的指令（`directive` 之后第一个引号内的指令名；Chromium 用单引号或双引号）。 */
+function violatedDirective(message: string): string {
+  return /directive:?\s*["']([a-z-]+)/i.exec(message)?.[1] ?? 'unknown';
+}
+
+export interface ConsoleClassification {
+  readonly expected: readonly string[];
+  readonly unexpected: readonly string[];
+}
+
+/**
+ * 预期的策略拒绝：CSP 拒绝且指令在 `expectedDirectives` 中，或命中 `expectedPatterns`（例如 Chromium 对顶层 data: 导航的拒绝）。
+ * 其余 error 级消息、任何其它 CSP 拒绝、资源加载失败与 Electron 安全警告都是非预期。
+ */
+export function classifyConsole(entries: readonly ConsoleEntry[], expectedDirectives: readonly string[], expectedPatterns: readonly RegExp[] = []): ConsoleClassification {
+  const expected: string[] = [];
+  const unexpected: string[] = [];
+  for (const entry of entries) {
+    const text = `${entry.level}: ${entry.message.slice(0, 240)}`;
+    if (CSP_REFUSAL.test(entry.message)) {
+      const directive = violatedDirective(entry.message);
+      if (expectedDirectives.some((name) => directive.startsWith(name))) expected.push(`csp:${directive}`);
+      else unexpected.push(text);
+    } else if (expectedPatterns.some((pattern) => pattern.test(entry.message))) {
+      expected.push(`refusal:${entry.message.slice(0, 80)}`);
+    } else if (entry.level === 'error' || /Failed to load resource|Electron Security Warning/i.test(entry.message)) {
+      unexpected.push(text);
+    }
+  }
+  return { expected, unexpected };
 }

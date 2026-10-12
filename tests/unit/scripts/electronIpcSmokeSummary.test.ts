@@ -1,5 +1,6 @@
 /**
  * M3 T1b-2b-1：真实窗口 IPC smoke 判定器的防假阳性测试（故障注入）。
+ * M3 T1c-1：清单增加安全用例（`risk.subframe-parent-bridge` 收紧为 pass、`security.subframe-control`、5 个 `prod.*`）；判定规则不变。
  */
 
 import { describe, expect, it } from 'vitest';
@@ -82,7 +83,20 @@ describe('electronIpcSmokeSummary —— 清单', () => {
     expect(expectedModes('darwin')).not.toContain('risk.linux-force-crash-stall');
     expect(expectedModes('win32')).not.toContain('risk.linux-force-crash-stall');
     const count = (platform: SmokePlatform): number => SMOKE_CASES.filter((s) => s.expect[platform] !== undefined).length;
-    expect([count('darwin'), count('win32'), count('linux')]).toEqual([45, 47, 46]);
+    expect([count('darwin'), count('win32'), count('linux')]).toEqual([51, 53, 52]);
+  });
+
+  it('M3 T1c-1 安全用例：子 frame 风险已是 pass 硬门；对照在 matrix；prod.* 各占独立子进程且三平台 pass；全清单只剩已裁决的 observe', () => {
+    expect(SMOKE_CASES.find((s) => s.id === 'risk.subframe-parent-bridge')).toEqual({ id: 'risk.subframe-parent-bridge', mode: 'matrix', expect: { darwin: 'pass', win32: 'pass', linux: 'pass' } });
+    expect(SMOKE_CASES.find((s) => s.id === 'security.subframe-control')).toEqual({ id: 'security.subframe-control', mode: 'matrix', expect: { darwin: 'pass', win32: 'pass', linux: 'pass' } });
+    const production = SMOKE_CASES.filter((s) => s.id.startsWith('prod.'));
+    expect(production.map((s) => s.id)).toEqual(['prod.renderer-loads', 'prod.popup-denied', 'prod.subframe-blocked', 'prod.inline-script-blocked', 'prod.navigation-blocked']);
+    for (const spec of production) expect(spec).toEqual({ id: spec.id, mode: 'isolated', expect: { darwin: 'pass', win32: 'pass', linux: 'pass' } });
+    for (const platform of ['darwin', 'win32', 'linux'] as const) for (const spec of production) expect(expectedModes(platform)).toContain(spec.id);
+    const observed = (platform: SmokePlatform): string[] => SMOKE_CASES.filter((s) => s.expect[platform] === 'observe').map((s) => s.id);
+    expect(observed('darwin')).toEqual([]);
+    expect(observed('win32')).toEqual(['real.close-settles', 'real.reload-keeps-dialog', 'real.crash-keeps-dialog', 'real.destroy-isolated']);
+    expect(observed('linux')).toEqual(['real.close-settles', 'real.reload-keeps-dialog', 'real.crash-keeps-dialog', 'real.destroy-isolated', 'risk.linux-force-crash-stall']);
   });
 
   it('Linux forceCrash 风险：缺失、以 passed 冒充、或出现在非 Linux 平台都失败', () => {
@@ -151,12 +165,15 @@ describe('electronIpcSmokeSummary —— 反例（必须失败）', () => {
     expect(matrixWith((cases) => cases.map((c) => (c.id === 'open.activate' ? { ...c, status: 'observed', detail: 'x' } : c)))).toContain(
       'case must pass, got observed: open.activate',
     );
-    expect(matrixWith((cases) => cases.map((c) => (c.id === 'risk.subframe-parent-bridge' ? { id: c.id, status: 'passed' } : c)))).toContain(
-      'case is observation-only, got passed: risk.subframe-parent-bridge',
+    expect(matrixWith((cases) => cases.map((c) => (c.id === 'risk.subframe-parent-bridge' ? { ...c, status: 'observed', detail: 'x' } : c)))).toContain(
+      'case must pass, got observed: risk.subframe-parent-bridge',
     );
-    expect(matrixWith((cases) => cases.map((c) => (c.id === 'risk.subframe-parent-bridge' ? { id: c.id, status: 'observed', detail: ' ' } : c)))).toContain(
-      'observed case has no recorded facts: risk.subframe-parent-bridge',
-    );
+    const linuxObserve = (entry: CaseEntry): readonly string[] =>
+      problemsOf(withChild('linux', 'real.close-settles', (child) => outcome(child.mode, [entry], 'linux')), 'linux');
+    expect(linuxObserve({ id: 'real.close-settles', status: 'passed' })).toContain('case is observation-only, got passed: real.close-settles');
+    expect(linuxObserve({ id: 'real.close-settles', status: 'observed', detail: ' ' })).toContain('observed case has no recorded facts: real.close-settles');
+    const prodAsObserved = withChild('darwin', 'prod.subframe-blocked', (child) => outcome(child.mode, [{ id: 'prod.subframe-blocked', status: 'observed', detail: 'x' }], 'darwin'));
+    expect(problemsOf(prodAsObserved)).toContain('case must pass, got observed: prod.subframe-blocked');
   });
 
   it('macOS 的真实对话框 gate 不能以 observed 通过；Linux 的观测用例不能以 passed 冒充', () => {

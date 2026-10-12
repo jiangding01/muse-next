@@ -107,6 +107,7 @@ describe('M3 T1b-2b-1 架构守卫 —— smoke 复用生产实现', () => {
         'casesEnvironment.ts',
         'casesIsolated.ts',
         'casesNavigation.ts',
+        'casesSecurity.ts',
         'casesSender.ts',
         'context.ts',
         'crashObservation.ts',

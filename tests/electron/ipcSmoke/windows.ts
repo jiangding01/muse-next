@@ -6,6 +6,10 @@
  *   `contextIsolation: true`、`nodeIntegration: false`。测试专属差异只有显式参数：`subframePreload`（仅 `reject.subframe`，
  *   让 preload 进入子 frame，以证明 main 侧 mainFrame 校验）与 `partition`（仅导航竞态用例，隔离 `protocol.handle`）。
  * - 登记与生命周期事件一律经生产 `wireOpenIpcWindow`；`wire: false` 只用于「未登记窗口」用例。
+ * - 窗口安全（M3 T1c-1）：默认每个窗口都经生产 `wireWindowSecurity` 接线（与产品 main 同一份实现），在加载页面之前注册。
+ *   只有两个测试页用例可以显式关闭它：`off-for-sender-check`（`reject.subframe`，单独观测 main 侧 mainFrame 鉴权）与
+ *   `off-for-control`（`security.subframe-control`，威胁对照）。关闭的只是 `wireWindowSecurity`，`wireOpenIpcWindow` 与 main 的
+ *   IPC 鉴权照常；当前子进程加载的是生产 renderer 时，拒绝创建关闭安全接线的窗口。
  * - 页面调用经主 frame 的 `WebFrameMain.executeJavaScript` 在页面主世界执行，IPC 由页面经 `window.museDesktop` 发起；每次调用都有超时。
  */
 
@@ -13,13 +17,23 @@ import { BrowserWindow } from 'electron';
 
 import type { OpenIpcHandle } from '../../../src/main/ipc/registerOpenIpc';
 import { wireOpenIpcWindow } from '../../../src/main/ipc/wireOpenIpcWindow';
+import type { PageIdentity } from '../../../src/main/open/ipcValidation';
+import { wireWindowSecurity } from '../../../src/main/security/windowSecurity';
+import type { SecurityLog } from './context';
 import { withTimeout } from './harness';
 import { parseActivationReply, parseOpenReply, parsePageResult } from './replies';
 import type { ActivationReply, OpenReply, PageResult, Ticket } from './replies';
 
 export const PAGE_CALL_TIMEOUT_MS = 8_000;
 
+/** 默认 `production`；两个 off 取值只允许出现在架构守卫登记的两个测试页用例中。 */
+export type WindowSecurityMode = 'production' | 'off-for-sender-check' | 'off-for-control';
+
 export interface WindowOptions {
+  /** 默认 `production`：经生产 `wireWindowSecurity` 接线。 */
+  readonly security?: WindowSecurityMode;
+  /** 窗口创建后、加载页面之前调用（只用于挂只读诊断监听，例如控制台消息）。 */
+  readonly onCreated?: (win: BrowserWindow) => void;
   /** 默认 true：经生产 `wireOpenIpcWindow` 登记。 */
   readonly wire?: boolean;
   /** 默认可信页面 `loadUrl`。 */
@@ -55,6 +69,11 @@ export interface WindowFactoryDeps {
   readonly openIpc: OpenIpcHandle<BrowserWindow>;
   readonly preloadPath: string;
   readonly defaultUrl: string;
+  /** 与 `registerOpenIpc` 相同的可信页面身份（安全接线的导航放行依据）。 */
+  readonly identity: PageIdentity;
+  readonly security: SecurityLog;
+  /** 本子进程的可信页面是否为真实生产 renderer（此时不允许关闭安全接线）。 */
+  readonly productionRenderer: boolean;
 }
 
 export interface WindowFactory {
@@ -102,6 +121,8 @@ export function createWindowFactory(deps: WindowFactoryDeps): WindowFactory {
   const alive = new Set<BrowserWindow>();
 
   async function create(options: WindowOptions = {}): Promise<SmokeWindow> {
+    const security = options.security ?? 'production';
+    if (security !== 'production' && deps.productionRenderer) throw new Error(`window security ${security} is not allowed with the production renderer`);
     const webPreferences = {
       preload: deps.preloadPath,
       contextIsolation: true,
@@ -113,8 +134,10 @@ export function createWindowFactory(deps: WindowFactoryDeps): WindowFactory {
     const win = new BrowserWindow({ width: 640, height: 480, show: options.show ?? false, webPreferences });
     alive.add(win);
     win.once('closed', () => alive.delete(win));
-    const ownerId = options.wire === false ? win.webContents.id : wireOpenIpcWindow(deps.openIpc, win);
     const contents = win.webContents;
+    if (security === 'production') wireWindowSecurity(contents, deps.identity, (block) => deps.security.record(contents.id, block));
+    const ownerId = options.wire === false ? win.webContents.id : wireOpenIpcWindow(deps.openIpc, win);
+    options.onCreated?.(win);
     // 用 WebFrameMain 而不是 webContents.executeJavaScript：后者在主 frame 加载中会排队到加载结束，无法在「导航已开始、
     // 未提交」窗口期内驱动旧文档；前者立即在当前已提交的主 frame 中执行。
     const run = (code: string): Promise<unknown> => contents.mainFrame.executeJavaScript(code, true);

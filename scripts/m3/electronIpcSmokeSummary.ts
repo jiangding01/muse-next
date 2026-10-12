@@ -25,7 +25,6 @@ export interface CaseSpec {
 }
 
 const ALL_PASS = { darwin: 'pass', win32: 'pass', linux: 'pass' } as const;
-const ALL_OBSERVE = { darwin: 'observe', win32: 'observe', linux: 'observe' } as const;
 /** 真实原生对话框：macOS 为 gate；Windows / Linux 首轮只做完整观测。 */
 const REAL_DIALOG = { darwin: 'pass', win32: 'observe', linux: 'observe' } as const;
 
@@ -69,7 +68,9 @@ export const SMOKE_CASES: readonly CaseSpec[] = [
   matrix('reject.bad-payload'),
   matrix('reject.cross-window-token'),
   matrix('reject.forged-capability'),
-  matrix('risk.subframe-parent-bridge', ALL_OBSERVE),
+  // M3 T1c-1：生产安全接线下由 observe 收紧为 pass 硬门；威胁对照见 security.subframe-control。
+  matrix('risk.subframe-parent-bridge'),
+  matrix('security.subframe-control'),
   matrix('dialog.logical-busy'),
   matrix('dialog.same-window-after-reload'),
   matrix('dialog.cross-window'),
@@ -82,6 +83,12 @@ export const SMOKE_CASES: readonly CaseSpec[] = [
   isolated('real.destroy-isolated', REAL_DIALOG),
   // Linux 残余风险：forcefullyCrashRenderer() 的半退出（CI run 38145428397）；只在 Linux 的独立子进程中观测，不计入 passed。
   isolated('risk.linux-force-crash-stall', { linux: 'observe' }),
+  // M3 T1c-1：真实生产 renderer（生产 CSP + 生产安全接线），各占一个独立子进程。
+  isolated('prod.renderer-loads', ALL_PASS),
+  isolated('prod.popup-denied', ALL_PASS),
+  isolated('prod.subframe-blocked', ALL_PASS),
+  isolated('prod.inline-script-blocked', ALL_PASS),
+  isolated('prod.navigation-blocked', ALL_PASS),
 ];
 
 export const RESULT_PREFIX = 'MUSE_IPC_SMOKE_RESULT ';

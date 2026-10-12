@@ -6,7 +6,9 @@
  * fixture、向**生产** `registerOpenIpc` 注入受控选择器 / 可暂停 fs / 测试时钟，按模式执行用例并输出结果。
  * Open 协议、窗口事件接线、页面身份全部来自生产模块；这里不实现任何协议逻辑。
  *
- * 模式：`matrix`（全部自动化 IPC 用例，受控选择器）；其余模式各对应一个需要独立进程的用例（真实原生对话框、UNC 身份）。
+ * 模式：`matrix`（全部自动化 IPC 用例，受控选择器）；其余模式各对应一个需要独立进程的用例（真实原生对话框、UNC 身份、
+ * 真实生产 renderer 的安全用例 `prod.*`——这些模式下驱动把可信页面路径指向生产 renderer 构建产物）。
+ * 每个窗口默认经生产 `wireWindowSecurity` 接线（见 `windows.ts`），拦截记录进 `ctx.security`。
  * stdout 只输出一行 `MUSE_IPC_SMOKE_RESULT <json>`（带驱动给出的 nonce）；诊断写 stderr。退出码：无失败 0，有失败 1，
  * harness 异常 2。
  */
@@ -21,13 +23,14 @@ import { createNodeReadOnlyFileSystem } from '../../../src/main/document/fileSys
 import { resolvePageEntry } from '../../../src/main/ipc/pageIdentity';
 import { registerOpenIpc } from '../../../src/main/ipc/registerOpenIpc';
 import { createOpenPathChooser } from '../../../src/main/ipc/wireOpenIpcWindow';
-import { residueProblems, SECOND_SOURCE, UTF8_SOURCE } from './context';
+import { createSecurityLog, residueProblems, SECOND_SOURCE, UTF8_SOURCE } from './context';
 import type { CaseOutcome, CaseResult, Fixtures, SmokeCase, SmokeContext } from './context';
 import { CAPABILITY_CASES } from './casesCapability';
 import { DIALOG_CASES, FINAL_CASE } from './casesDialog';
 import { ENVIRONMENT_CASES } from './casesEnvironment';
 import { NAVIGATION_CASES } from './casesNavigation';
 import { ISOLATED_CASES } from './casesIsolated';
+import { PRODUCTION_CASES, SECURITY_MATRIX_CASES } from './casesSecurity';
 import { SENDER_CASES } from './casesSender';
 import { runtimeEvidence, sandboxEvidence } from './evidence';
 import type { SandboxEvidence } from './evidence';
@@ -142,7 +145,8 @@ async function main(): Promise<number> {
   const clock = createTestClock();
   const scheduler = createManualScheduler(clock);
   const tokenFaults = createTokenFaults();
-  const isolated = ISOLATED_CASES.find((item) => item.id === config.mode);
+  const isolated = [...ISOLATED_CASES, ...PRODUCTION_CASES].find((item) => item.id === config.mode);
+  const productionRenderer = PRODUCTION_CASES.some((item) => item.id === config.mode);
   const realChooser = createOpenPathChooser((parent: BrowserWindow, options) => dialog.showOpenDialog(parent, options));
 
   const openIpc = registerOpenIpc({
@@ -157,7 +161,8 @@ async function main(): Promise<number> {
     issueToken: () => tokenFaults.issue(() => randomUUID()),
     schedule: (delayMs, task) => scheduler.schedule(delayMs, task),
   });
-  const windows = createWindowFactory({ openIpc, preloadPath: config.preloadPath, defaultUrl: entry.loadUrl });
+  const security = createSecurityLog((ownerId) => openIpc.currentState().owners.get(ownerId)?.generation ?? null);
+  const windows = createWindowFactory({ openIpc, preloadPath: config.preloadPath, defaultUrl: entry.loadUrl, identity: entry.identity, security, productionRenderer });
   const ctx: SmokeContext = {
     openIpc,
     chooser,
@@ -171,12 +176,13 @@ async function main(): Promise<number> {
     fixtures,
     pathChars: config.pathChars,
     trustedPagePath: config.trustedPagePath,
+    security,
   };
 
   const sandbox = await collectSandbox(ctx, local.loadUrl);
   const results: CaseResult[] = [];
   if (config.mode === 'matrix') {
-    const cases = [...ENVIRONMENT_CASES, ...CAPABILITY_CASES, ...NAVIGATION_CASES, ...SENDER_CASES, ...DIALOG_CASES];
+    const cases = [...ENVIRONMENT_CASES, ...CAPABILITY_CASES, ...NAVIGATION_CASES, ...SENDER_CASES, ...SECURITY_MATRIX_CASES, ...DIALOG_CASES];
     for (const smokeCase of cases) results.push(await runCase(ctx, smokeCase, true));
     results.push(await runCase(ctx, FINAL_CASE, false));
   } else if (isolated !== undefined) {
