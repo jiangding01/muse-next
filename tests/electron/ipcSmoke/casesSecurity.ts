@@ -25,7 +25,7 @@ import type { PageResult } from './replies';
 import type { SmokeWindow } from './windows';
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
-const valueOf = (result: PageResult): unknown => (result.ok ? result.value : `error: ${result.error}`);
+export const valueOf = (result: PageResult): unknown => (result.ok ? result.value : `error: ${result.error}`);
 
 /** 控制台记录器的正向探针文本（只在 `prod.renderer-loads` 启动判定之后写入）。 */
 const CONSOLE_PROBE = 'muse-smoke-console-probe';
@@ -41,7 +41,7 @@ async function violations(window: SmokeWindow): Promise<string[]> {
 }
 
 /** 轮询页面表达式直到为 true（每次调用都有超时）；到期返回 false。 */
-async function pageCondition(window: SmokeWindow, expression: string, timeoutMs: number): Promise<boolean> {
+export async function pageCondition(window: SmokeWindow, expression: string, timeoutMs: number): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const result = await window.call(expression, 2_000);
@@ -69,7 +69,7 @@ async function frameFacts(window: SmokeWindow): Promise<FrameFact[]> {
 }
 
 /** 生产 renderer 窗口：控制台记录在加载之前挂上。 */
-async function productionWindow(ctx: SmokeContext): Promise<{ readonly window: SmokeWindow; readonly consoleEntries: ConsoleEntry[] }> {
+export async function productionWindow(ctx: SmokeContext): Promise<{ readonly window: SmokeWindow; readonly consoleEntries: ConsoleEntry[] }> {
   const recorder = consoleRecorder();
   const window = await ctx.windows.create({ onCreated: recorder.attach });
   return { window, consoleEntries: recorder.entries };
@@ -131,7 +131,7 @@ const prodRendererLoads: SmokeCase = {
     expectTrue(problems, 'main frame is the production renderer identity', matchesPageIdentity(window.win.webContents.mainFrame.url, ctx.entry.identity));
     expectEqual(problems, 'demo layers', facts.layers, ['system-layer-jianpu', 'system-layer-tab']);
     expectEqual(problems, 'demo chord diagrams', facts.chordDiagrams, 3);
-    expectEqual(problems, 'bridge methods', facts.bridge, ['activateDocument', 'openDocument', 'openScore', 'rejectDocument']);
+    expectEqual(problems, 'bridge methods', facts.bridge, ['activateDocument', 'openDocument', 'rejectDocument']);
     expectEqual(problems, 'page main world has no require / process', [facts.hasRequire, facts.hasProcess], [false, false]);
     expectEqual(problems, 'unexpected console errors or CSP refusals during startup', startup.unexpected, []);
     expectEqual(problems, 'no CSP refusal at all on a normal load', startup.expected, []);

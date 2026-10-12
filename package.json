@@ -17,7 +17,8 @@
     "jcx:corpus-test": "tsx scripts/jcx/corpus-lex-test.ts",
     "jcx:fixture-report": "tsx scripts/jcx/fixture-report.ts",
     "test:electron-codec": "tsx scripts/m3/electronCodecProbe.ts",
-    "test:electron-ipc": "tsx scripts/m3/electronIpcSmoke.ts"
+    "test:electron-ipc": "tsx scripts/m3/electronIpcSmoke.ts",
+    "check:renderer-bundle": "tsx scripts/m3/rendererBundleCheck.ts"
   },
   "engines": {
     "node": ">=22.12"

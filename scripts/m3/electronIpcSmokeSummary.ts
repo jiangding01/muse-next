@@ -89,6 +89,15 @@ export const SMOKE_CASES: readonly CaseSpec[] = [
   isolated('prod.subframe-blocked', ALL_PASS),
   isolated('prod.inline-script-blocked', ALL_PASS),
   isolated('prod.navigation-blocked', ALL_PASS),
+  // M3 T1c-2：生产 UI 的真实 Open（Toolbar → preload → 新 IPC → 候选 → 激活 → commitSession），各占一个独立子进程。
+  isolated('ui.open-commit', ALL_PASS),
+  isolated('ui.cancel-keeps', ALL_PASS),
+  isolated('ui.decode-failure-keeps', ALL_PASS),
+  isolated('ui.reload-isolation', ALL_PASS),
+  isolated('ui.staff-render', ALL_PASS),
+  isolated('ui.activation-held-retry', ALL_PASS),
+  isolated('ui.activation-unresolved', ALL_PASS),
+  isolated('ui.win-unc', { win32: 'pass-or-unverified' }),
 ];
 
 export const RESULT_PREFIX = 'MUSE_IPC_SMOKE_RESULT ';

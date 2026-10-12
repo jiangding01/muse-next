@@ -236,13 +236,13 @@ describe('M3 T1b-2a 架构守卫 —— preload 白名单', () => {
 
   it('AST：每个方法体恰好一个调用，且是对同名通道的 ipcRenderer.invoke；票据方法只转发两个字段', () => {
     const calls = preloadMethodCalls(parse(PRELOAD, read(PRELOAD)));
-    expect([...calls.keys()].sort()).toEqual(['activateDocument', 'openDocument', 'openScore', 'rejectDocument']);
+    // M3 T1c-2：旧 openScore 已删除，白名单收敛为三个方法。
+    expect([...calls.keys()].sort()).toEqual(['activateDocument', 'openDocument', 'rejectDocument']);
     for (const [method, list] of calls) {
       expect(list).toHaveLength(1);
       expect(list[0]?.callee).toBe('ipcRenderer.invoke');
       expect(list[0]?.args[0]).toBe(`IPC.${method}`);
     }
-    expect(calls.get('openScore')?.[0]?.args).toEqual(['IPC.openScore']);
     expect(calls.get('openDocument')?.[0]?.args).toEqual(['IPC.openDocument', "{ intent: 'dialog' }"]);
     for (const method of ['activateDocument', 'rejectDocument']) {
       expect(calls.get(method)?.[0]?.args).toEqual([`IPC.${method}`, '{ capabilityId: ticket.capabilityId, documentId: ticket.documentId }']);
@@ -253,10 +253,10 @@ describe('M3 T1b-2a 架构守卫 —— preload 白名单', () => {
     expect(/ipcRenderer\s*\[|=\s*ipcRenderer\b|\{[^}]*\}\s*=\s*ipcRenderer/.test(source)).toBe(false);
   });
 
-  it('只经四个白名单通道 invoke，每个恰好一处', () => {
+  it('只经三个白名单通道 invoke，每个恰好一处', () => {
     const channels = [...source.matchAll(/ipcRenderer\.invoke\(\s*IPC\.(\w+)/g)].map((m) => m[1]);
-    expect(channels.sort()).toEqual(['activateDocument', 'openDocument', 'openScore', 'rejectDocument']);
-    expect(count(source, /ipcRenderer\.invoke\(/g)).toBe(4);
+    expect(channels.sort()).toEqual(['activateDocument', 'openDocument', 'rejectDocument']);
+    expect(count(source, /ipcRenderer\.invoke\(/g)).toBe(3);
   });
 
   it('不使用 send / on / sendSync / postMessage / 动态通道', () => {
@@ -284,7 +284,6 @@ describe('M3 T1b-2a 架构守卫 —— MuseDesktopApi 不接受路径', () => {
     expect(methods.map((m) => (isIdentifier(m.name) ? m.name.text : '?')).sort()).toEqual([
       'activateDocument',
       'openDocument',
-      'openScore',
       'rejectDocument',
     ]);
     expect(api.members.length).toBe(methods.length);

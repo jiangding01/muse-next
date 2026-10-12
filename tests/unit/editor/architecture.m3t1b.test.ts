@@ -7,8 +7,8 @@
  * - 协调器与不变量检查是纯状态机：不使用定时器、墙钟（`Date`）、`process`、`performance`、`Math.random` 等平台全局或
  *   非确定性来源；时间只来自注入的 `now`，token 由调用方签发。
  * - `src/shared/activationContracts.ts`：只有类型，没有任何值导出，只 `import type` shared 内的模块。
- * - 旧 Open 通道（`muse:open-score` / `decodeLegacyText` / `OpenedScoreFile` / `openScore`）只允许留在既有的 5 个文件中，
- *   新代码零引用；T1c 切换 UI 时一次性删除（届时由 T1c 守卫要求归零）。
+ * - 旧 Open 通道（`muse:open-score` / `decodeLegacyText` / `OpenedScoreFile` / `openScore`）：T1b 时只允许留在既有的 5 个文件中；
+ *   M3 T1c-2 已在 UI 切换的同一阶段一次性删除，本守卫随之迁移为「src 中零出现，禁止复活」（更严格，不放宽其它规则）。
  */
 
 import { readFileSync } from 'node:fs';
@@ -21,13 +21,6 @@ import { collectTsFiles, exportedNames, forbiddenGlobalUses, parseImports, posix
 const OPEN_DIR = join(REPO_ROOT, 'src/main/open');
 const CONTRACTS = join(REPO_ROOT, 'src/shared/activationContracts.ts');
 const VALUE_ALLOWED = 'src/main/document/capabilities.ts';
-const LEGACY_FILES: ReadonlySet<string> = new Set([
-  'src/main/main.ts',
-  'src/preload/preload.ts',
-  'src/shared/ipc.ts',
-  'src/renderer/app/store.ts',
-  'src/renderer/components/Toolbar.tsx',
-]);
 const LEGACY_PATTERN = /muse:open-score|\bdecodeLegacyText\b|\bOpenedScoreFile\b|\bopenScore\b/;
 
 /** `src/main/open/**` 单个文件的依赖违规。 */
@@ -108,12 +101,12 @@ describe('M3 T1b 架构守卫 —— activationContracts 只有类型', () => {
   });
 });
 
-describe('M3 T1b 架构守卫 —— 旧 Open 通道隔离到 T1c', () => {
+describe('M3 T1b 架构守卫 —— 旧 Open 通道已在 T1c-2 删除', () => {
   const srcFiles = collectTsFiles(join(REPO_ROOT, 'src'));
 
-  it('旧通道标识符只出现在既有的 5 个文件中', () => {
+  it('旧通道标识符在 src 中零出现（含注释），禁止复活', () => {
     const offenders = srcFiles.filter((file) => LEGACY_PATTERN.test(readFileSync(file, 'utf8'))).map(posixPath);
-    expect(offenders.filter((path) => !LEGACY_FILES.has(path))).toEqual([]);
+    expect(offenders).toEqual([]);
   });
 
   it('反例：识别四种旧标识符', () => {

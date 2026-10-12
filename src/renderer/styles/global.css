@@ -211,3 +211,8 @@ button { cursor: pointer; }
   .source-inspector { display: none; }
   .toolbar { grid-template-columns: 230px 1fr 200px; }
 }
+
+/* M3 T1c-2：Open 进行中的按钮与不阻塞操作的提示条（固定在工具栏下方，不改变既有布局）。 */
+.toolbar button:disabled { opacity: .62; cursor: progress; }
+.open-notice { position: fixed; top: 72px; left: 50%; transform: translateX(-50%); z-index: 20; max-width: min(720px, calc(100vw - 48px)); display: flex; align-items: center; gap: 12px; padding: 9px 12px 9px 14px; border: 1px solid #d8c9a6; border-radius: 9px; background: #fbf4e2; color: #4a3d22; font-size: 12px; box-shadow: 0 6px 18px rgba(40, 34, 20, .12); -webkit-app-region: no-drag; }
+.open-notice button.secondary { flex: none; padding: 5px 10px; font-size: 12px; }

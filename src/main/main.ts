@@ -1,16 +1,13 @@
 import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 import path from 'node:path';
-import fs from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
-import iconv from 'iconv-lite';
 import { createNodeReadOnlyFileSystem } from './document/fileSystemPort';
 import { resolvePageEntry } from './ipc/pageIdentity';
 import { registerOpenIpc } from './ipc/registerOpenIpc';
 import { createOpenPathChooser, wireOpenIpcWindow } from './ipc/wireOpenIpcWindow';
 import { matchesPageIdentity } from './open/ipcValidation';
 import { wireWindowSecurity } from './security/windowSecurity';
-import { IPC, type OpenedScoreFile } from '../shared/ipc';
 
 /** 应用页面的加载地址与可信页面身份：只由 main 配置构造（M3 T1b-2a）。 */
 const pageEntry = resolvePageEntry({
@@ -19,7 +16,7 @@ const pageEntry = resolvePageEntry({
   platform: process.platform,
 });
 
-/** M3 Open 协议（新 IPC，产品 UI 在 T1c 切换前仍走旧通道）。进程内只注册一次。 */
+/** M3 Open 协议：产品唯一的 Open 通道（M3 T1c-2 起 UI 已切换，M3 前的过渡通道已删除）。进程内只注册一次。 */
 const openIpc = registerOpenIpc({
   ipc: ipcMain,
   windowForSender: (sender) => BrowserWindow.fromWebContents(sender),
@@ -67,30 +64,6 @@ function createWindow(): void {
   void mainWindow.loadURL(pageEntry.loadUrl);
 }
 
-ipcMain.handle(IPC.openScore, async (): Promise<OpenedScoreFile> => {
-  const result = await dialog.showOpenDialog({
-    title: 'Open Muse Score',
-    properties: ['openFile'],
-    filters: [
-      { name: 'Muse score', extensions: ['jcx'] },
-      { name: 'Text files', extensions: ['txt', 'abc', 'tab'] },
-      { name: 'All files', extensions: ['*'] },
-    ],
-  });
-
-  const filePath = result.filePaths[0];
-  if (result.canceled || !filePath) return { canceled: true };
-
-  const bytes = await fs.readFile(filePath);
-  const decoded = decodeLegacyText(bytes);
-  return {
-    canceled: false,
-    path: filePath,
-    content: decoded.content,
-    encoding: decoded.encoding,
-  };
-});
-
 app.whenReady().then(() => {
   createWindow();
   app.on('activate', () => {
@@ -101,15 +74,3 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
-
-function decodeLegacyText(bytes: Buffer): {
-  content: string;
-  encoding: 'utf8' | 'gb18030';
-} {
-  try {
-    const decoder = new TextDecoder('utf-8', { fatal: true });
-    return { content: decoder.decode(bytes), encoding: 'utf8' };
-  } catch {
-    return { content: iconv.decode(bytes, 'gb18030'), encoding: 'gb18030' };
-  }
-}

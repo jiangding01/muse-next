@@ -21,6 +21,9 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      # renderer 生产产物不得包含 iconv-lite、Node builtin、格式层总入口 / serializer / codec（M3 T1c-2）。
+      - name: Renderer production bundle check (M3 T1c-2)
+        run: npm run check:renderer-bundle
       - name: Electron runtime codec probe (M3 T1a)
         run: npm run test:electron-codec
       # 根 tsconfig 不含 scripts/m3：单独检查 IPC smoke 的 runner 与判定器。

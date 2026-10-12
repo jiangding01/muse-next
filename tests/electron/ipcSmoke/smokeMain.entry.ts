@@ -23,7 +23,7 @@ import { createNodeReadOnlyFileSystem } from '../../../src/main/document/fileSys
 import { resolvePageEntry } from '../../../src/main/ipc/pageIdentity';
 import { registerOpenIpc } from '../../../src/main/ipc/registerOpenIpc';
 import { createOpenPathChooser } from '../../../src/main/ipc/wireOpenIpcWindow';
-import { createSecurityLog, residueProblems, SECOND_SOURCE, UTF8_SOURCE } from './context';
+import { createSecurityLog, residueProblems, SECOND_SOURCE, STAFF_SOURCE, UTF8_SOURCE } from './context';
 import type { CaseOutcome, CaseResult, Fixtures, SmokeCase, SmokeContext } from './context';
 import { CAPABILITY_CASES } from './casesCapability';
 import { DIALOG_CASES, FINAL_CASE } from './casesDialog';
@@ -32,9 +32,11 @@ import { NAVIGATION_CASES } from './casesNavigation';
 import { ISOLATED_CASES } from './casesIsolated';
 import { PRODUCTION_CASES, SECURITY_MATRIX_CASES } from './casesSecurity';
 import { SENDER_CASES } from './casesSender';
+import { UI_CASES } from './casesUi';
 import { runtimeEvidence, sandboxEvidence } from './evidence';
 import type { SandboxEvidence } from './evidence';
 import { createGatedFileSystem, createManualScheduler, createScriptedChooser, createTestClock, createTokenFaults, withTimeout } from './harness';
+import { createActivationFaults } from './ipcFaults';
 import { isRecord } from './replies';
 import { createWindowFactory } from './windows';
 
@@ -84,10 +86,12 @@ async function writeFixtures(dir: string): Promise<Fixtures> {
     utf8: join(dir, 'utf8 score.jcx'),
     second: join(dir, 'second score.jcx'),
     utf16: join(dir, 'utf16 score.jcx'),
+    staff: join(dir, 'staff score.jcx'),
   };
   await writeFile(fixtures.utf8, UTF8_SOURCE, 'utf8');
   await writeFile(fixtures.second, SECOND_SOURCE, 'utf8');
   await writeFile(fixtures.utf16, Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from('X:1\nK:C\n', 'utf16le')]));
+  await writeFile(fixtures.staff, STAFF_SOURCE, 'utf8');
   return fixtures;
 }
 
@@ -111,6 +115,7 @@ async function runCase(ctx: SmokeContext, smokeCase: SmokeCase, checkResidue: bo
   ctx.fs.releaseAll();
   ctx.chooser.reset();
   ctx.tokenFaults.clear();
+  ctx.faults.reset();
   if (residue.length > 0 && outcome.status !== 'failed') outcome = { status: 'failed', detail: [residue.join('; '), outcome.detail ?? ''].join(' | ') };
   else if (residue.length > 0) outcome = { status: 'failed', detail: `${outcome.detail ?? ''} | ${residue.join('; ')}` };
   return outcome.detail === undefined ? { id: smokeCase.id, status: outcome.status } : { id: smokeCase.id, status: outcome.status, detail: outcome.detail };
@@ -145,12 +150,14 @@ async function main(): Promise<number> {
   const clock = createTestClock();
   const scheduler = createManualScheduler(clock);
   const tokenFaults = createTokenFaults();
-  const isolated = [...ISOLATED_CASES, ...PRODUCTION_CASES].find((item) => item.id === config.mode);
-  const productionRenderer = PRODUCTION_CASES.some((item) => item.id === config.mode);
+  const isolated = [...ISOLATED_CASES, ...PRODUCTION_CASES, ...UI_CASES].find((item) => item.id === config.mode);
+  const productionRenderer = [...PRODUCTION_CASES, ...UI_CASES].some((item) => item.id === config.mode);
+  // 激活应答扣留只包装交给生产 registerOpenIpc 的 registrar（M3 T1c-2）；未布置时完全透明。
+  const faults = createActivationFaults();
   const realChooser = createOpenPathChooser((parent: BrowserWindow, options) => dialog.showOpenDialog(parent, options));
 
   const openIpc = registerOpenIpc({
-    ipc: ipcMain,
+    ipc: faults.registrar(ipcMain),
     windowForSender: (sender) => BrowserWindow.fromWebContents(sender),
     pageIdentity: entry.identity,
     // 真实原生对话框用例使用与产品完全相同的选择器；其余用例使用 main 持有的受控选择器。
@@ -177,6 +184,7 @@ async function main(): Promise<number> {
     pathChars: config.pathChars,
     trustedPagePath: config.trustedPagePath,
     security,
+    faults,
   };
 
   const sandbox = await collectSandbox(ctx, local.loadUrl);

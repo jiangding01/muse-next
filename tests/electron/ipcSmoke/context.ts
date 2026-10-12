@@ -16,6 +16,7 @@ import { coordinatorInvariantViolations } from '../../../src/main/open/coordinat
 import type { OwnerMeta } from '../../../src/main/open/openCoordinator';
 import type { WindowSecurityBlock } from '../../../src/main/security/windowSecurity';
 import type { GatedFileSystem, ManualScheduler, ScriptedChooser, TestClock, TokenFaults } from './harness';
+import type { ActivationFaults } from './ipcFaults';
 import type { WindowFactory } from './windows';
 
 /** 用例状态：`observed` 只记录事实、不是通过；`unverified` 只允许用于登记过的环境受限用例。 */
@@ -39,12 +40,31 @@ export interface Fixtures {
   readonly second: string;
   /** UTF-16 LE（带 BOM）：解码失败 `decode-utf16-unsupported`。 */
   readonly utf16: string;
+  /** 含五线谱声部的自建乐谱（内容见 `STAFF_SOURCE`），用于生产 CSP 下的 VexFlow 渲染（M3 T1c-2）。 */
+  readonly staff: string;
   /** 所有 fixture 所在目录（断言错误信息不泄露路径）。 */
   readonly dir: string;
 }
 
 export const UTF8_SOURCE = 'X:1\nT:smoke 中文\nK:C\nCDEF|\n';
 export const SECOND_SOURCE = 'X:2\nT:second\nK:G\nGABc|\n';
+/** 自建五线谱 fixture：14 个音符（4 + 4 + 三连音 3 + 2 + 1），另有一个简谱声部。 */
+export const STAFF_SOURCE = [
+  '%MUSE2',
+  'X:1',
+  'T:Staff smoke',
+  'M:4/4',
+  'L:1/8',
+  'K:G',
+  'V:1 name="Staff" style=staff ins=0 vol=64',
+  'V:2 name="Jianpu" style=jianpu play=1 instrument=0 volumn=64',
+  '[V:1]',
+  'G2 A2 B2 d2 | c2 B2 A2 G2 | (3GAB c4 d2- | d8 |]',
+  '[V:2]',
+  'G2 A2 B2 d2 | c2 B2 A2 G2 | G2 A2 B2 c2 | d8 |]',
+  '',
+].join('\n');
+export const STAFF_NOTE_COUNT = 14;
 
 export interface SmokeContext {
   readonly openIpc: OpenIpcHandle<BrowserWindow>;
@@ -65,6 +85,8 @@ export interface SmokeContext {
   readonly trustedPagePath: string;
   /** 生产安全接线（`wireWindowSecurity`）的拦截记录（M3 T1c-1）。 */
   readonly security: SecurityLog;
+  /** 激活应答扣留（M3 T1c-2，只在 smoke harness）。 */
+  readonly faults: ActivationFaults;
 }
 
 /** 一次拦截及其发生时该窗口的页面代次（用于判断 `did-start-navigation` 是否先于拦截发生）。 */

@@ -5,7 +5,7 @@
  *   IPC handler、不直接调用 handle 的生命周期方法）；页面身份来自生产 `resolvePageEntry`；真实对话框用与产品相同的选择器表达式。
  * - smoke 使用 runner 用 vite 打包的生产 preload 源码（不是 Forge 构建产物）；每个窗口都是 `sandbox: true` / `contextIsolation: true` / `nodeIntegration: false`；
  *   子 frame preload 只在显式的测试参数下打开。驱动不设 RunAsNode、不追加任何 Chromium 开关。
- * - 产品不含测试通道或测试白名单；旧 `openScore` 在 T1b-2b-1 阶段保留（T1c 删除）。
+ * - 产品不含测试通道或测试白名单；旧 Open 通道已在 M3 T1c-2 删除（下方用例由「保留」迁移为「禁止复活」）。
  * - CI：独立 step 运行 smoke，Ubuntu 经 `xvfb-run -a`；既有 gate step 保留。
  */
 
@@ -109,10 +109,12 @@ describe('M3 T1b-2b-1 架构守卫 —— smoke 复用生产实现', () => {
         'casesNavigation.ts',
         'casesSecurity.ts',
         'casesSender.ts',
+        'casesUi.ts',
         'context.ts',
         'crashObservation.ts',
         'evidence.ts',
         'harness.ts',
+        'ipcFaults.ts',
         'linuxExitExperiments.ts',
         'linuxProcessDiagnostics.ts',
         'replies.ts',
@@ -137,10 +139,11 @@ describe('M3 T1b-2b-1 架构守卫 —— smoke 复用生产实现', () => {
     expect([...imports].filter((path) => /^src\/(main\/main\.ts|preload\/|renderer\/)/.test(path))).toEqual([]);
   });
 
-  it('registerOpenIpc 在 smoke 中恰好调用一次，且 ipc 是真实 ipcMain、页面身份来自 resolvePageEntry', () => {
+  it('registerOpenIpc 在 smoke 中恰好调用一次，且 ipc 是真实 ipcMain（仅经激活应答扣留包装）、页面身份来自 resolvePageEntry', () => {
     const entry = smokeSource('smokeMain.entry.ts');
     expect(count(allSmoke(), /registerOpenIpc\(/g)).toBe(1);
-    expect(entry).toContain('ipc: ipcMain,');
+    // M3 T1c-2：真实 ipcMain 经 smoke 的激活应答扣留包装后交给生产 registerOpenIpc（包装器的透明性与使用范围由 tests/unit/scripts/ipcFaults.test.ts 钉住）。
+    expect(entry).toContain('ipc: faults.registrar(ipcMain),');
     expect(entry).toContain('windowForSender: (sender) => BrowserWindow.fromWebContents(sender),');
     expect(entry).toContain('pageIdentity: entry.identity,');
     expect(entry).toMatch(/const entry = resolvePageEntry\(\{ devServerUrl: undefined, indexFilePath: config\.trustedPagePath/);
@@ -167,7 +170,7 @@ describe('M3 T1b-2b-1 架构守卫 —— smoke 复用生产实现', () => {
     expect(/['"`](did-start-navigation|did-navigate|render-process-gone|destroyed)['"`]/.test(withoutDiagnostics)).toBe(false);
     expect(/\.(attachWindow|handleNavigation|handleNavigationCommitted|handleRendererGone|disposeWindow)\s*\(/.test(source)).toBe(false);
     expect(/\[\s*['"`](attachWindow|handleNavigation|handleNavigationCommitted|handleRendererGone|disposeWindow)['"`]\s*\]/.test(source)).toBe(false);
-    expect(/ipcMain\s*(\.|\[)|\.ipc\.(handle|on|once|handleOnce)\b|\.emit\(\s*['"`]muse:/.test(source.replace('ipc: ipcMain,', ''))).toBe(false);
+    expect(/ipcMain\s*(\.|\[)|\.ipc\.(handle|on|once|handleOnce)\b|\.emit\(\s*['"`]muse:/.test(source.replace('ipc: faults.registrar(ipcMain),', ''))).toBe(false);
   });
 
   it('smoke 不自动确认：activate 只由页面经 window.museDesktop.activateDocument 发起', () => {
@@ -254,12 +257,14 @@ describe('M3 T1b-2b-1 架构守卫 —— 产品隔离与 CI', () => {
     expect(offenders.map(posixPath)).toEqual([]);
   });
 
-  it('旧 openScore 在 T1b-2b-1 阶段保留：IPC 常量、preload 与 main 仍有它（T1c 删除）', () => {
+  it('旧 openScore 已在 M3 T1c-2 删除：IPC 常量恰为三条新通道，preload 与 main 中都没有旧入口', () => {
     const ipc = stripComments(read(join(REPO_ROOT, 'src/shared/ipc.ts')));
-    expect(ipc).toContain("openScore: 'muse:open-score',");
-    expect([...ipc.matchAll(/^\s+(\w+): 'muse:[\w-]+',$/gm)].map((m) => m[1]).sort()).toEqual(['activateDocument', 'openDocument', 'openScore', 'rejectDocument']);
-    expect(stripComments(read(join(REPO_ROOT, 'src/preload/preload.ts')))).toContain('openScore: () => ipcRenderer.invoke(IPC.openScore)');
-    expect(stripComments(read(join(REPO_ROOT, 'src/main/main.ts')))).toContain('ipcMain.handle(IPC.openScore,');
+    expect(ipc).not.toContain('muse:open-score');
+    expect([...ipc.matchAll(/^\s+(\w+): 'muse:[\w-]+',$/gm)].map((m) => m[1]).sort()).toEqual(['activateDocument', 'openDocument', 'rejectDocument']);
+    expect(stripComments(read(join(REPO_ROOT, 'src/preload/preload.ts')))).not.toContain('openScore');
+    const main = stripComments(read(join(REPO_ROOT, 'src/main/main.ts')));
+    expect(main).not.toContain('openScore');
+    expect(/ipcMain\.handle\(/.test(main)).toBe(false);
   });
 
   it('runner 类型检查配置只覆盖两个 runner 文件，且继承根 tsconfig', () => {

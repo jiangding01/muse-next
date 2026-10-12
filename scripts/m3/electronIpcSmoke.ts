@@ -34,6 +34,8 @@ const RENDERER_CONFIG = join(REPO_ROOT, 'vite.renderer.config.ts');
 const RENDERER_ROOT = join(REPO_ROOT, 'src/renderer');
 /** 以此前缀命名的模式在真实生产 renderer 上运行（与 `casesSecurity.ts` 的 `PRODUCTION_CASES` 一致，由架构守卫钉住）。 */
 const PRODUCTION_MODE_PREFIX = 'prod.';
+/** 生产 UI 的真实 Open 用例（M3 T1c-2，`casesUi.ts` 的 `UI_CASES`）同样运行在真实生产 renderer 上；`ui.win-unc` 经 UNC 路径加载。 */
+const UI_MODE_PREFIX = 'ui.';
 /** `matrix` 子进程的总超时（全部自动化用例；本地 macOS 实测见 HANDOFF）。 */
 const MATRIX_TIMEOUT_MS = 180_000;
 /** 每个独立用例子进程的总超时。 */
@@ -226,7 +228,9 @@ async function main(): Promise<number> {
     const binary = electronBinary();
     const outcomes: ChildOutcome[] = [];
     for (const mode of expectedModes(platform)) {
-      const trustedPagePath = mode === 'identity.win-unc' ? uncPath(pages.trusted) : mode.startsWith(PRODUCTION_MODE_PREFIX) ? productionPage : local;
+      const production = mode.startsWith(PRODUCTION_MODE_PREFIX) || mode.startsWith(UI_MODE_PREFIX);
+      const trustedPagePath =
+        mode === 'identity.win-unc' ? uncPath(pages.trusted) : mode === 'ui.win-unc' ? uncPath(productionPage) : production ? productionPage : local;
       const timeout = mode === 'matrix' ? MATRIX_TIMEOUT_MS : ISOLATED_TIMEOUT_MS;
       process.stderr.write(`[electron-ipc] starting child ${mode}\n`);
       outcomes.push(await runChild(binary, mainBundle, { ...base, trustedPagePath }, mode, timeout));

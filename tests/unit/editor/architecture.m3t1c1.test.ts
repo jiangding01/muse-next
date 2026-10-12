@@ -176,8 +176,10 @@ describe('M3 T1c-1 架构守卫 —— smoke 复用同一份安全接线', () =>
     expect(SMOKE_CASES.filter((spec) => spec.mode === 'matrix' && spec.id.startsWith('prod.'))).toEqual([]);
     const runner = stripComments(read(RUNNER));
     expect(runner).toContain("const PRODUCTION_MODE_PREFIX = 'prod.';");
-    expect(runner).toContain('mode.startsWith(PRODUCTION_MODE_PREFIX) ? productionPage : local');
-    expect(smoke('smokeMain.entry.ts')).toContain('const productionRenderer = PRODUCTION_CASES.some((item) => item.id === config.mode);');
+    // M3 T1c-2 起 `ui.*`（生产 UI 用例）同样指向生产 renderer；`ui.win-unc` 经 UNC 路径。
+    expect(runner).toContain('const production = mode.startsWith(PRODUCTION_MODE_PREFIX) || mode.startsWith(UI_MODE_PREFIX);');
+    expect(runner).toContain("mode === 'ui.win-unc' ? uncPath(productionPage) : production ? productionPage : local");
+    expect(smoke('smokeMain.entry.ts')).toContain('const productionRenderer = [...PRODUCTION_CASES, ...UI_CASES].some((item) => item.id === config.mode);');
   });
 
   it('威胁对照与生产 renderer 用例都真正注册进 smoke（不能只留在清单里）', () => {
@@ -186,7 +188,7 @@ describe('M3 T1c-1 架构守卫 —— smoke 复用同一份安全接线', () =>
     expect(security).toContain('[prodRendererLoads, prodPopupDenied, prodSubframeBlocked, prodInlineScriptBlocked, prodNavigationBlocked]');
     const entry = smoke('smokeMain.entry.ts');
     expect(entry).toContain('...SENDER_CASES, ...SECURITY_MATRIX_CASES, ...DIALOG_CASES]');
-    expect(entry).toContain('const isolated = [...ISOLATED_CASES, ...PRODUCTION_CASES].find((item) => item.id === config.mode);');
+    expect(entry).toContain('const isolated = [...ISOLATED_CASES, ...PRODUCTION_CASES, ...UI_CASES].find((item) => item.id === config.mode);');
   });
 });
 
@@ -203,8 +205,24 @@ describe('M3 T1c-1 架构守卫 —— 判定不放宽', () => {
       else expect(spec?.expect, id).toEqual(expectation);
     }
     const added = SMOKE_CASES.map((spec) => spec.id).filter((id) => !(id in T1B_EXPECTATIONS));
-    expect(added).toEqual(['security.subframe-control', 'prod.renderer-loads', 'prod.popup-denied', 'prod.subframe-blocked', 'prod.inline-script-blocked', 'prod.navigation-blocked']);
-    for (const id of added) expect(SMOKE_CASES.find((spec) => spec.id === id)?.expect).toEqual(PASS);
+    expect(added).toEqual([
+      'security.subframe-control',
+      'prod.renderer-loads',
+      'prod.popup-denied',
+      'prod.subframe-blocked',
+      'prod.inline-script-blocked',
+      'prod.navigation-blocked',
+      // M3 T1c-2：生产 UI 的真实 Open（ui.win-unc 与 identity.win-unc 相同，只在 Windows、允许 unverified）。
+      'ui.open-commit',
+      'ui.cancel-keeps',
+      'ui.decode-failure-keeps',
+      'ui.reload-isolation',
+      'ui.staff-render',
+      'ui.activation-held-retry',
+      'ui.activation-unresolved',
+      'ui.win-unc',
+    ]);
+    for (const id of added) expect(SMOKE_CASES.find((spec) => spec.id === id)?.expect).toEqual(id === 'ui.win-unc' ? { win32: 'pass-or-unverified' } : PASS);
   });
 
   it('反例：判定器哈希对规则改动敏感', () => {

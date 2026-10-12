@@ -83,7 +83,7 @@ describe('electronIpcSmokeSummary —— 清单', () => {
     expect(expectedModes('darwin')).not.toContain('risk.linux-force-crash-stall');
     expect(expectedModes('win32')).not.toContain('risk.linux-force-crash-stall');
     const count = (platform: SmokePlatform): number => SMOKE_CASES.filter((s) => s.expect[platform] !== undefined).length;
-    expect([count('darwin'), count('win32'), count('linux')]).toEqual([51, 53, 52]);
+    expect([count('darwin'), count('win32'), count('linux')]).toEqual([58, 61, 59]);
   });
 
   it('M3 T1c-1 安全用例：子 frame 风险已是 pass 硬门；对照在 matrix；prod.* 各占独立子进程且三平台 pass；全清单只剩已裁决的 observe', () => {
@@ -97,6 +97,27 @@ describe('electronIpcSmokeSummary —— 清单', () => {
     expect(observed('darwin')).toEqual([]);
     expect(observed('win32')).toEqual(['real.close-settles', 'real.reload-keeps-dialog', 'real.crash-keeps-dialog', 'real.destroy-isolated']);
     expect(observed('linux')).toEqual(['real.close-settles', 'real.reload-keeps-dialog', 'real.crash-keeps-dialog', 'real.destroy-isolated', 'risk.linux-force-crash-stall']);
+  });
+
+  it('M3 T1c-2 生产 UI 用例：ui.* 各占独立子进程且三平台 pass（ui.win-unc 只在 Windows、允许 unverified）', () => {
+    const ui = SMOKE_CASES.filter((s) => s.id.startsWith('ui.'));
+    expect(ui.map((s) => s.id)).toEqual([
+      'ui.open-commit',
+      'ui.cancel-keeps',
+      'ui.decode-failure-keeps',
+      'ui.reload-isolation',
+      'ui.staff-render',
+      'ui.activation-held-retry',
+      'ui.activation-unresolved',
+      'ui.win-unc',
+    ]);
+    for (const spec of ui) {
+      expect(spec.mode).toBe('isolated');
+      expect(spec.expect).toEqual(spec.id === 'ui.win-unc' ? { win32: 'pass-or-unverified' } : { darwin: 'pass', win32: 'pass', linux: 'pass' });
+    }
+    expect(expectedModes('darwin')).not.toContain('ui.win-unc');
+    const asObserved = withChild('linux', 'ui.activation-unresolved', (child) => outcome(child.mode, [{ id: 'ui.activation-unresolved', status: 'observed', detail: 'x' }], 'linux'));
+    expect(problemsOf(asObserved, 'linux')).toContain('case must pass, got observed: ui.activation-unresolved');
   });
 
   it('Linux forceCrash 风险：缺失、以 passed 冒充、或出现在非 Linux 平台都失败', () => {
