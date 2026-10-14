@@ -86,7 +86,9 @@ const rows = (files: readonly string[]): [string, string][] => files.map((file) 
 describe('M3 T0 架构守卫 —— src/editor 依赖与运行时', () => {
   it('扫到了 T0 的四个核心目录（守卫没有扫空目录），且没有 .tsx 文件', () => {
     const dirs = new Set(editorFiles.map((file) => posixPath(file).split('/')[2]));
-    expect([...dirs].sort()).toEqual(['projection', 'selection', 'session', 'text']);
+    // M3 T2（用户 2026-10-14 裁决 Q1 / R3-H1）：保留「四个 T0 目录都被扫到」的防空扫要求；不设目录白名单，
+    // 新目录由各阶段守卫约束（T2：architecture.m3t2.test.ts），本文件其余扫描照常覆盖整个 src/editor。
+    for (const dir of ['projection', 'selection', 'session', 'text']) expect(dirs.has(dir), dir).toBe(true);
     expect(editorFiles.filter((file) => file.endsWith('.tsx'))).toEqual([]);
   });
 
