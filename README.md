@@ -28,8 +28,10 @@ success），**M2.5 ✅ SEALED**（2026-10-06，Stage B seal `30395fe`，CI run 
 **M3 T1c（产品 UI 接入）**：T1c-1 窗口安全加固（`b79172e`，CI run 38215803880）与 T1c-2 会话迁移和新 Open 切换（`d8cb04e`，CI run 38220816649）
 已验收，旧 Open 通道已删除；T1c-3 按 2026-10-12 用户批准的修订后阶段 Seal Gate 完成——macOS 真实 GUI 人工辅助验收（Claude 经 Computer Use 操作真实窗口、只读 CDP 读取状态，用户接受为验收证据），
 Windows / Ubuntu 以三平台 CI 为阶段依据（**这两个平台的真实 GUI 人工验收尚未执行**，是对应平台产品发布前的强制硬门，须在真实打包应用上执行，
-CI 不得永久替代）；**T1c 与 M3 T1 整体：Seal candidate**（2026-10-12 docs-only seal，该 seal 提交的三平台 CI success 后正式 ✅ SEALED）。
-M3 T2–T9 尚未开始，整个 M3 未封板，产品正式发布未批准。详见 §5「路线图」。
+CI 不得永久替代）；**T1c 与 M3 T1 整体 ✅ SEALED**（2026-10-12 docs-only seal `05359f0`，CI run 38233013156 三平台 success）。
+**M3 T2 History Core：Seal candidate**（2026-10-14；代码 `1b2a1cf`，CI run 38559027099 三平台 success；本次 docs-only seal 提交的三平台 CI success
+后正式 ✅ SEALED）：纯撤销 / 重做核心已完成，但**尚未接入 renderer，产品界面中的撤销 / 重做目前不可用**。
+M3 T3–T9 尚未开始，整个 M3 未封板，产品正式发布未批准。详见 §5「路线图」。
 
 ## 2. 核心发现与设计原则
 
@@ -222,14 +224,20 @@ projectionEquals(before, after); // true 表示语义往返无损
   以及在 macOS / Windows / Ubuntu 真实 Electron 窗口上运行的 IPC smoke（Ubuntu 为 CI 的 Xvfb 环境，不代表真实 Linux 桌面）。
   已知残余风险（Windows / Linux 关窗后原生对话框不结束、macOS `destroy()` 留下孤儿对话框、Linux 上 `forcefullyCrashRenderer()` 后
   renderer 半退出）带入 T5，详见 `HANDOFF.md` §30.1「M3 T1b 整体实际状态」。
-  **T1c**（产品 UI 接入，Seal candidate）分三段：**T1c-1** 窗口安全加固（拒绝弹窗、拦截非可信导航 / 子 frame / webview，生产 CSP）；
+  **T1c ✅ SEALED**（产品 UI 接入，2026-10-12，docs-only seal `05359f0`，CI run 38233013156；M3 T1 随之整体封板）分三段：**T1c-1** 窗口安全加固（拒绝弹窗、拦截非可信导航 / 子 frame / webview，生产 CSP）；
   **T1c-2** renderer 会话迁移到 `DocumentSession`，产品 Open 切换到新 IPC（main 明确确认激活后才切换文档，确认不了时保留当前文档并标记
   「授权未确认」），删除旧 `muse:open-score`，renderer 生产产物检查进入 CI；**T1c-3** 人工验收按修订后的阶段 Seal Gate 完成：macOS 真实
   GUI 人工辅助验收（Claude 经 Computer Use 操作真实窗口、只读 CDP 读取状态，用户接受为验收证据）（M1–M6、M8 通过，M7 被系统模态阻止记为 N/A，M9 不适用），Windows / Ubuntu 只以三平台 CI
   为阶段依据，真实 GUI 人工验收未执行，是对应平台产品发布前的强制硬门（须在真实打包应用上执行，CI 不得永久替代）。已接受的残余风险：页面导航被拦截时打开授权会被提前吊销。**构建 / 打包尚未解决**：生产 renderer 输出目录与
   main 加载路径错位（F1），`npm run package` 退出码 0 却没有产出应用（F2），asar / Fuses / 打包应用均未验证，须在 M3 整体 package smoke 与
   Seal 前解决。详见 `HANDOFF.md` §30.1「M3 T1c-1 / T1c-2 / T1c-3 实际状态」。
-  **T2–T9 尚未开始；M3 T1 正式封板后，下一步是 T2 History 核心（撤销 / 重做，待用户授权）。**
+  **T2 History Core**（Seal candidate，2026-10-14，代码 `1b2a1cf`，CI run 38559027099 三平台 success；本次 docs-only seal 提交的三平台 CI success
+  后正式 ✅ SEALED）：`src/editor/history/` 下的纯函数撤销 / 重做核心——History 与 `DocumentSession` 并列并绑定文档、版本与源码，所有 source 变化
+  仍经 T0 `applySourceTransaction`；持久化单链表栈（压栈 / 出栈 O(1)，旧状态结构共享）；连续插入、向后删除、向前删除三类合并（约 1 s 窗口，
+  换行结束合并，可视化命令不合并）；选中随事务存储与恢复；无变化事务不入栈；失败不返回新状态。新增 history 测试 107 个与架构守卫 15 个，
+  变异测试 43/43 杀死。**T2 尚未接入 renderer、菜单与快捷键（T3 范围），产品界面中的撤销 / 重做目前不可用。** 已接受的残余风险：V8 子串可能
+  保留整份旧 source（C2）；不设历史深度上限（Q5）；T3 preflight 须先确认 `document` 类选区与 Q7 的关系。详见 `HANDOFF.md` §30.1「M3 T2 实际状态」。
+  **T3–T9 尚未开始；T2 正式封板后，下一步是 T3（源码输入 + 解析调度）只读 preflight，待用户授权。**
 - **M4 及以后 — Playback / Import-Export / Layout**：播放、MIDI 导入导出、页面布局
   与打包分发。以 `HANDOFF.md` §61 的规划为准，本文档不重复展开、不提前承诺细节。
 

@@ -52,15 +52,25 @@ Windows 路径与 UNC、Ubuntu 默认 sandbox（CI 专用 AppArmor profile；Lin
 不结束、macOS `destroy()` 留孤儿、Linux 上 `forcefullyCrashRenderer()` 后 renderer 半退出（Linux 的「进程退出 ⇒ 吊销」由 SIGKILL 硬门
 验证，半退出由风险观测用例持续记录，未修复）。（以上为 T1b 封板时的状态；T1c 的结果与验收范围修订见下一段。）
 
-**M3 T1c Product Open UI：Seal candidate（2026-10-12，docs-only seal；该 seal 提交的三平台 CI success 后 T1c 与 M3 T1 整体正式 ✅ SEALED）**：
+**M3 T1c Product Open UI ✅ SEALED，M3 T1 整体 ✅ SEALED（2026-10-12，docs-only seal `05359f0`，CI run 38233013156 三平台 success；2026-10-14 补记）**：
 T1c-1 窗口安全加固 `b79172e`（CI run 38215803880）；T1c-2 会话迁移与新 Open 切换 `d8cb04e`（CI run 38220816649），docs `1cb10dc`（38221319092）；
 均为 macOS / Windows / Ubuntu 三平台 success（真实窗口 smoke：macOS 58 passed、Windows 57 passed + 4 个已裁决 observed、Ubuntu 54 passed + 5 个已裁决 observed）。
 产品 Open 现在只走 main 签发授权的新协议：界面在 main 明确确认激活后才切换文档，确认不了时保留当前文档并标记「授权未确认」；旧 Open 通道已删除，
 renderer 生产产物不再包含 iconv-lite。T1c-3 人工验收按 **2026-10-12 用户批准的修订后阶段 Seal Gate** 完成：macOS 真实 GUI 人工辅助验收
 （Claude 经 Computer Use 操作真实窗口、只读 CDP 读取状态，用户接受为验收证据）（M1–M6、M8 通过，M7 被系统模态阻止记为 N/A，M9 不适用）；Windows / Ubuntu 只以上述三平台 CI
 为阶段依据，**真实 GUI 人工验收尚未执行**，是对应平台产品发布前的强制硬门（须在真实打包应用上执行，CI 不得永久替代）。已接受风险：页面发起的导航被拦截时打开授权会被提前吊销（页面无信号）；T4 普通 Save 必须由 main 重新验证授权；
-旧 dirty 会话在激活不确定时的恢复由 T4 负责。构建 / 打包问题见 Known limitations。整个 M3 未封板，产品正式发布未批准；
-M3 T1 正式封板后下一步是 T2 History 核心（撤销 / 重做，待用户授权）。
+旧 dirty 会话在激活不确定时的恢复由 T4 负责。构建 / 打包问题见 Known limitations。（以上为 T1c 封板时的状态。）
+
+**M3 T2 History Core：Seal candidate（2026-10-14；代码 `1b2a1cf`，CI run 38559027099 三平台 success；本次 docs-only seal 提交的三平台 CI success
+后正式 ✅ SEALED）**：按 Preflight r3（用户裁决 Q1–Q7、C1–C2 与 R3-H1 / R3-H2）实现 `src/editor/history/` 纯函数撤销 / 重做核心。History 与
+`DocumentSession` 并列，由文档 id、版本与源码绑定，绕过 History 的写入一律拒绝；所有 source 变化仍经 T0 `applySourceTransaction`（undo / redo
+用当前版本，版本严格递增，源码不变量照常校验），不新建补丁引擎、不存 dirty、不读写 saved；持久化单链表栈，压栈 / 出栈 O(1)、旧状态结构共享；
+连续插入、向后删除、向前删除三类合并（约 1 s 窗口，换行与可视化命令不合并，Save 等由调用方结束合并组）；选中随事务存储与恢复，提交时计算候选
+选中（仍须 T6 / T7 校验）；无变化事务不入栈、不清 redo；失败不返回新状态。CI 三平台：npm test 164 个测试文件（macOS 8489 passed，Windows / Ubuntu
+8488 passed + 1 项既有 skip），其中 history 测试 107 个、`architecture.m3t2` 15 个；renderer bundle、codec、fixture 105/105、真实窗口 IPC smoke
+与 T1 一致。本地变异测试 43/43 杀死，独立审查无 CRITICAL / HIGH。**T2 尚未接入 renderer、菜单与快捷键（T3 范围），产品界面中的撤销 / 重做目前
+不可用，源码面板仍为只读。** 整个 M3 未封板，T3–T9 尚未开始，产品正式发布未批准；T2 正式封板后下一步是 T3（源码输入 + 解析调度）只读 preflight，
+待用户授权。
 
 ### Added
 
@@ -134,6 +144,9 @@ M3 T1 正式封板后下一步是 T2 History 核心（撤销 / 重做，待用�
   以及按构建模式注入的 renderer CSP（生产不含 `'unsafe-inline'` 与 WebSocket）；在真实生产 renderer 上运行的 `prod.*` smoke（M3 T1c-1）。
 - M3 T1c-2 renderer Open 事务：纯状态机 `openTransaction`（激活每次 5 s、最多 3 次尝试（含首次，重试使用同一张票），只有明确确认才提交）与模块级控制器 `openController`；
   `npm run check:renderer-bundle` 生产产物检查进入三平台 CI；8 个生产 UI 真实窗口用例 `ui.*`（M3 T1c-2）。
+- M3 T2 History Core（纯核心，尚未接入产品界面）：`src/editor/history/{types,stack,selection,coalesce,history}.ts`——`createHistory`、
+  `commitTransaction`、`undo`、`redo`、`endCoalescing`、`canUndo` / `canRedo` 与撤销 / 重做标签；新增 history 测试 9 个文件与架构守卫
+  `architecture.m3t2`（不设目录白名单，只精确拒绝错误拼写）；`architecture.m3t0` 的目录断言由「恰好四个目录」改为「四个 T0 目录都存在」（M3 T2）。
 
 ### Changed
 
@@ -238,6 +251,15 @@ Canonical 序列化原记录四条已知限制，其中第 2 条已回填，**�
 已接受风险（M3 T1c-1）：
 
 - 页面发起的导航被策略拦截时，该窗口的打开授权会被提前吊销且页面无信号（裁决 A）。
+
+平台验收（M3 T1c-3 登记）：Windows / Linux 真实 GUI 人工验收尚未执行，是对应平台产品发布前的强制硬门（须在真实打包应用上执行，CI 不得永久替代）。
+
+M3 T2 History Core 的限制与已接受风险：
+
+- 撤销 / 重做只完成纯核心，尚未接入 renderer、菜单与快捷键（T3 范围），产品界面中目前不可用。
+- C2（已接受）：V8 可能让较长子串保留整份旧版本 source，History 的真实内存可能高于「只记补丁」。
+- Q5（已接受）：不设历史深度上限，长会话内存随编辑总量增长；如需上限另行裁决。
+- T3 preflight 须确认：`document` 类选区（全选）与 Q7「替换整个选区后光标折叠到补丁结束位置」规则的关系；Q7 只对非折叠 source 选区生效。
 
 ### Quality
 
