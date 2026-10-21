@@ -61,16 +61,26 @@ renderer 生产产物不再包含 iconv-lite。T1c-3 人工验收按 **2026-10-1
 为阶段依据，**真实 GUI 人工验收尚未执行**，是对应平台产品发布前的强制硬门（须在真实打包应用上执行，CI 不得永久替代）。已接受风险：页面发起的导航被拦截时打开授权会被提前吊销（页面无信号）；T4 普通 Save 必须由 main 重新验证授权；
 旧 dirty 会话在激活不确定时的恢复由 T4 负责。构建 / 打包问题见 Known limitations。（以上为 T1c 封板时的状态。）
 
-**M3 T2 History Core：Seal candidate（2026-10-14；代码 `1b2a1cf`，CI run 38559027099 三平台 success；本次 docs-only seal 提交的三平台 CI success
-后正式 ✅ SEALED）**：按 Preflight r3（用户裁决 Q1–Q7、C1–C2 与 R3-H1 / R3-H2）实现 `src/editor/history/` 纯函数撤销 / 重做核心。History 与
+**M3 T2 History Core ✅ SEALED（2026-10-14；代码 `1b2a1cf`，CI run 38559027099；docs-only seal `5363d38`，CI run 38562968395 三平台 success；
+2026-10-21 补记）**：按 Preflight r3（用户裁决 Q1–Q7、C1–C2 与 R3-H1 / R3-H2）实现 `src/editor/history/` 纯函数撤销 / 重做核心。History 与
 `DocumentSession` 并列，由文档 id、版本与源码绑定，绕过 History 的写入一律拒绝；所有 source 变化仍经 T0 `applySourceTransaction`（undo / redo
 用当前版本，版本严格递增，源码不变量照常校验），不新建补丁引擎、不存 dirty、不读写 saved；持久化单链表栈，压栈 / 出栈 O(1)、旧状态结构共享；
 连续插入、向后删除、向前删除三类合并（约 1 s 窗口，换行与可视化命令不合并，Save 等由调用方结束合并组）；选中随事务存储与恢复，提交时计算候选
 选中（仍须 T6 / T7 校验）；无变化事务不入栈、不清 redo；失败不返回新状态。CI 三平台：npm test 164 个测试文件（macOS 8489 passed，Windows / Ubuntu
 8488 passed + 1 项既有 skip），其中 history 测试 107 个、`architecture.m3t2` 15 个；renderer bundle、codec、fixture 105/105、真实窗口 IPC smoke
 与 T1 一致。本地变异测试 43/43 杀死，独立审查无 CRITICAL / HIGH。**T2 尚未接入 renderer、菜单与快捷键（T3 范围），产品界面中的撤销 / 重做目前
-不可用，源码面板仍为只读。** 整个 M3 未封板，T3–T9 尚未开始，产品正式发布未批准；T2 正式封板后下一步是 T3（源码输入 + 解析调度）只读 preflight，
-待用户授权。
+不可用，源码面板仍为只读。**（以上为 T2 封板时的状态。）
+
+**M3 T3a 编辑状态、历史接线与解析调度：实现与 CI Gate PASS，已合并 main（2026-10-21；功能提交 `ffd37c9`，CI run 39581666437；PR #1 合并为 `087dc36`，
+main CI run 39585682584；均三平台 success）**：T3（源码输入 + 解析调度）按 Preflight r3 与实施 Gate 附录 v2 拆为 T3a / T3b / T3c，本次完成 T3a。
+renderer store 把会话、History 与选中成对存放并只经原子写入函数替换，编辑写入对计算基线做同一性 CAS（旧分支结果即使版本恰好 +1 也拒绝）；
+解析按 500 ms debounce 调度，显式 Reparse 强制解析，组字期间不解析，undo / redo 后立即解析，stale 快照合法（谱面保留最后一份快照）；undo / redo /
+Reparse 只经一个编辑命令入口；Open 在文档 dirty 或组字时拒绝，激活提交前再次确认，控制器异常按事务阶段 fail closed；模块级 beforeunload 在 dirty
+或组字时阻止关闭 / 刷新；React 根错误回调与根卸载后的致命提示；开发期 renderer 模块更新改为整页刷新（Vite 8）。CI 三平台：172 个测试文件、8662 个
+用例（macOS 8662 passed，Windows / Ubuntu 8661 passed + 1 项既有 skip），renderer bundle、codec、fixture 105/105、真实窗口 IPC smoke 与 T2 一致；
+外部独立代码复核（GPT）r3b 最终 PASS（0 CRITICAL / HIGH / MEDIUM）。**源码面板在所有平台仍为只读，界面中的撤销 / 重做入口属 T3b，编辑功能尚未开放。**
+T3b / T3c 尚未开始，T3 整体未封板，Q8（IME 尾随事件规则）与 Q9（macOS 优先及限定范围 Seal）待裁决；T4–T9 尚未开始，整个 M3 未封板，产品正式发布
+未批准（T3–T5 只允许开发构建）。项目当前暂停，恢复时从 T3b 前置验证 SP-KEY-P（macOS 真实键盘）开始，待用户授权。
 
 ### Added
 
@@ -147,6 +157,10 @@ renderer 生产产物不再包含 iconv-lite。T1c-3 人工验收按 **2026-10-1
 - M3 T2 History Core（纯核心，尚未接入产品界面）：`src/editor/history/{types,stack,selection,coalesce,history}.ts`——`createHistory`、
   `commitTransaction`、`undo`、`redo`、`endCoalescing`、`canUndo` / `canRedo` 与撤销 / 重做标签；新增 history 测试 9 个文件与架构守卫
   `architecture.m3t2`（不设目录白名单，只精确拒绝错误拼写）；`architecture.m3t0` 的目录断言由「恰好四个目录」改为「四个 T0 目录都存在」（M3 T2）。
+- M3 T3a renderer 编辑状态与调度（源码面板仍只读）：`src/renderer/app/editor/{editorTransitions,parseSchedule,parseController,editorController,unloadBlocker}.ts`、
+  `src/renderer/app/fatalError.ts` 与开发期整页刷新插件 `vite.renderer.reload.ts`；store 新增原子写入 `applyEditorStep(core, base)`（CAS）/
+  `publishParsedSession` / `setEditorSelection`；Open 状态机新增 dirty 字段与 `replacement-refused` / `controller-failed` / `commit-failed`；新增架构守卫
+  `architecture.m3t3`（M3 T3a）。
 
 ### Changed
 
@@ -260,6 +274,15 @@ M3 T2 History Core 的限制与已接受风险：
 - C2（已接受）：V8 可能让较长子串保留整份旧版本 source，History 的真实内存可能高于「只记补丁」。
 - Q5（已接受）：不设历史深度上限，长会话内存随编辑总量增长；如需上限另行裁决。
 - T3 preflight 须确认：`document` 类选区（全选）与 Q7「替换整个选区后光标折叠到补丁结束位置」规则的关系；Q7 只对非折叠 source 选区生效。
+  （T3 Preflight r3 已处理：T3 的选中只有 `none` / `source` 两种，全选以 `source` 选区表示。）
+
+M3 T3a 的限制与遗留技术债：
+
+- 源码面板在所有平台仍为只读，编辑与界面撤销 / 重做尚未开放（T3b / T3c）；Windows / Linux 真实 GUI 与 IME 未验收（分平台 G4 硬门）。
+- 后续源码输入接线必须向 store 传入当次计算所依据的真实 CAS 基线，并验证 DOM 选区事件交错（`setEditorSelection` 目前只检查会话身份）。
+- Open 的「已提交」判据依赖每次 Open 的 documentId 唯一，扩展重载 / 恢复 / 保存协议时须复核。
+- beforeunload 依赖页面已有用户激活，对无用户激活的页面与主进程强制退出不提供数据保护；关窗 / 退出路径待 T3c 实测。
+- `tests/unit/app/openController.test.ts` 544 行，拆分属可维护性债务。
 
 ### Quality
 

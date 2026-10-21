@@ -29,9 +29,10 @@ success），**M2.5 ✅ SEALED**（2026-10-06，Stage B seal `30395fe`，CI run 
 已验收，旧 Open 通道已删除；T1c-3 按 2026-10-12 用户批准的修订后阶段 Seal Gate 完成——macOS 真实 GUI 人工辅助验收（Claude 经 Computer Use 操作真实窗口、只读 CDP 读取状态，用户接受为验收证据），
 Windows / Ubuntu 以三平台 CI 为阶段依据（**这两个平台的真实 GUI 人工验收尚未执行**，是对应平台产品发布前的强制硬门，须在真实打包应用上执行，
 CI 不得永久替代）；**T1c 与 M3 T1 整体 ✅ SEALED**（2026-10-12 docs-only seal `05359f0`，CI run 38233013156 三平台 success）。
-**M3 T2 History Core：Seal candidate**（2026-10-14；代码 `1b2a1cf`，CI run 38559027099 三平台 success；本次 docs-only seal 提交的三平台 CI success
-后正式 ✅ SEALED）：纯撤销 / 重做核心已完成，但**尚未接入 renderer，产品界面中的撤销 / 重做目前不可用**。
-M3 T3–T9 尚未开始，整个 M3 未封板，产品正式发布未批准。详见 §5「路线图」。
+**M3 T2 History Core ✅ SEALED**（2026-10-14；代码 `1b2a1cf`，CI run 38559027099；docs-only seal `5363d38`，CI run 38562968395 三平台 success）：纯撤销 / 重做核心。
+**M3 T3a 编辑状态、历史接线与解析调度：实现与 CI Gate PASS，已合并 main**（2026-10-21；`ffd37c9` / CI run 39581666437，PR #1 合并为 `087dc36` / CI run 39585682584，
+三平台 success）：store 接线、解析调度、Open 安全防线与 beforeunload 已完成，但**源码面板在所有平台仍为只读，产品界面中的撤销 / 重做目前不可用**（T3b / T3c）。
+M3 T3b / T3c 尚未开始，T3 整体未封板；T4–T9 尚未开始，整个 M3 未封板，产品正式发布未批准。详见 §5「路线图」。
 
 ## 2. 核心发现与设计原则
 
@@ -231,13 +232,17 @@ projectionEquals(before, after); // true 表示语义往返无损
   为阶段依据，真实 GUI 人工验收未执行，是对应平台产品发布前的强制硬门（须在真实打包应用上执行，CI 不得永久替代）。已接受的残余风险：页面导航被拦截时打开授权会被提前吊销。**构建 / 打包尚未解决**：生产 renderer 输出目录与
   main 加载路径错位（F1），`npm run package` 退出码 0 却没有产出应用（F2），asar / Fuses / 打包应用均未验证，须在 M3 整体 package smoke 与
   Seal 前解决。详见 `HANDOFF.md` §30.1「M3 T1c-1 / T1c-2 / T1c-3 实际状态」。
-  **T2 History Core**（Seal candidate，2026-10-14，代码 `1b2a1cf`，CI run 38559027099 三平台 success；本次 docs-only seal 提交的三平台 CI success
-  后正式 ✅ SEALED）：`src/editor/history/` 下的纯函数撤销 / 重做核心——History 与 `DocumentSession` 并列并绑定文档、版本与源码，所有 source 变化
+  **T2 History Core ✅ SEALED**（2026-10-14，代码 `1b2a1cf`，CI run 38559027099；docs-only seal `5363d38`，CI run 38562968395 三平台 success）：`src/editor/history/` 下的纯函数撤销 / 重做核心——History 与 `DocumentSession` 并列并绑定文档、版本与源码，所有 source 变化
   仍经 T0 `applySourceTransaction`；持久化单链表栈（压栈 / 出栈 O(1)，旧状态结构共享）；连续插入、向后删除、向前删除三类合并（约 1 s 窗口，
   换行结束合并，可视化命令不合并）；选中随事务存储与恢复；无变化事务不入栈；失败不返回新状态。新增 history 测试 107 个与架构守卫 15 个，
   变异测试 43/43 杀死。**T2 尚未接入 renderer、菜单与快捷键（T3 范围），产品界面中的撤销 / 重做目前不可用。** 已接受的残余风险：V8 子串可能
   保留整份旧 source（C2）；不设历史深度上限（Q5）；T3 preflight 须先确认 `document` 类选区与 Q7 的关系。详见 `HANDOFF.md` §30.1「M3 T2 实际状态」。
-  **T3–T9 尚未开始；T2 正式封板后，下一步是 T3（源码输入 + 解析调度）只读 preflight，待用户授权。**
+  **T3（源码输入 + 解析调度）** 按 Preflight r3 与实施 Gate 附录 v2 拆为 T3a / T3b / T3c。**T3a 实现与 CI Gate PASS，已合并 main**（2026-10-21，
+  `ffd37c9` / CI run 39581666437，PR #1 合并为 `087dc36` / main CI run 39585682584，三平台 success；外部独立代码复核 PASS）：renderer store 把会话、
+  History 与选中成对存放并只经原子写入替换（编辑写入对计算基线做 CAS）；500 ms 解析调度、显式 Reparse 强制解析、组字期间不解析；undo / redo /
+  Reparse 只经一个编辑命令入口；Open 在 dirty 或组字时拒绝、控制器异常 fail closed；beforeunload 在 dirty 或组字时阻止关闭 / 刷新；开发期模块更新改为
+  整页刷新。**源码面板在所有平台仍为只读，界面撤销 / 重做入口属 T3b。** 遗留技术债见 `HANDOFF.md` §30.1「M3 T3a 实际状态」。
+  **T3b / T3c 尚未开始，T3 整体未封板，Q8 / Q9 待裁决；T4–T9 尚未开始。项目当前暂停，恢复时从 T3b 前置验证 SP-KEY-P 开始，待用户授权。**
 - **M4 及以后 — Playback / Import-Export / Layout**：播放、MIDI 导入导出、页面布局
   与打包分发。以 `HANDOFF.md` §61 的规划为准，本文档不重复展开、不提前承诺细节。
 
