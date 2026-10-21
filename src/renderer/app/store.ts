@@ -1,12 +1,13 @@
 /**
- * Renderer 应用状态（M3 T1c-2 起：T1c Preflight r2 §6.1；用户裁决 Q2 / Q8）。
+ * Renderer 应用状态（M3 T1c-2 起：T1c Preflight r2 §6.1；M3 T3a：T3 Preflight r3 §4）。
  *
  * - **唯一会话真源**是 T0 的 `DocumentSession`（`session`）；本模块不复制、不改写会话合同，不维护第二套文档状态。
- * - `score / index / diagnostics` 是为兼容 ScoreView 等既有组件保留的派生字段，恒取自**同一个** `session.parsed.load`；
- *   写入会话与派生字段的只有 `commitSession`（单次 `set()`），初始化时由同一个投影函数生成。
+ * - `history`（T2）与 `selection`（运行时选中）和会话成对存放，三者只经下面的原子写入函数在同一次 `set()` 中替换。
+ * - `score / index / diagnostics` 是为兼容 ScoreView 等既有组件保留的派生字段，恒为 `session.parsed.load` 中的同一批对象；
+ *   只在 `commitSession`（Open / demo）与 `publishParsedSession`（解析被接受）中重算。编辑与 undo / redo 不换快照，
+ *   因此 `parsed.sourceVersion < sourceVersion`（stale）是合法状态：谱面继续显示最后一份快照（§8.2）。
  * - `capabilityTrust`：demo 恒为 `none`；明确激活成功后为 `trusted`；观察到吊销信号后为 `unverified`（只降级，不升级）。
- *   它是适配层事实，不进入 `DocumentSession`，也不是授权证明——授权始终由 main 校验 capability 与 documentId。
- * - `open` 只是 Open 状态机的展示视图（阶段与提示），事务本身在 `editor/openController.ts`。
+ * - `open` 与 `editor` 只是展示视图（阶段与提示），不参与任何判断。
  * - `zoom` 等纯 UI 状态独立于会话，不参与 dirty。
  * - 格式层只经 renderer-safe parse façade（`src/formats/jcxParse.ts`）。
  */
@@ -15,14 +16,24 @@ import { create } from 'zustand';
 
 import type { DomainIndex, Score } from '../../domain';
 import type { JcxDiagnostic, LoadResult } from '../../formats/jcxParse';
+import type { HistoryState } from '../../editor/history/types';
+import type { EditorSelection } from '../../editor/selection/types';
 import type { DocumentSession } from '../../editor/session/types';
 import { SCORE_VIEW_METRICS } from '../../notation/layout/metrics';
+import { initialEditorCore } from './editor/editorTransitions';
+import type { EditorCore, EditorNotice } from './editor/editorTransitions';
 import { createDemoSession } from './editor/sessionFactory';
 import type { CapabilityTrust, OpenNotice, OpenPhase } from './editor/openTransaction';
 
 export interface OpenView {
   readonly phase: OpenPhase;
   readonly notice: OpenNotice | null;
+}
+
+/** 编辑器的展示视图（T3a 中尚无界面呈现，状态栏在 T3b）。 */
+export interface EditorView {
+  readonly composing: boolean;
+  readonly notice: EditorNotice | null;
 }
 
 /** 由会话的解析快照派生、兼容既有组件的三个字段。 */
@@ -34,8 +45,11 @@ interface DerivedDocument {
 
 interface MuseAppState extends DerivedDocument {
   readonly session: DocumentSession;
+  readonly history: HistoryState;
+  readonly selection: EditorSelection;
   readonly capabilityTrust: CapabilityTrust;
   readonly open: OpenView;
+  readonly editor: EditorView;
   /** 谱面缩放比例（T6.4，D6：只影响 renderer 层像素换算，不改任何 layout 数值）。 */
   readonly zoom: number;
   /** 设置缩放比例，clamp 到 `SCORE_VIEW_METRICS.zoomMin/zoomMax`。 */
@@ -60,14 +74,16 @@ function clampZoom(zoom: number): number {
 }
 
 const IDLE_VIEW: OpenView = { phase: 'idle', notice: null };
+const IDLE_EDITOR: EditorView = { composing: false, notice: null };
 
 export const useMuseAppStore = create<MuseAppState>((set) => {
-  const session = createDemoSession();
+  const core = initialEditorCore(createDemoSession());
   return {
-    session,
+    ...core,
     capabilityTrust: 'none',
-    ...derive(session),
+    ...derive(core.session),
     open: IDLE_VIEW,
+    editor: IDLE_EDITOR,
     zoom: 1,
     setZoom(zoom) {
       set({ zoom: clampZoom(zoom) });
@@ -75,10 +91,106 @@ export const useMuseAppStore = create<MuseAppState>((set) => {
   };
 });
 
-/** 提交一个已激活的会话：会话、授权状态与三个派生字段在同一次 `set()` 中替换。 */
+/** 提交一个已激活的会话（Open / demo）：会话、空历史、空选中、授权状态、派生字段与编辑视图在同一次 `set()` 中替换。 */
 export function commitSession(session: DocumentSession, capabilityTrust: CapabilityTrust): void {
   const derived = derive(session);
-  useMuseAppStore.setState({ session, capabilityTrust, ...derived });
+  const core = initialEditorCore(session);
+  useMuseAppStore.setState({ session, history: core.history, selection: core.selection, capabilityTrust, ...derived, editor: IDLE_EDITOR });
+}
+
+export type StoreWriteRejection =
+  | 'base-changed'
+  | 'document-mismatch'
+  | 'version-regressed'
+  | 'not-derived-from-current'
+  | 'snapshot-replaced'
+  | 'history-unbound'
+  | 'selection-not-current'
+  | 'session-changed'
+  | 'snapshot-not-current';
+
+export type StoreWriteResult = { readonly ok: true } | { readonly ok: false; readonly reason: StoreWriteRejection };
+
+const historyBound = (history: HistoryState, session: DocumentSession): boolean =>
+  history.documentId === session.documentId && history.headVersion === session.sourceVersion && history.headSource === session.source;
+
+/**
+ * 写入前的检查。先是对编辑基线的 CAS（r3a 复核 M-1）：调用方计算所依据的会话、历史、选中必须**就是**当前 store 中的
+ * 同一批对象，否则（基线已被别的写入取代，例如旧分支上再编辑得到的结果版本恰好 +1）一律拒绝。然后是绑定检查：同一文档；
+ * 结果由基线一步得到——要么就是基线会话对象（无变化事务），要么版本恰好 +1（编辑、undo、redo 只加 1）；不换快照；
+ * 历史与选中都属于新会话。
+ */
+function editorStepProblem(current: EditorCore, core: EditorCore, base: EditorCore): StoreWriteRejection | null {
+  if (base.session !== current.session || base.history !== current.history || base.selection !== current.selection) return 'base-changed';
+  return bindingProblem(current.session, core);
+}
+
+function bindingProblem(current: DocumentSession, core: EditorCore): StoreWriteRejection | null {
+  if (core.session.documentId !== current.documentId) return 'document-mismatch';
+  if (core.session.sourceVersion < current.sourceVersion) return 'version-regressed';
+  if (core.session !== current && core.session.sourceVersion !== current.sourceVersion + 1) return 'not-derived-from-current';
+  if (core.session.parsed !== current.parsed) return 'snapshot-replaced';
+  if (!historyBound(core.history, core.session)) return 'history-unbound';
+  if (core.selection.basisVersion !== core.session.sourceVersion) return 'selection-not-current';
+  return null;
+}
+
+/**
+ * 编辑、undo / redo、无变化事务的结果：会话、历史、选中在同一次 `set()` 中替换。派生字段不变（编辑不换快照），
+ * 因此只订阅 `score / index` 的组件不重渲染。`base` 是调用方计算 `core` 时读取的状态（CAS 的期望值）。
+ * 检查失败时不写入，由调用方按编辑器不变量错误处理。
+ */
+export function applyEditorStep(core: EditorCore, base: EditorCore): StoreWriteResult {
+  const { session, history, selection } = useMuseAppStore.getState();
+  const problem = editorStepProblem({ session, history, selection }, core, base);
+  if (problem !== null) return { ok: false, reason: problem };
+  useMuseAppStore.setState({ session: core.session, history: core.history, selection: core.selection });
+  return { ok: true };
+}
+
+/** 除 `parsed` 外，两个会话的每个字段都是同一个值（引用相等）。 */
+const sameExceptParsed = (a: DocumentSession, b: DocumentSession): boolean =>
+  a.source === b.source &&
+  a.sourceVersion === b.sourceVersion &&
+  a.projection === b.projection &&
+  a.saved === b.saved &&
+  a.file === b.file &&
+  a.writeEncoding === b.writeEncoding &&
+  a.byteBom === b.byteBom &&
+  a.protectedLeadingFeff === b.protectedLeadingFeff &&
+  a.encodingRoundTrip === b.encodingRoundTrip &&
+  a.fileOp === b.fileOp;
+
+/**
+ * 解析被接受（`acceptParsedSnapshot` 之后）：只换会话对象（新的 `parsed`）并重算派生字段。必须与当前会话是同一文档，
+ * 除 `parsed` 外其余字段都与当前会话逐一相同（不会把调用方捕获的旧 `saved` / `file` 写回），且快照属于该版本；
+ * 历史与选中不变（它们只以版本与 source 绑定）。
+ */
+export function publishParsedSession(session: DocumentSession): StoreWriteResult {
+  const current = useMuseAppStore.getState().session;
+  if (session.documentId !== current.documentId) return { ok: false, reason: 'document-mismatch' };
+  if (!sameExceptParsed(session, current)) return { ok: false, reason: 'session-changed' };
+  const { parsed } = session;
+  if (parsed === null || parsed.documentId !== session.documentId || parsed.sourceVersion !== session.sourceVersion) {
+    return { ok: false, reason: 'snapshot-not-current' };
+  }
+  useMuseAppStore.setState({ session, ...derive(session) });
+  return { ok: true };
+}
+
+/** 非编辑的选区变化：会话必须是当前同一个对象，只替换选中与（结束合并组后的）历史。 */
+export function setEditorSelection(core: EditorCore): StoreWriteResult {
+  const current = useMuseAppStore.getState().session;
+  if (core.session !== current) return { ok: false, reason: 'session-changed' };
+  if (!historyBound(core.history, core.session)) return { ok: false, reason: 'history-unbound' };
+  if (core.selection.basisVersion !== core.session.sourceVersion) return { ok: false, reason: 'selection-not-current' };
+  useMuseAppStore.setState({ history: core.history, selection: core.selection });
+  return { ok: true };
+}
+
+/** 编辑器展示视图（组字状态、轻提示）；不触碰会话。 */
+export function publishEditorView(view: Partial<EditorView>): void {
+  useMuseAppStore.setState((state) => ({ editor: { ...state.editor, ...view } }));
 }
 
 /** 观察到吊销信号：有文件的会话降为 unverified；demo（none）与已降级的会话不变。 */
@@ -90,16 +202,34 @@ export function publishOpenView(view: OpenView): void {
   useMuseAppStore.setState({ open: view });
 }
 
-/** 一致性检查（测试与诊断）：派生字段必须是当前会话解析快照中的同一批对象。 */
-export function storeConsistencyProblems(state: Pick<MuseAppState, 'session' | 'score' | 'index' | 'diagnostics' | 'capabilityTrust'>): string[] {
+type ConsistencyInput = Pick<MuseAppState, 'session' | 'history' | 'selection' | 'score' | 'index' | 'diagnostics' | 'capabilityTrust'>;
+
+const T3_SELECTION_KINDS: ReadonlySet<EditorSelection['kind']> = new Set(['none', 'source']);
+
+/**
+ * 一致性检查（测试与诊断）。合法：`parsed.sourceVersion < sourceVersion`（stale，谱面保留旧快照）。
+ * 错误：没有快照、快照属于别的文档或来自未来版本、派生字段不是快照中的同一批对象、历史与会话失去绑定、
+ * 合并组状态自相矛盾、选中不属于当前版本或越界、T3 中出现 none / source 以外的选中、投影不是由当前 source 构建、
+ * 授权状态与文件引用不符。
+ */
+export function storeConsistencyProblems(state: ConsistencyInput): string[] {
   const problems: string[] = [];
-  const { parsed } = state.session;
+  const { session, history, selection } = state;
+  const { parsed } = session;
   if (parsed === null) return ['session has no parsed snapshot'];
-  if (parsed.documentId !== state.session.documentId) problems.push('parsed snapshot belongs to another document');
-  if (parsed.sourceVersion !== state.session.sourceVersion) problems.push('parsed snapshot is stale');
+  if (parsed.documentId !== session.documentId) problems.push('parsed snapshot belongs to another document');
+  if (parsed.sourceVersion > session.sourceVersion) problems.push('parsed snapshot is from a future version');
   if (state.score !== parsed.load.score) problems.push('score is not session.parsed.load.score');
   if (state.index !== parsed.load.index) problems.push('index is not session.parsed.load.index');
   if (state.diagnostics !== parsed.load.diagnostics) problems.push('diagnostics is not session.parsed.load.diagnostics');
-  if ((state.session.file === null) !== (state.capabilityTrust === 'none')) problems.push('capability trust does not match the file reference');
+  if (history.documentId !== session.documentId) problems.push('history belongs to another document');
+  else if (!historyBound(history, session)) problems.push('history is out of sync with the session');
+  if (history.open !== null && (history.redo !== null || history.undo === null)) problems.push('history coalescing group is inconsistent');
+  if (selection.basisVersion !== session.sourceVersion) problems.push('selection is not on the current version');
+  const fits = selection.ranges.every((range) => range.start >= 0 && range.start <= range.end && range.end <= session.source.length);
+  if (!fits) problems.push('selection is out of range');
+  if (!T3_SELECTION_KINDS.has(selection.kind)) problems.push('selection kind is not allowed in T3');
+  if (session.projection.source !== session.source) problems.push('projection is not built from the session source');
+  if ((session.file === null) !== (state.capabilityTrust === 'none')) problems.push('capability trust does not match the file reference');
   return problems;
 }
