@@ -136,8 +136,21 @@ describe('M3 T1c-2 架构守卫 —— 会话只由 commitSession 写入', () =>
   it('store.ts：写入会话 / 派生字段的 setState 只在 commitSession 中', () => {
     const writes = storeWrites(read(STORE));
     const sessionWriters = writes.filter((write) => SESSION_FIELDS.test(write.fields)).map((write) => write.fn);
-    expect(sessionWriters).toEqual(['commitSession']);
-    expect(writes.map((write) => write.fn).sort()).toEqual(['commitSession', 'downgradeCapabilityTrust', 'publishOpenView', '<module>'].sort());
+    // M3 T3a（用户裁决 Q1 / S1，T3 Preflight r3 §10.1 G3）：编辑 / undo / redo 与解析发布各有一个原子写入函数；
+    // 每个函数写入的字段集合由 architecture.m3t3 精确钉住。
+    expect(sessionWriters).toEqual(['commitSession', 'applyEditorStep', 'publishParsedSession']);
+    expect(writes.map((write) => write.fn).sort()).toEqual(
+      [
+        'commitSession',
+        'applyEditorStep',
+        'publishParsedSession',
+        'setEditorSelection',
+        'publishEditorView',
+        'downgradeCapabilityTrust',
+        'publishOpenView',
+        '<module>',
+      ].sort(),
+    );
   });
 
   it('renderer 其它文件不直接 setState 或 getState().set…', () => {
