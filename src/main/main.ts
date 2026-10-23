@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu } from 'electron';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
@@ -6,6 +6,8 @@ import { createNodeReadOnlyFileSystem } from './document/fileSystemPort';
 import { resolvePageEntry } from './ipc/pageIdentity';
 import { registerOpenIpc } from './ipc/registerOpenIpc';
 import { createOpenPathChooser, wireOpenIpcWindow } from './ipc/wireOpenIpcWindow';
+import { installAppMenu } from './menu/appMenu';
+import { createEditorCommandRouter, sendMenuCommand, wireEditorWindow } from './menu/wireEditorWindow';
 import { matchesPageIdentity } from './open/ipcValidation';
 import { wireWindowSecurity } from './security/windowSecurity';
 
@@ -31,6 +33,15 @@ const openIpc = registerOpenIpc({
   },
 });
 
+/** M3 T3b：Undo / Redo / Reparse / Open 的唯一派发路由（菜单回调与每个窗口的按键拦截共用）。 */
+const editorCommands = createEditorCommandRouter<BrowserWindow>({
+  platform: process.platform,
+  send: sendMenuCommand,
+  nextTick: (task) => {
+    setImmediate(task);
+  },
+});
+
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
     width: 1440,
@@ -53,6 +64,8 @@ function createWindow(): void {
   });
   // Open 协议的窗口事件接线与真实窗口 smoke 共用同一份实现（M3 T1b-2a′）。
   wireOpenIpcWindow(openIpc, mainWindow);
+  // 编辑命令接线（M3 T3b）：按键拦截与菜单路由登记，与真实窗口 smoke 共用同一份实现。
+  wireEditorWindow(editorCommands, mainWindow);
   const contents = mainWindow.webContents;
   // 诊断：实际页面地址是否与配置的可信身份一致。只记录，不改变任何信任判断。
   contents.on('did-finish-load', () => {
@@ -65,6 +78,18 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  // 替换默认菜单（无 Reload / 原生 Undo role）；只经 installAppMenu 安装。
+  installAppMenu({
+    platform: process.platform,
+    devBuild: !app.isPackaged,
+    onCommand: (command, window, event) => {
+      editorCommands.handleMenuCommand(command, window, event);
+    },
+    buildFromTemplate: (template) => Menu.buildFromTemplate(template),
+    setApplicationMenu: (menu) => {
+      Menu.setApplicationMenu(menu);
+    },
+  });
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

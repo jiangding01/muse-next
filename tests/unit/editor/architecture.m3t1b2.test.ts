@@ -237,8 +237,10 @@ describe('M3 T1b-2a 架构守卫 —— preload 白名单', () => {
   it('AST：每个方法体恰好一个调用，且是对同名通道的 ipcRenderer.invoke；票据方法只转发两个字段', () => {
     const calls = preloadMethodCalls(parse(PRELOAD, read(PRELOAD)));
     // M3 T1c-2：旧 openScore 已删除，白名单收敛为三个方法。
-    expect([...calls.keys()].sort()).toEqual(['activateDocument', 'openDocument', 'rejectDocument']);
-    for (const [method, list] of calls) {
+    // M3 T3b（用户裁决 Q1 / S1，T3 Preflight r3 §10.1 G5）：另有 onMenuCommand（订阅，不是 invoke），其方法体调用集合由
+    // architecture.m3t3 精确钉住；下面「恰一个 invoke 调用」只对三个 invoke 方法断言。
+    expect([...calls.keys()].sort()).toEqual(['activateDocument', 'onMenuCommand', 'openDocument', 'rejectDocument']);
+    for (const [method, list] of [...calls].filter(([name]) => name !== 'onMenuCommand')) {
       expect(list).toHaveLength(1);
       expect(list[0]?.callee).toBe('ipcRenderer.invoke');
       expect(list[0]?.args[0]).toBe(`IPC.${method}`);
@@ -260,7 +262,11 @@ describe('M3 T1b-2a 架构守卫 —— preload 白名单', () => {
   });
 
   it('不使用 send / on / sendSync / postMessage / 动态通道', () => {
-    expect(/ipcRenderer\.(send|sendSync|sendToHost|on|once|postMessage|addListener)\b/.test(source)).toBe(false);
+    // M3 T3b（G5）：除 IPC.menuCommand 上恰一处 on 与一处 removeListener 外，不使用任何其它收发方法。
+    const listeners = [...source.matchAll(/ipcRenderer\.(on|removeListener)\(([^,]*),/g)].map((m) => `${m[1] ?? ''}:${(m[2] ?? '').trim()}`);
+    expect(listeners.sort()).toEqual(['on:IPC.menuCommand', 'removeListener:IPC.menuCommand']);
+    expect(/ipcRenderer\.(send|sendSync|sendToHost|once|postMessage|addListener|removeAllListeners|off)\b/.test(source)).toBe(false);
+    expect(count(source, /ipcRenderer\.(on|removeListener)\b/g)).toBe(2);
     expect(/ipcRenderer\.invoke\(\s*[^I\s]/.test(source)).toBe(false);
   });
 
@@ -281,8 +287,10 @@ describe('M3 T1b-2a 架构守卫 —— MuseDesktopApi 不接受路径', () => {
   it('方法集合固定，且没有任何字符串参数', () => {
     if (api === undefined || !isInterfaceDeclaration(api)) throw new Error('MuseDesktopApi not found');
     const methods = api.members.filter(isMethodSignature);
+    // M3 T3b（G6）：增加订阅方法 onMenuCommand（参数为函数，签名由 architecture.m3t3 钉住）。
     expect(methods.map((m) => (isIdentifier(m.name) ? m.name.text : '?')).sort()).toEqual([
       'activateDocument',
+      'onMenuCommand',
       'openDocument',
       'rejectDocument',
     ]);

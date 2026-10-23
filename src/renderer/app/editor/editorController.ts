@@ -20,8 +20,11 @@ import { museParseController } from './parseController';
 import type { FlushOutcome } from './parseController';
 import type { FlushReason } from './parseSchedule';
 
-/** 派发来源：键盘拦截（main）、菜单点击、菜单加速键兜底、beforeinput（T3b / T3c 接入）。 */
-export type HistoryDispatchSource = 'key-intercept' | 'menu-click' | 'menu-accelerator' | 'beforeinput';
+/**
+ * 派发来源：键盘拦截（main）、菜单点击、菜单加速键兜底（这三个经 IPC，即 `MenuCommandSource`）；beforeinput（T3c 接入）；
+ * 状态栏「重新解析」按钮（M3 T3b，用户裁决 Q-B1）。后两个只在 renderer 内部，不经过 IPC。
+ */
+export type HistoryDispatchSource = 'key-intercept' | 'menu-click' | 'menu-accelerator' | 'beforeinput' | 'status-bar';
 
 export type ImeView = 'idle' | 'composing' | 'discarded' | 'settled';
 

@@ -4,6 +4,7 @@ import type {
   OpenDocumentReply,
   RejectDocumentReply,
 } from './activationContracts';
+import type { MenuCommandMessage } from './menuContracts';
 
 export const IPC = {
   /** M3 T1b：main 原生对话框打开文档，签发 pending 候选能力（`docs/M3_EDITOR_CORE_PLAN.md` §13.4）。 */
@@ -12,6 +13,8 @@ export const IPC = {
   activateDocument: 'muse:activate-document',
   /** M3 T1b：renderer 放弃候选或已激活的能力。 */
   rejectDocument: 'muse:reject-document',
+  /** M3 T3b：main → renderer 的菜单 / 快捷键命令（只发给所属窗口；preload 校验后转发）。 */
+  menuCommand: 'muse:menu-command',
 } as const;
 
 /**
@@ -22,4 +25,6 @@ export interface MuseDesktopApi {
   openDocument(): Promise<OpenDocumentReply>;
   activateDocument(ticket: DocumentActivationTicket): Promise<ActivateDocumentReply>;
   rejectDocument(ticket: DocumentActivationTicket): Promise<RejectDocumentReply>;
+  /** M3 T3b：订阅菜单命令；listener 只收到校验通过的 `{ command, source }`，不接触 IPC event。返回注销函数。 */
+  onMenuCommand(listener: (message: MenuCommandMessage) => void): () => void;
 }

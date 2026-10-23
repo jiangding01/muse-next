@@ -83,7 +83,8 @@ describe('electronIpcSmokeSummary —— 清单', () => {
     expect(expectedModes('darwin')).not.toContain('risk.linux-force-crash-stall');
     expect(expectedModes('win32')).not.toContain('risk.linux-force-crash-stall');
     const count = (platform: SmokePlatform): number => SMOKE_CASES.filter((s) => s.expect[platform] !== undefined).length;
-    expect([count('darwin'), count('win32'), count('linux')]).toEqual([58, 61, 59]);
+    // M3 T3b：新增 5 个 ui.* 菜单 / 按键用例（三平台 pass；用户授权的最小修改）。
+    expect([count('darwin'), count('win32'), count('linux')]).toEqual([63, 66, 64]);
   });
 
   it('M3 T1c-1 安全用例：子 frame 风险已是 pass 硬门；对照在 matrix；prod.* 各占独立子进程且三平台 pass；全清单只剩已裁决的 observe', () => {
@@ -110,6 +111,12 @@ describe('electronIpcSmokeSummary —— 清单', () => {
       'ui.activation-held-retry',
       'ui.activation-unresolved',
       'ui.win-unc',
+      // M3 T3b：菜单、快捷键与命令桥。
+      'ui.menu-template',
+      'ui.menu-click-dispatch',
+      'ui.menu-routing',
+      'ui.key-intercept',
+      'ui.reload-keys-blocked',
     ]);
     for (const spec of ui) {
       expect(spec.mode).toBe('isolated');

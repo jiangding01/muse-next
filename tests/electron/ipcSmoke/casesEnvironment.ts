@@ -34,8 +34,8 @@ const envSandbox: SmokeCase = {
 /** 只保留 URL 最后两段（不在日志中输出本机临时目录的绝对路径）。 */
 const tail = (url: string): string => url.split('/').slice(-2).join('/');
 
-/** M3 T1c-2 起 M3 前的过渡 Open 通道已删除，桥只剩三条新通道。 */
-const API_METHODS = ['activateDocument', 'openDocument', 'rejectDocument'];
+/** M3 T1c-2 起 M3 前的过渡 Open 通道已删除，桥只剩三条新通道；M3 T3b 增加菜单命令订阅 `onMenuCommand`（用户授权的最小修改）。 */
+const API_METHODS = ['activateDocument', 'onMenuCommand', 'openDocument', 'rejectDocument'];
 
 const bridgeSurface: SmokeCase = {
   id: 'bridge.surface',
@@ -48,7 +48,7 @@ const bridgeSurface: SmokeCase = {
     if (!result.ok || !isRecord(result.value)) return verdict([`page call failed: ${result.ok ? 'malformed' : result.error}`]);
     const value = result.value;
     expectEqual(problems, 'museDesktop keys', value.keys, API_METHODS);
-    expectEqual(problems, 'method types', value.types, ['function', 'function', 'function']);
+    expectEqual(problems, 'method types', value.types, ['function', 'function', 'function', 'function']);
     expectEqual(problems, 'typeof require', value.require, 'undefined');
     expectEqual(problems, 'typeof process', value.process, 'undefined');
     expectEqual(problems, 'typeof ipcRenderer', value.ipc, 'undefined');
