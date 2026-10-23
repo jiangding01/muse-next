@@ -80,7 +80,18 @@ Reparse 只经一个编辑命令入口；Open 在文档 dirty 或组字时拒绝
 用例（macOS 8662 passed，Windows / Ubuntu 8661 passed + 1 项既有 skip），renderer bundle、codec、fixture 105/105、真实窗口 IPC smoke 与 T2 一致；
 外部独立代码复核（GPT）r3b 最终 PASS（0 CRITICAL / HIGH / MEDIUM）。**源码面板在所有平台仍为只读，界面中的撤销 / 重做入口属 T3b，编辑功能尚未开放。**
 T3b / T3c 尚未开始，T3 整体未封板，Q8（IME 尾随事件规则）与 Q9（macOS 优先及限定范围 Seal）待裁决；T4–T9 尚未开始，整个 M3 未封板，产品正式发布
-未批准（T3–T5 只允许开发构建）。项目当前暂停，恢复时从 T3b 前置验证 SP-KEY-P（macOS 真实键盘）开始，待用户授权。
+未批准（T3–T5 只允许开发构建）。（以上为 T3a 合并时的状态。）
+
+**M3 T3b 菜单命令桥、快捷键与编辑状态栏：实现与三平台 CI 通过，已合并 main（2026-10-23；功能提交 `6bf8faf`，CI run 39924238908；PR #2 合并为 `dfd3fcf`，
+main CI run 39928586564，三平台 success）**：先完成 SP-KEY-P（macOS 真实窗口按键 spike）。Electron 默认菜单替换为产品菜单（无 Reload / Force Reload，
+Undo / Redo 无原生 role，macOS Window 菜单含 Close）；Undo / Redo 只有一条派发路径——main 拦截快捷键（按字符口径、只 keyDown、长按逐次派发、非 macOS
+另有 Ctrl+Y），菜单点击照常派发，菜单加速键只在未被拦截时兜底，DevTools 有焦点时 Undo / Redo / Reparse / Open 的加速键都不派发；Cmd/Ctrl+R = Reparse，
+F5 / Shift+F5 / Ctrl+F5 / Shift+Cmd/Ctrl+R 不刷新页面；命令经白名单校验的 preload 订阅与模块级命令桥交给编辑 / Open 控制器，只发给所属窗口；新增编辑
+状态栏（源码已修改 / 待解析 / 保存中三态、版本、提示与「重新解析」按钮），dirty 时禁用 Open。CI 三平台：176 个测试文件、8782 个用例（Windows / Ubuntu
+8781 passed + 1 项既有 skip），renderer bundle（279 模块）、codec、fixture 105/105、真实窗口 IPC smoke（新增 5 个菜单 / 按键用例）全部通过；变异 36/36
+杀死；独立代码审查无 CRITICAL，GPT 复核 Conditional PASS。证据等级：macOS 实机按键由 Claude 经 Computer Use 注入系统级按键（长按为用户物理键盘），CI 的
+菜单 / 按键用例是菜单项回调与合成按键，**都不是原生交互**。**源码面板在所有平台仍为只读，编辑尚未开放。** T3c 尚未开始，T3 整体未封板，Q8 / Q9 待裁决；
+T4–T9 尚未开始，整个 M3 未封板，产品正式发布未批准。项目当前暂停，T3c 只读 preflight 待用户授权。
 
 ### Added
 
@@ -161,6 +172,10 @@ T3b / T3c 尚未开始，T3 整体未封板，Q8（IME 尾随事件规则）与 
   `src/renderer/app/fatalError.ts` 与开发期整页刷新插件 `vite.renderer.reload.ts`；store 新增原子写入 `applyEditorStep(core, base)`（CAS）/
   `publishParsedSession` / `setEditorSelection`；Open 状态机新增 dirty 字段与 `replacement-refused` / `controller-failed` / `commit-failed`；新增架构守卫
   `architecture.m3t3`（M3 T3a）。
+- M3 T3b 菜单与命令桥（源码面板仍只读）：`src/main/menu/{appMenu,wireEditorWindow}.ts`（菜单唯一安装函数、按键拦截与菜单派发路由）、
+  `src/shared/menuContracts.ts`（`muse:menu-command` 消息契约与校验）、preload `onMenuCommand`、`src/renderer/app/editor/{menuBridge,editorStatus}.ts`、
+  `src/renderer/components/EditorStatusBar.tsx`；真实窗口 smoke 新增 `ui.menu-template` / `ui.menu-click-dispatch` / `ui.menu-routing` / `ui.key-intercept` /
+  `ui.reload-keys-blocked`；`architecture.m3t3` 新增 T3b 守卫（M3 T3b）。
 
 ### Changed
 
@@ -283,6 +298,12 @@ M3 T3a 的限制与遗留技术债：
 - Open 的「已提交」判据依赖每次 Open 的 documentId 唯一，扩展重载 / 恢复 / 保存协议时须复核。
 - beforeunload 依赖页面已有用户激活，对无用户激活的页面与主进程强制退出不提供数据保护；关窗 / 退出路径待 T3c 实测。
 - `tests/unit/app/openController.test.ts` 544 行，拆分属可维护性债务。
+
+M3 T3b 的限制与遗留风险：
+
+- Windows / Linux 真实 GUI、真实键盘与 IME 未验收（G4 硬门）；Win / Linux 非拉丁布局下 Ctrl+Z 可能不派发（G4 观察项）。
+- macOS 实机 Close / Cmd+W 未完整验证；DevTools 自身的 Cmd+R 会重载页面，只靠阶段性 beforeunload 保护。
+- `openController.ts` 头注释关于 `window.museDesktop` 唯一使用者的说法已过时；`casesEditing.ts` 超过 350 行约定，T3c 追加用例时拆分。
 
 ### Quality
 

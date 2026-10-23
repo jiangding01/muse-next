@@ -31,8 +31,10 @@ Windows / Ubuntu 以三平台 CI 为阶段依据（**这两个平台的真实 GU
 CI 不得永久替代）；**T1c 与 M3 T1 整体 ✅ SEALED**（2026-10-12 docs-only seal `05359f0`，CI run 38233013156 三平台 success）。
 **M3 T2 History Core ✅ SEALED**（2026-10-14；代码 `1b2a1cf`，CI run 38559027099；docs-only seal `5363d38`，CI run 38562968395 三平台 success）：纯撤销 / 重做核心。
 **M3 T3a 编辑状态、历史接线与解析调度：实现与 CI Gate PASS，已合并 main**（2026-10-21；`ffd37c9` / CI run 39581666437，PR #1 合并为 `087dc36` / CI run 39585682584，
-三平台 success）：store 接线、解析调度、Open 安全防线与 beforeunload 已完成，但**源码面板在所有平台仍为只读，产品界面中的撤销 / 重做目前不可用**（T3b / T3c）。
-M3 T3b / T3c 尚未开始，T3 整体未封板；T4–T9 尚未开始，整个 M3 未封板，产品正式发布未批准。详见 §5「路线图」。
+三平台 success）：store 接线、解析调度、Open 安全防线与 beforeunload 已完成。
+**M3 T3b 菜单命令桥、快捷键与编辑状态栏：实现与三平台 CI 通过，已合并 main**（2026-10-23；`6bf8faf` / CI run 39924238908，PR #2 合并为 `dfd3fcf` /
+CI run 39928586564，三平台 success）：产品菜单、撤销 / 重做唯一派发、reload 键拦截、命令桥与编辑状态栏已接通，但**源码面板在所有平台仍为只读，编辑尚未开放**（T3c）。
+M3 T3c 尚未开始，T3 整体未封板；T4–T9 尚未开始，整个 M3 未封板，产品正式发布未批准。详见 §5「路线图」。
 
 ## 2. 核心发现与设计原则
 
@@ -242,7 +244,11 @@ projectionEquals(before, after); // true 表示语义往返无损
   History 与选中成对存放并只经原子写入替换（编辑写入对计算基线做 CAS）；500 ms 解析调度、显式 Reparse 强制解析、组字期间不解析；undo / redo /
   Reparse 只经一个编辑命令入口；Open 在 dirty 或组字时拒绝、控制器异常 fail closed；beforeunload 在 dirty 或组字时阻止关闭 / 刷新；开发期模块更新改为
   整页刷新。**源码面板在所有平台仍为只读，界面撤销 / 重做入口属 T3b。** 遗留技术债见 `HANDOFF.md` §30.1「M3 T3a 实际状态」。
-  **T3b / T3c 尚未开始，T3 整体未封板，Q8 / Q9 待裁决；T4–T9 尚未开始。项目当前暂停，恢复时从 T3b 前置验证 SP-KEY-P 开始，待用户授权。**
+  **T3b 实现与三平台 CI 通过，已合并 main**（2026-10-23，`6bf8faf` / CI run 39924238908，PR #2 合并为 `dfd3fcf` / main CI run 39928586564，三平台 success；
+  GPT 复核 Conditional PASS）：替换 Electron 默认菜单（无 Reload、Undo / Redo 无原生 role）；撤销 / 重做只有一条派发路径（main 拦截快捷键，菜单点击照常，
+  加速键只在未被拦截时兜底，DevTools 有焦点时加速键不派发）；Cmd/Ctrl+R = Reparse，F5 等刷新键不刷新页面；白名单校验的命令桥；编辑状态栏。macOS 实机
+  按键由 Claude 经 Computer Use 验证，CI 用例为菜单项回调与合成按键（都不是原生交互）。**源码面板仍为只读。** 遗留风险见 `HANDOFF.md` §30.1「M3 T3b 实际状态」。
+  **T3c 尚未开始，T3 整体未封板，Q8 / Q9 待裁决；T4–T9 尚未开始。项目当前暂停，T3c 只读 preflight 待用户授权。**
 - **M4 及以后 — Playback / Import-Export / Layout**：播放、MIDI 导入导出、页面布局
   与打包分发。以 `HANDOFF.md` §61 的规划为准，本文档不重复展开、不提前承诺细节。
 
