@@ -179,7 +179,8 @@ describe('M3 T1c-1 架构守卫 —— smoke 复用同一份安全接线', () =>
     // M3 T1c-2 起 `ui.*`（生产 UI 用例）同样指向生产 renderer；`ui.win-unc` 经 UNC 路径。
     expect(runner).toContain('const production = mode.startsWith(PRODUCTION_MODE_PREFIX) || mode.startsWith(UI_MODE_PREFIX);');
     expect(runner).toContain("mode === 'ui.win-unc' ? uncPath(productionPage) : production ? productionPage : local");
-    expect(smoke('smokeMain.entry.ts')).toContain('const productionRenderer = [...PRODUCTION_CASES, ...UI_CASES].some((item) => item.id === config.mode);');
+    // M3 T3b（G11）：菜单 / 按键用例同样运行在生产 renderer 上。
+    expect(smoke('smokeMain.entry.ts')).toContain('const productionRenderer = [...PRODUCTION_CASES, ...UI_CASES, ...EDITING_CASES].some((item) => item.id === config.mode);');
   });
 
   it('威胁对照与生产 renderer 用例都真正注册进 smoke（不能只留在清单里）', () => {
@@ -188,7 +189,7 @@ describe('M3 T1c-1 架构守卫 —— smoke 复用同一份安全接线', () =>
     expect(security).toContain('[prodRendererLoads, prodPopupDenied, prodSubframeBlocked, prodInlineScriptBlocked, prodNavigationBlocked]');
     const entry = smoke('smokeMain.entry.ts');
     expect(entry).toContain('...SENDER_CASES, ...SECURITY_MATRIX_CASES, ...DIALOG_CASES]');
-    expect(entry).toContain('const isolated = [...ISOLATED_CASES, ...PRODUCTION_CASES, ...UI_CASES].find((item) => item.id === config.mode);');
+    expect(entry).toContain('const isolated = [...ISOLATED_CASES, ...PRODUCTION_CASES, ...UI_CASES, ...EDITING_CASES].find((item) => item.id === config.mode);');
   });
 });
 
@@ -221,6 +222,12 @@ describe('M3 T1c-1 架构守卫 —— 判定不放宽', () => {
       'ui.activation-held-retry',
       'ui.activation-unresolved',
       'ui.win-unc',
+      // M3 T3b：菜单、快捷键与命令桥（全部平台 PASS）。
+      'ui.menu-template',
+      'ui.menu-click-dispatch',
+      'ui.menu-routing',
+      'ui.key-intercept',
+      'ui.reload-keys-blocked',
     ]);
     for (const id of added) expect(SMOKE_CASES.find((spec) => spec.id === id)?.expect).toEqual(id === 'ui.win-unc' ? { win32: 'pass-or-unverified' } : PASS);
   });

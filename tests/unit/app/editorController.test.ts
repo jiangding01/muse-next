@@ -113,6 +113,17 @@ describe('editorController —— Reparse、Open 门控与组字视图', () => {
     expect(controller.lastDispatch()).toEqual({ command: 'reparse', source: 'menu-accelerator' });
   });
 
+  it('状态栏按钮的 Reparse 以 status-bar 来源记录（M3 T3b，用户裁决 Q-B1）；同版本连按两次各 flush 一次、不建历史事务', () => {
+    const { state, controller, flushes } = fixture();
+    const { session, history } = state.core;
+    controller.reparse('status-bar');
+    controller.reparse('status-bar');
+    expect(flushes).toEqual(['reparse', 'reparse']);
+    expect(state.core.session).toBe(session);
+    expect(state.core.history).toBe(history);
+    expect(controller.lastDispatch()).toEqual({ command: 'reparse', source: 'status-bar' });
+  });
+
   it('openGate：dirty 来自 source ≠ saved；composing 只认 composing（discarded / settled 不算）', () => {
     expect(fixture().controller.openGate()).toEqual({ dirty: true, composing: false });
     expect(fixture({ ime: 'composing' }).controller.openGate().composing).toBe(true);

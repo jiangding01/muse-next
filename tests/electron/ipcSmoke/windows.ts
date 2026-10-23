@@ -6,6 +6,7 @@
  *   `contextIsolation: true`、`nodeIntegration: false`。测试专属差异只有显式参数：`subframePreload`（仅 `reject.subframe`，
  *   让 preload 进入子 frame，以证明 main 侧 mainFrame 校验）与 `partition`（仅导航竞态用例，隔离 `protocol.handle`）。
  * - 登记与生命周期事件一律经生产 `wireOpenIpcWindow`；`wire: false` 只用于「未登记窗口」用例。
+ * - 编辑命令（M3 T3b）：每个窗口都经生产 `wireEditorWindow` 登记（与产品 main 同一份实现），不受 `wire` / `security` 影响。
  * - 窗口安全（M3 T1c-1）：默认每个窗口都经生产 `wireWindowSecurity` 接线（与产品 main 同一份实现），在加载页面之前注册。
  *   只有两个测试页用例可以显式关闭它：`off-for-sender-check`（`reject.subframe`，单独观测 main 侧 mainFrame 鉴权）与
  *   `off-for-control`（`security.subframe-control`，威胁对照）。关闭的只是 `wireWindowSecurity`，`wireOpenIpcWindow` 与 main 的
@@ -17,6 +18,8 @@ import { BrowserWindow } from 'electron';
 
 import type { OpenIpcHandle } from '../../../src/main/ipc/registerOpenIpc';
 import { wireOpenIpcWindow } from '../../../src/main/ipc/wireOpenIpcWindow';
+import { wireEditorWindow } from '../../../src/main/menu/wireEditorWindow';
+import type { EditorCommandRouter } from '../../../src/main/menu/wireEditorWindow';
 import type { PageIdentity } from '../../../src/main/open/ipcValidation';
 import { wireWindowSecurity } from '../../../src/main/security/windowSecurity';
 import type { SecurityLog } from './context';
@@ -74,6 +77,8 @@ export interface WindowFactoryDeps {
   readonly security: SecurityLog;
   /** 本子进程的可信页面是否为真实生产 renderer（此时不允许关闭安全接线）。 */
   readonly productionRenderer: boolean;
+  /** 生产的编辑命令路由（M3 T3b）。 */
+  readonly editorCommands: EditorCommandRouter<BrowserWindow>;
 }
 
 export interface WindowFactory {
@@ -137,6 +142,8 @@ export function createWindowFactory(deps: WindowFactoryDeps): WindowFactory {
     const contents = win.webContents;
     if (security === 'production') wireWindowSecurity(contents, deps.identity, (block) => deps.security.record(contents.id, block));
     const ownerId = options.wire === false ? win.webContents.id : wireOpenIpcWindow(deps.openIpc, win);
+    // M3 T3b：与产品 main 相同的编辑命令接线（按键拦截与菜单路由登记），每个窗口无条件一次。
+    wireEditorWindow(deps.editorCommands, win);
     options.onCreated?.(win);
     // 用 WebFrameMain 而不是 webContents.executeJavaScript：后者在主 frame 加载中会排队到加载结束，无法在「导航已开始、
     // 未提交」窗口期内驱动旧文档；前者立即在当前已提交的主 frame 中执行。

@@ -98,6 +98,11 @@ export const SMOKE_CASES: readonly CaseSpec[] = [
   isolated('ui.activation-held-retry', ALL_PASS),
   isolated('ui.activation-unresolved', ALL_PASS),
   isolated('ui.win-unc', { win32: 'pass-or-unverified' }),
+  isolated('ui.menu-template', ALL_PASS),
+  isolated('ui.menu-click-dispatch', ALL_PASS),
+  isolated('ui.menu-routing', ALL_PASS),
+  isolated('ui.key-intercept', ALL_PASS),
+  isolated('ui.reload-keys-blocked', ALL_PASS),
 ];
 
 export const RESULT_PREFIX = 'MUSE_IPC_SMOKE_RESULT ';

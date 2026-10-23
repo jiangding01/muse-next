@@ -114,7 +114,7 @@ const uiOpenCommit: IsolatedCase = {
     problems.push(...sameDocumentProblems(ctx, window, second, 'second open'));
     expectTrue(problems, 'previous capability still authorized after the replacement', !authorized(ctx, window, firstToken));
     const surface = await window.call(`({ bridge: Object.keys(window.museDesktop).sort(), require: typeof window.require, process: typeof window.process })`);
-    expectEqual(problems, 'bridge surface', surface.ok ? surface.value : surface.error, { bridge: ['activateDocument', 'openDocument', 'rejectDocument'], require: 'undefined', process: 'undefined' });
+    expectEqual(problems, 'bridge surface', surface.ok ? surface.value : surface.error, { bridge: ['activateDocument', 'onMenuCommand', 'openDocument', 'rejectDocument'], require: 'undefined', process: 'undefined' }); // M3 T3b：onMenuCommand（用户授权）
     expectEqual(problems, 'no window-security blocks during normal use', ctx.security.events(window.ownerId), []);
     expectEqual(problems, 'unexpected console errors', classifyConsole(consoleEntries, []).unexpected, []);
     return verdict(problems, { first: first?.documentId, second: second?.documentId });

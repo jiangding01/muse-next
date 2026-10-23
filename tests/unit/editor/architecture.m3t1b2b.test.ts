@@ -104,6 +104,8 @@ describe('M3 T1b-2b-1 架构守卫 —— smoke 复用生产实现', () => {
       [
         'casesCapability.ts',
         'casesDialog.ts',
+        // M3 T3b（G8）：菜单 / 按键派发的生产 UI 用例。
+        'casesEditing.ts',
         'casesEnvironment.ts',
         'casesIsolated.ts',
         'casesNavigation.ts',
@@ -260,7 +262,9 @@ describe('M3 T1b-2b-1 架构守卫 —— 产品隔离与 CI', () => {
   it('旧 openScore 已在 M3 T1c-2 删除：IPC 常量恰为三条新通道，preload 与 main 中都没有旧入口', () => {
     const ipc = stripComments(read(join(REPO_ROOT, 'src/shared/ipc.ts')));
     expect(ipc).not.toContain('muse:open-score');
-    expect([...ipc.matchAll(/^\s+(\w+): 'muse:[\w-]+',$/gm)].map((m) => m[1]).sort()).toEqual(['activateDocument', 'openDocument', 'rejectDocument']);
+    // M3 T3b（G7）：另有 main → renderer 的 menuCommand（只在 main 菜单模块发送、只在 preload 接收，由 architecture.m3t3 钉住）。
+    expect([...ipc.matchAll(/^\s+(\w+): 'muse:[\w-]+',$/gm)].map((m) => m[1]).sort()).toEqual(['activateDocument', 'menuCommand', 'openDocument', 'rejectDocument']);
+    expect(ipc).toContain("menuCommand: 'muse:menu-command',");
     expect(stripComments(read(join(REPO_ROOT, 'src/preload/preload.ts')))).not.toContain('openScore');
     const main = stripComments(read(join(REPO_ROOT, 'src/main/main.ts')));
     expect(main).not.toContain('openScore');

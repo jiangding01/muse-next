@@ -12,6 +12,8 @@ import type { BrowserWindow } from 'electron';
 
 import type { PageEntry } from '../../../src/main/ipc/pageIdentity';
 import type { OpenIpcHandle } from '../../../src/main/ipc/registerOpenIpc';
+import type { EditorCommandRouter } from '../../../src/main/menu/wireEditorWindow';
+import type { MenuCommandMessage } from '../../../src/shared/menuContracts';
 import { coordinatorInvariantViolations } from '../../../src/main/open/coordinatorInvariants';
 import type { OwnerMeta } from '../../../src/main/open/openCoordinator';
 import type { WindowSecurityBlock } from '../../../src/main/security/windowSecurity';
@@ -87,6 +89,35 @@ export interface SmokeContext {
   readonly security: SecurityLog;
   /** 激活应答扣留（M3 T1c-2，只在 smoke harness）。 */
   readonly faults: ActivationFaults;
+  /** 生产的编辑命令路由（M3 T3b：每个 smoke 窗口经 `wireEditorWindow` 登记，菜单经 `installAppMenu` 安装）。 */
+  readonly editorCommands: EditorCommandRouter<BrowserWindow>;
+  /** main 侧实际发出的菜单命令（包装生产 `sendMenuCommand` 记录，M3 T3b）。 */
+  readonly menuCommands: MenuCommandLog;
+}
+
+export interface MenuCommandRecord {
+  readonly ownerId: number;
+  readonly message: MenuCommandMessage;
+}
+
+/** main 侧发送记录：只在生产发送函数外层记录，不改变发送本身。 */
+export interface MenuCommandLog {
+  record(ownerId: number, message: MenuCommandMessage): void;
+  all(): readonly MenuCommandRecord[];
+  clear(): void;
+}
+
+export function createMenuCommandLog(): MenuCommandLog {
+  const records: MenuCommandRecord[] = [];
+  return {
+    record: (ownerId, message) => {
+      records.push({ ownerId, message: { command: message.command, source: message.source } });
+    },
+    all: () => [...records],
+    clear: () => {
+      records.length = 0;
+    },
+  };
 }
 
 /** 一次拦截及其发生时该窗口的页面代次（用于判断 `did-start-navigation` 是否先于拦截发生）。 */

@@ -8,6 +8,10 @@
  * 3. T3a 只产生 `none` / `source` 两种选中。
  * 4. `replacementPending` 只由 Open 控制器写入；beforeunload 只在模块级阻止器中注册，且入口在 createRoot 之前安装并传入根错误回调。
  * 5. 开发期整页刷新插件：renderer 配置中紧随 CSP 插件、只在 serve 生效，插件文件只有 vite 的类型依赖。
+ * 6. M3 T3b：preload `onMenuCommand` 方法体调用集合精确；`IPC.menuCommand` 只在 main 菜单模块发送、只在 preload 接收；
+ *    menuBridge 只订阅、在 createRoot 之前安装一次；状态栏纯模块与组件的派发集合；`src/main/menu/**` 不 import electron；
+ *    菜单只经 installAppMenu 安装、无危险 role；main 与 smoke 的 `new BrowserWindow` 与 `wireEditorWindow` 一一对应；
+ *    `src/main/**` 无写盘 API。
  * 每条附反例。
  */
 
@@ -234,5 +238,251 @@ describe('M3 T3a 架构守卫 —— 开发期整页刷新插件', () => {
     expect(source).toContain("if (environment.name !== 'client') return undefined;");
     expect(source).toContain("environment.hot.send({ type: 'full-reload' });");
     expect(/\.decline\(/.test(source)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// M3 T3b（用户裁决 Q1 / S1、Q2、Q-B1～Q-B4；T3 Preflight r3 §10 T3b、§10.1）：菜单、快捷键、命令桥与状态栏。
+// ---------------------------------------------------------------------------------------------------------------------
+
+const PRELOAD = join(REPO_ROOT, 'src/preload/preload.ts');
+const MAIN = join(REPO_ROOT, 'src/main/main.ts');
+const MENU_DIR = join(REPO_ROOT, 'src/main/menu');
+const SMOKE_DIR = join(REPO_ROOT, 'tests/electron/ipcSmoke');
+const count = (source: string, pattern: RegExp): number => [...source.matchAll(pattern)].length;
+
+/** preload 中 `onMenuCommand` 方法体（含内部 handler 与注销函数）里全部调用表达式的文本（空白归一）。 */
+function onMenuCommandCalls(source: string): string[] | null {
+  const file = parse(PRELOAD, source);
+  let calls: string[] | null = null;
+  const visit = (node: Node): void => {
+    if (isPropertyAssignment(node) && node.name.getText(file) === 'onMenuCommand' && isArrowFunction(node.initializer)) {
+      const found: string[] = [];
+      const collect = (inner: Node): void => {
+        if (isCallExpression(inner)) found.push(inner.getText(file).replace(/\s+/g, ' '));
+        forEachChild(inner, collect);
+      };
+      collect(node.initializer.body);
+      calls = found.sort();
+      return;
+    }
+    forEachChild(node, visit);
+  };
+  visit(file);
+  return calls;
+}
+
+const EXPECTED_ON_MENU_COMMAND_CALLS = [
+  'ipcRenderer.on(IPC.menuCommand, handler)',
+  'ipcRenderer.removeListener(IPC.menuCommand, handler)',
+  'listener(message)',
+  'parseMenuCommandMessage(payload)',
+].sort();
+
+describe('M3 T3b 架构守卫 —— preload 的菜单命令订阅', () => {
+  it('onMenuCommand 方法体的调用集合精确：校验后只把消息交给 listener，不暴露 event；注销同一个 handler', () => {
+    const source = read(PRELOAD);
+    expect(onMenuCommandCalls(source)).toEqual(EXPECTED_ON_MENU_COMMAND_CALLS);
+    expect(stripComments(source)).toContain('const handler = (_event: unknown, payload: unknown): void => {');
+    expect(stripComments(source)).toContain('if (message !== null) listener(message);');
+  });
+
+  it('反例：把 event 交给页面、跳过校验、注销别的函数都会被识别', () => {
+    const source = read(PRELOAD);
+    expect(onMenuCommandCalls(source.replace('if (message !== null) listener(message);', 'listener(_event as never);'))).not.toEqual(EXPECTED_ON_MENU_COMMAND_CALLS);
+    expect(onMenuCommandCalls(source.replace('parseMenuCommandMessage(payload)', '(payload as never)'))).not.toEqual(EXPECTED_ON_MENU_COMMAND_CALLS);
+    expect(onMenuCommandCalls(source.replace('ipcRenderer.removeListener(IPC.menuCommand, handler)', 'ipcRenderer.removeAllListeners(IPC.menuCommand)'))).not.toEqual(
+      EXPECTED_ON_MENU_COMMAND_CALLS,
+    );
+  });
+
+  it('MuseDesktopApi.onMenuCommand 签名：参数为函数、返回注销函数；跨进程来源不含 renderer 内部来源', async () => {
+    const ipc = stripComments(read(join(REPO_ROOT, 'src/shared/ipc.ts')));
+    expect(ipc).toContain('onMenuCommand(listener: (message: MenuCommandMessage) => void): () => void;');
+    const { MENU_COMMAND_SOURCES, MENU_COMMANDS } = await import('../../../src/shared/menuContracts');
+    expect([...MENU_COMMAND_SOURCES]).toEqual(['key-intercept', 'menu-click', 'menu-accelerator']);
+    expect([...MENU_COMMANDS]).toEqual(['undo', 'redo', 'reparse', 'open']);
+  });
+});
+
+/** 源码中出现 `IPC.menuCommand` 的文件（去注释）。 */
+function menuCommandChannelUsers(roots: readonly string[]): string[] {
+  return roots
+    .flatMap((root) => collectTsFiles(root))
+    .filter((file) => /IPC\.menuCommand\b/.test(stripComments(read(file))))
+    .map(posixPath)
+    .sort();
+}
+
+describe('M3 T3b 架构守卫 —— menuCommand 通道只在 main 菜单模块发送、只在 preload 接收', () => {
+  it('src 与 smoke 中使用 IPC.menuCommand 的文件恰为两个；main 侧恰一处 send', () => {
+    expect(menuCommandChannelUsers([join(REPO_ROOT, 'src'), SMOKE_DIR])).toEqual(['src/main/menu/wireEditorWindow.ts', 'src/preload/preload.ts']);
+    const wire = stripComments(read(join(MENU_DIR, 'wireEditorWindow.ts')));
+    expect(count(wire, /IPC\.menuCommand/g)).toBe(1);
+    expect(wire).toContain('contents.send(IPC.menuCommand, message);');
+    const preload = stripComments(read(PRELOAD));
+    expect(count(preload, /IPC\.menuCommand/g)).toBe(2);
+  });
+
+  it('通道字面量 muse:menu-command 只出现在 src/shared/ipc.ts（绕开 IPC 常量直接发送会被识别）', () => {
+    const literal = /['"`]muse:menu-command['"`]/;
+    const users = [...collectTsFiles(join(REPO_ROOT, 'src')), ...collectTsFiles(join(REPO_ROOT, 'tests/electron'))]
+      .filter((file) => literal.test(stripComments(read(file))))
+      .map(posixPath);
+    expect(users).toEqual(['src/shared/ipc.ts']);
+    expect(literal.test("contents.send('muse:menu-command', message);")).toBe(true);
+    expect(/IPC\.menuCommand\b/.test(stripComments('mainWindow.webContents.send(IPC.menuCommand, { command: "undo" });'))).toBe(true);
+  });
+});
+
+describe('M3 T3b 架构守卫 —— renderer 命令桥', () => {
+  const bridge = stripComments(read(join(EDITOR_ADAPTER, 'menuBridge.ts')));
+
+  it('menuBridge 只调用 onMenuCommand，不调用 Open 三方法；产品实例只路由到编辑 / Open 控制器', () => {
+    expect([...bridge.matchAll(/museDesktop\.(\w+)/g)].map((m) => m[1])).toEqual(['onMenuCommand']);
+    expect(/openDocument|activateDocument|rejectDocument/.test(bridge)).toBe(false);
+    expect(bridge).toContain('subscribe: (listener) => window.museDesktop.onMenuCommand(listener),');
+    expect(bridge).toContain('editor: museEditorController,');
+    expect(bridge).toContain('museOpenController.open();');
+    expect(bridge).toContain('if (unsubscribe !== null) return false;');
+  });
+
+  it('入口在 createRoot 之前安装一次（在卸载阻止器之后）；只有入口调用 installMenuBridge', () => {
+    const main = stripComments(read(join(RENDERER, 'main.tsx')));
+    expect(count(main, /installMenuBridge\(\);/g)).toBe(1);
+    expect(main.indexOf('installMenuBridge();')).toBeGreaterThan(main.indexOf('installMuseUnloadBlocker();'));
+    expect(main.indexOf('installMenuBridge();')).toBeLessThan(main.indexOf('createRoot('));
+    const callers = collectTsFiles(RENDERER)
+      .filter((file) => /\binstallMenuBridge\(|\bmuseMenuBridge\.install\(/.test(stripComments(read(file))))
+      .map(posixPath)
+      .sort();
+    expect(callers).toEqual(['src/renderer/app/editor/menuBridge.ts', 'src/renderer/main.tsx']);
+  });
+
+  it('反例：组件里订阅菜单命令会被识别', () => {
+    expect(/museDesktop\.(\w+)/.exec('useEffect(() => window.museDesktop.onMenuCommand(h), []);')?.[1]).toBe('onMenuCommand');
+  });
+});
+
+/** 纯模块 editorStatus 允许的依赖：Editor Core（值或类型）与同目录 editorTransitions 的类型。 */
+function editorStatusViolations(file: string, source: string): string[] {
+  return parseImports(file, source).flatMap((record) => {
+    const resolved = resolveSpecifier(file, record.specifier);
+    if (resolved === null) return [`bare:${record.specifier}`];
+    if (resolved === undefined) return [`unresolved:${record.specifier}`];
+    const path = posixPath(resolved);
+    if (path.startsWith('src/editor/')) return [];
+    if (path === 'src/renderer/app/editor/editorTransitions.ts' && record.typeOnly) return [];
+    return [`${record.typeOnly ? 'type' : 'value'}-import:${path}`];
+  });
+}
+
+describe('M3 T3b 架构守卫 —— 状态栏', () => {
+  const statusFile = join(EDITOR_ADAPTER, 'editorStatus.ts');
+
+  it('editorStatus 是纯模块：只依赖 Editor Core 与 editorTransitions 的类型，不用平台全局', () => {
+    const source = read(statusFile);
+    expect(editorStatusViolations(statusFile, source)).toEqual([]);
+    expect(forbiddenGlobalUses(statusFile, source)).toEqual([]);
+  });
+
+  it('反例：值导入 editorTransitions、导入 store 都会被识别', () => {
+    expect(editorStatusViolations(statusFile, "import { initialEditorCore } from './editorTransitions';")).toEqual([
+      'value-import:src/renderer/app/editor/editorTransitions.ts',
+    ]);
+    expect(editorStatusViolations(statusFile, "import { useMuseAppStore } from '../store';")).toEqual(['value-import:src/renderer/app/store.ts']);
+    expect(editorStatusViolations(statusFile, "import { useState } from 'react';")).toEqual(['bare:react']);
+  });
+
+  it('EditorStatusBar 只派发 status-bar 来源的 Reparse 与清除提示；不注册 effect；没有来源 / 计数类测试钩子', () => {
+    const bar = stripComments(read(join(RENDERER, 'components/EditorStatusBar.tsx')));
+    expect([...bar.matchAll(/museEditorController\.(\w+)\(([^)]*)\)/g)].map((m) => `${m[1] ?? ''}(${m[2] ?? ''})`)).toEqual(["reparse('status-bar')"]);
+    expect([...bar.matchAll(/publishEditorView\(([^)]*)\)/g)].map((m) => m[1])).toEqual(['{ notice: null }']);
+    expect(/useEffect|useLayoutEffect|setState|museDesktop|museOpenController/.test(bar)).toBe(false);
+    expect(/data-[\w-]*(dispatch|source=|count|origin)/.test(bar.replace('data-source-version', '').replace('data-source-dirty', ''))).toBe(false);
+  });
+
+  it('status-bar 来源只出现在状态栏与编辑控制器的类型中', () => {
+    const users = collectTsFiles(join(REPO_ROOT, 'src'))
+      .filter((file) => /'status-bar'/.test(stripComments(read(file))))
+      .map(posixPath)
+      .sort();
+    expect(users).toEqual(['src/renderer/app/editor/editorController.ts', 'src/renderer/components/EditorStatusBar.tsx']);
+  });
+
+  it('Toolbar：dirty 只用于禁用 Open（读取 Editor Core 的派生函数），不新增其它入口', () => {
+    const toolbar = stripComments(read(join(RENDERER, 'components/Toolbar.tsx')));
+    expect(toolbar).toContain('const dirty = useMuseAppStore((state) => isSourceDirty(state.session));');
+    expect(toolbar).toContain("disabled={open.phase !== 'idle' || dirty}");
+    expect(/museEditorController|menuBridge/.test(toolbar)).toBe(false);
+  });
+});
+
+describe('M3 T3b 架构守卫 —— main 菜单与窗口接线', () => {
+  const main = stripComments(read(MAIN));
+
+  it('src/main/menu/** 不 import electron，只依赖 shared 与同目录模块', () => {
+    const files = collectTsFiles(MENU_DIR);
+    expect(files.map(posixPath).sort()).toEqual(['src/main/menu/appMenu.ts', 'src/main/menu/wireEditorWindow.ts']);
+    for (const file of files) {
+      const imports = parseImports(file, read(file)).map((record) => resolveSpecifier(file, record.specifier));
+      for (const resolved of imports) {
+        expect(resolved === null || resolved === undefined ? `bare-or-unresolved` : posixPath(resolved)).toMatch(/^src\/(shared|main\/menu)\//);
+      }
+      expect(/from 'electron'/.test(read(file))).toBe(false);
+    }
+  });
+
+  it('菜单只经 installAppMenu 安装：main 与 smoke 各恰一次，Menu.setApplicationMenu 只出现在该调用的注入函数中', () => {
+    expect(count(main, /installAppMenu\(/g)).toBe(1);
+    expect(count(main, /Menu\.setApplicationMenu\(/g)).toBe(1);
+    expect(main.indexOf('installAppMenu({')).toBeLessThan(main.indexOf('Menu.setApplicationMenu(menu);'));
+    const smoke = stripComments(read(join(SMOKE_DIR, 'smokeMain.entry.ts')));
+    expect(count(smoke, /installAppMenu\(/g)).toBe(1);
+    expect(count(smoke, /Menu\.setApplicationMenu\(/g)).toBe(1);
+    const setters = [...collectTsFiles(join(REPO_ROOT, 'src')), ...collectTsFiles(SMOKE_DIR)]
+      .filter((file) => /Menu\.setApplicationMenu\(/.test(stripComments(read(file))))
+      .map(posixPath)
+      .sort();
+    expect(setters).toEqual(['src/main/main.ts', 'tests/electron/ipcSmoke/smokeMain.entry.ts']);
+  });
+
+  it('菜单模块没有危险 role；产品命令项不带 role', () => {
+    const menu = stripComments(read(join(MENU_DIR, 'appMenu.ts')));
+    expect(/role: '(undo|redo|reload|forceReload|editMenu|viewMenu|fileMenu)'/.test(menu)).toBe(false);
+    expect(/'(undo|redo|reload|forceReload|editMenu|viewMenu|fileMenu)'/.test(menu.slice(menu.indexOf('export type AppMenuRole'), menu.indexOf('export interface AppMenuItem')))).toBe(false);
+  });
+
+  it('反例：加回 role undo / reload 会被识别', () => {
+    expect(/role: '(undo|redo|reload|forceReload|editMenu|viewMenu|fileMenu)'/.test("{ role: 'reload' }")).toBe(true);
+    expect(/role: '(undo|redo|reload|forceReload|editMenu|viewMenu|fileMenu)'/.test("{ role: 'undo' }")).toBe(true);
+  });
+
+  it('main.ts：new BrowserWindow 次数 = wireEditorWindow 次数；在安全与 Open 接线之后、加载页面之前', () => {
+    expect(count(main, /new BrowserWindow\(/g)).toBe(count(main, /wireEditorWindow\(/g));
+    expect(main).toContain('wireEditorWindow(editorCommands, mainWindow);');
+    expect(main.indexOf('wireOpenIpcWindow(openIpc, mainWindow);')).toBeLessThan(main.indexOf('wireEditorWindow(editorCommands, mainWindow);'));
+    expect(main.indexOf('wireWindowSecurity(mainWindow.webContents')).toBeLessThan(main.indexOf('wireEditorWindow(editorCommands, mainWindow);'));
+    expect(main.indexOf('wireEditorWindow(editorCommands, mainWindow);')).toBeLessThan(main.indexOf('mainWindow.loadURL('));
+    expect(main).toContain('send: sendMenuCommand,');
+    expect(main).toContain('editorCommands.handleMenuCommand(command, window, event);');
+  });
+
+  it('smoke 窗口工厂：每个窗口无条件经生产 wireEditorWindow 登记（与 new BrowserWindow 一一对应）', () => {
+    const windows = stripComments(read(join(SMOKE_DIR, 'windows.ts')));
+    expect(count(windows, /new BrowserWindow\(/g)).toBe(1);
+    expect(count(windows, /wireEditorWindow\(/g)).toBe(1);
+    expect(windows).toContain('    wireEditorWindow(deps.editorCommands, win);\n');
+    expect(windows.indexOf('wireEditorWindow(deps.editorCommands, win);')).toBeGreaterThan(windows.indexOf('wireOpenIpcWindow(deps.openIpc, win)'));
+    const smoke = stripComments(read(join(SMOKE_DIR, 'smokeMain.entry.ts')));
+    expect(smoke).toContain('sendMenuCommand(contents, message);');
+  });
+
+  it('src/main/** 不出现写盘 API（T3 零写盘）', () => {
+    const WRITE_API = /\b(writeFile|appendFile|createWriteStream|rename|unlink|rmdir|rm|mkdir|copyFile|truncate|ftruncate|symlink|chmod|utimes|cp)(Sync)?\s*\(/;
+    const offenders = collectTsFiles(join(REPO_ROOT, 'src/main')).filter((file) => WRITE_API.test(stripComments(read(file))));
+    expect(offenders.map(posixPath)).toEqual([]);
+    expect(WRITE_API.test("await writeFile(path, 'x');")).toBe(true);
+    expect(WRITE_API.test('fs.renameSync(a, b);')).toBe(true);
   });
 });
