@@ -100,3 +100,18 @@ describe('unloadBlocker —— 判据纯函数（r3a 审查 L-3，变异 M35 补
     expect(unloadReasonFor(dirty, ime)).toBe(expected);
   });
 });
+
+describe('unloadBlocker —— 组字中关窗的三条路径（M3 T3c，Preflight r1 §6：合同为「beforeunload 判定时」dirty 或组字中）', () => {
+  it('路径 A：判定时仍在组字中 → 阻止（composing）', () => {
+    expect(unloadReasonFor(false, 'composing')).toBe('composing');
+  });
+
+  it('路径 B：组字先提交、文档变 dirty → 阻止（dirty）', () => {
+    expect(unloadReasonFor(true, 'settled')).toBe('dirty');
+  });
+
+  it('路径 C：输入法取消组字、文档仍 clean → 不阻止（方案 §20：组字结束后按 dirty 判断；不得擅自加强为「请求时组字即阻止」）', () => {
+    expect(unloadReasonFor(false, 'settled')).toBeNull();
+    expect(unloadReasonFor(false, 'idle')).toBeNull();
+  });
+});

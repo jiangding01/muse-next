@@ -4,8 +4,9 @@
  * 每个用例一个独立子进程（`ui.` 前缀，真实生产 renderer + 生产 preload）。main 侧经生产 `installAppMenu` 安装菜单、每个窗口经
  * 生产 `wireEditorWindow` 登记；`ctx.menuCommands` 只在生产 `sendMenuCommand` 外层记录实际发出的 `{ command, source }`。
  * renderer 侧只读状态栏的产品数据属性（`data-source-version` / `data-parsed-version` / `data-editor-notice`）与「知道了」按钮，
- * 产品 DOM 不含任何来源或计数类测试钩子。T3b 中文档恒为 clean、源码面板只读：撤销 / 重做只能得到「没有可撤销 / 可重做」
- * 提示且版本不变（Q-B4；有真实历史时的版本 +1 属 T3c / G4）。
+ * 产品 DOM 不含任何来源或计数类测试钩子。本组用例不做任何编辑，文档恒为 clean：撤销 / 重做只能得到「没有可撤销 / 可重做」
+ * 提示且版本不变（Q-B4；有真实历史时的版本 +1 由 T3c 的 `ui.edit-path-*` 覆盖）。源码面板是否只读随 T3c 平台门控（Q9-A）：
+ * macOS 可编辑，Windows / Linux 只读。
  *
  * 证据等级（必须如实区分）：
  * - 菜单用例调用的是 `MenuItem.click(event, window, webContents)`：它执行的是菜单项回调与生产路由，**不是原生菜单交互**；
@@ -171,7 +172,8 @@ const uiMenuClickDispatch: IsolatedCase = {
     const problems: string[] = [];
     expectTrue(problems, 'status bar ready', ready);
     const initial = await readStatus(window);
-    expectEqual(problems, 'source panel stays read-only', initial?.readOnly, true);
+    // M3 T3c（用户授权方案 (a)）：只读与否随平台门控——macOS 可编辑，Windows / Linux 只读。
+    expectEqual(problems, 'source panel read-only only where editing is gated', initial?.readOnly, process.platform !== 'darwin');
     const id = window.ownerId;
 
     // 1. 显式点击 Undo / Redo：恰一次 menu-click；renderer 收到并给出「没有可撤销 / 可重做」；版本不变。

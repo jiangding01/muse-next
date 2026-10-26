@@ -5,8 +5,8 @@
  * - Open 进行中（`replacementPending`）或输入法组字中，undo / redo 一律忽略并提示；Reparse 在组字中由调度器忽略（F3）。
  * - `replacementPending` 是**同步标志**：由 Open 控制器在事务进入非 idle 时置位、在终态的全部效果执行完之后清除
  *   （r3 复核 M-2 / L-5），不依赖 Open 视图的发布顺序。
- * - `imeView()`：T3a 中恒为 `'idle'`（源码面板只读，不可能组字）；T3c 替换为输入法状态机的实现（r3 复查 M-3）。
- * - `openGate()` / `prepareReplacement()` 供 Open 控制器在入口与提交前读取 dirty 与组字状态、结束组字（T3a 中为空操作）。
+ * - `imeView()`：T3a 中恒为 `'idle'`；M3 T3c 起读取模块级输入法会话（`imeSession.ts`；提交过渡态对外视为 composing）。
+ * - `openGate()` / `prepareReplacement()` 供 Open 控制器在入口与提交前读取 dirty 与组字状态、结束组字（T3c：discard → blur）。
  * 控制器是模块级对象，不在任何 React 组件生命周期里。
  */
 
@@ -16,6 +16,8 @@ import { applyEditorStep, publishEditorView, useMuseAppStore } from '../store';
 import type { StoreWriteResult } from '../store';
 import { redoStep, undoStep } from './editorTransitions';
 import type { EditorCore, EditorNotice, EditorStep } from './editorTransitions';
+import type { ImeView } from './imeMachine';
+import { museImeSession } from './imeSession';
 import { museParseController } from './parseController';
 import type { FlushOutcome } from './parseController';
 import type { FlushReason } from './parseSchedule';
@@ -26,7 +28,7 @@ import type { FlushReason } from './parseSchedule';
  */
 export type HistoryDispatchSource = 'key-intercept' | 'menu-click' | 'menu-accelerator' | 'beforeinput' | 'status-bar';
 
-export type ImeView = 'idle' | 'composing' | 'discarded' | 'settled';
+export type { ImeView } from './imeMachine';
 
 export type HistoryCommand = 'undo' | 'redo';
 
@@ -128,7 +130,15 @@ export function createEditorController(deps: EditorControllerDeps): EditorContro
   };
 }
 
-/** 产品使用的模块级编辑控制器（T3a：输入法视图恒为 idle）。 */
+/** Open 提交前让源码面板失焦（输入法可能因此同步派发 compositionend，已被 discard 拦下，只回滚）。 */
+function blurSourceEditor(): void {
+  const doc = globalThis.document;
+  if (doc === undefined) return;
+  const active = doc.activeElement;
+  if (active instanceof HTMLTextAreaElement && active.classList.contains('source-editor')) active.blur();
+}
+
+/** 产品使用的模块级编辑控制器（M3 T3c：输入法视图来自模块级输入法会话；Open 提交前 discard → blur）。 */
 export const museEditorController: EditorController = createEditorController({
   read: () => {
     const { session, history, selection } = useMuseAppStore.getState();
@@ -138,6 +148,9 @@ export const museEditorController: EditorController = createEditorController({
   flush: (reason) => museParseController.flush(reason),
   notify: (notice) => publishEditorView({ notice }),
   report: reportEditorError,
-  imeView: () => 'idle',
-  beforeReplace: () => undefined,
+  imeView: () => museImeSession.view(),
+  beforeReplace: () => {
+    museImeSession.discard('open-commit');
+    blurSourceEditor();
+  },
 });

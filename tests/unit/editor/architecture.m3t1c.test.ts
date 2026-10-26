@@ -6,7 +6,7 @@
  * 3. renderer 中只有 `openController.ts` 调用 `window.museDesktop`；组件只派发 `museOpenController.open()` / `dismissNotice()`。
  * 4. store 中写入会话与派生字段的只有 `commitSession`；renderer 其它文件不直接 `setState`。
  * 5. `sessionFactory` / `openTransaction` 是纯模块：只依赖 T0 editor、parse façade、shared 类型与彼此，不用平台全局。
- * 6. SourceInspector 只读：显示 `session.projection.view`，不处理输入、不读回 `textarea.value`；Reparse 在 T1c 隐藏。
+ * 6. SourceInspector（M3 T3c 起非受控可编辑）：不传 value、不订阅 view、不处理输入、不读回 `textarea.value`，只经适配层 ref 回调绑定；Reparse 在 T1c 隐藏。
  * 7. main 中旧的对话框与解码路径已删除：不再 import `node:fs` / iconv-lite，`dialog.showOpenDialog` 只出现在共享选择器表达式中。
  */
 
@@ -186,11 +186,13 @@ describe('M3 T1c-2 架构守卫 —— 纯模块', () => {
 });
 
 describe('M3 T1c-2 架构守卫 —— SourceInspector 只读、Reparse 隐藏', () => {
-  it('textarea 只读并显示 projection.view；不处理输入、不读回 value', () => {
+  // M3 T3c（G4，用户授权）：源码面板改为非受控可编辑 textarea。去掉「readOnly + value={view}」与订阅 view 两条只读断言；
+  // 原有禁止项全部保留并追加 onBeforeInput / onCut / onComposition* / defaultValue / value=；替代保护见 architecture.m3t3 的 T3c 守卫。
+  it('textarea 非受控：不传 value / defaultValue、不订阅 view、不处理任何输入事件、不读回 value；只经适配层 ref 回调绑定', () => {
     const inspector = stripComments(read(join(RENDERER, 'components/SourceInspector.tsx')));
-    expect(inspector).toContain('useMuseAppStore((state) => state.session.projection.view)');
-    expect(/<textarea[^>]*\breadOnly\b[^>]*value=\{view\}/.test(inspector)).toBe(true);
-    expect(/onChange|onInput|onKeyDown|onPaste|\.value\b|setSource/.test(inspector)).toBe(false);
+    expect(inspector).not.toContain('state.session.projection.view');
+    expect(/<textarea[^>]*\bref=\{bindSourceEditor\}/.test(inspector)).toBe(true);
+    expect(/onChange|onInput|onKeyDown|onPaste|onBeforeInput|onCut|onComposition|defaultValue|\bvalue=|\.value\b|setSource/.test(inspector)).toBe(false);
   });
 
   it('Toolbar 不提供 Reparse 与保存类操作', () => {

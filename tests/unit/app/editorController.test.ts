@@ -10,7 +10,8 @@ import { describe, expect, it } from 'vitest';
 import { createDocumentSession } from '../../../src/editor/session/create';
 import { applySourceInput, initialEditorCore, sourceSelectionFromView } from '../../../src/renderer/app/editor/editorTransitions';
 import type { EditorCore, EditorNotice } from '../../../src/renderer/app/editor/editorTransitions';
-import { createEditorController } from '../../../src/renderer/app/editor/editorController';
+import { createEditorController, museEditorController } from '../../../src/renderer/app/editor/editorController';
+import { museImeSession } from '../../../src/renderer/app/editor/imeSession';
 import type { ImeView } from '../../../src/renderer/app/editor/editorController';
 import type { FlushReason } from '../../../src/renderer/app/editor/parseSchedule';
 import type { StoreWriteResult } from '../../../src/renderer/app/store';
@@ -161,5 +162,19 @@ describe('editorController —— 写入以读取到的状态为 CAS 基线（r3
     expect(bases).toHaveLength(2);
     expect(bases[0]).toBe(beforeUndo);
     expect(bases[1]).toBe(beforeRedo);
+  });
+});
+
+describe('editorController —— M3 T3c 产品接线', () => {
+  it('产品实例的 imeView 读取模块级输入法会话（不再恒为 idle）；prepareReplacement 以 open-commit 理由 discard 组字', () => {
+    museImeSession.discard('detach');
+    expect(museEditorController.imeView()).toBe('idle');
+    museImeSession.start({ documentId: 1, version: 1, view: 'abc', base: { start: 3, end: 3 }, replacing: false });
+    expect(museEditorController.imeView()).toBe('composing');
+    expect(museEditorController.openGate().composing).toBe(true);
+    museEditorController.prepareReplacement();
+    expect(museEditorController.imeView()).toBe('discarded');
+    expect(museEditorController.openGate().composing).toBe(false);
+    museImeSession.discard('detach');
   });
 });

@@ -38,7 +38,15 @@ export type EditorNoticeKind =
   | 'parse-failed'
   | 'editor-error'
   | 'unload-blocked-dirty'
-  | 'unload-blocked-composing';
+  | 'unload-blocked-composing'
+  // M3 T3c：源码编辑。
+  | 'input-unsupported'
+  | 'input-rejected'
+  | 'input-reverted'
+  | 'edit-conflict'
+  | 'edit-out-of-sync'
+  | 'ime-not-applied'
+  | 'source-readonly-platform';
 
 export interface EditorNotice {
   readonly kind: EditorNoticeKind;

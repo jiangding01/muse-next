@@ -180,7 +180,7 @@ describe('M3 T1c-1 架构守卫 —— smoke 复用同一份安全接线', () =>
     expect(runner).toContain('const production = mode.startsWith(PRODUCTION_MODE_PREFIX) || mode.startsWith(UI_MODE_PREFIX);');
     expect(runner).toContain("mode === 'ui.win-unc' ? uncPath(productionPage) : production ? productionPage : local");
     // M3 T3b（G11）：菜单 / 按键用例同样运行在生产 renderer 上。
-    expect(smoke('smokeMain.entry.ts')).toContain('const productionRenderer = [...PRODUCTION_CASES, ...UI_CASES, ...EDITING_CASES].some((item) => item.id === config.mode);');
+    expect(smoke('smokeMain.entry.ts')).toContain('const productionRenderer = [...PRODUCTION_CASES, ...UI_CASES, ...EDITING_CASES, ...EDITING_INPUT_CASES, ...EDITING_GATE_CASES].some((item) => item.id === config.mode);');
   });
 
   it('威胁对照与生产 renderer 用例都真正注册进 smoke（不能只留在清单里）', () => {
@@ -189,7 +189,7 @@ describe('M3 T1c-1 架构守卫 —— smoke 复用同一份安全接线', () =>
     expect(security).toContain('[prodRendererLoads, prodPopupDenied, prodSubframeBlocked, prodInlineScriptBlocked, prodNavigationBlocked]');
     const entry = smoke('smokeMain.entry.ts');
     expect(entry).toContain('...SENDER_CASES, ...SECURITY_MATRIX_CASES, ...DIALOG_CASES]');
-    expect(entry).toContain('const isolated = [...ISOLATED_CASES, ...PRODUCTION_CASES, ...UI_CASES, ...EDITING_CASES].find((item) => item.id === config.mode);');
+    expect(entry).toContain('const isolated = [...ISOLATED_CASES, ...PRODUCTION_CASES, ...UI_CASES, ...EDITING_CASES, ...EDITING_INPUT_CASES, ...EDITING_GATE_CASES].find((item) => item.id === config.mode);');
   });
 });
 
@@ -228,6 +228,11 @@ describe('M3 T1c-1 架构守卫 —— 判定不放宽', () => {
       'ui.menu-routing',
       'ui.key-intercept',
       'ui.reload-keys-blocked',
+      // M3 T3c：编辑代码路径与真实平台门控（只追加；期望一律 PASS）。
+      'ui.edit-path-input',
+      'ui.edit-path-ime',
+      'ui.edit-path-guard',
+      'ui.edit-gate-platform',
     ]);
     for (const id of added) expect(SMOKE_CASES.find((spec) => spec.id === id)?.expect).toEqual(id === 'ui.win-unc' ? { win32: 'pass-or-unverified' } : PASS);
   });
