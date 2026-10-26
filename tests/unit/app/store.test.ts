@@ -269,9 +269,10 @@ describe('store —— T3a 原子写入与合法 stale（T3 Preflight r3 §4）'
     if (!noop.ok) throw new Error(noop.reason);
     expect(noop.core.session).toBe(afterRedo.session);
     expect(applyEditorStep(noop.core, afterRedo)).toEqual({ ok: true });
-    const moved = changeSelection(currentCore(), caret);
+    const selectionBase = currentCore();
+    const moved = changeSelection(selectionBase, caret);
     if (!moved.ok) throw new Error(moved.reason);
-    expect(setEditorSelection(moved.core)).toEqual({ ok: true });
+    expect(setEditorSelection(moved.core, selectionBase)).toEqual({ ok: true });
     const state = useMuseAppStore.getState();
     expect(state.session.sourceVersion).toBe(4);
     expect(state.selection).toBe(moved.core.selection);
@@ -285,16 +286,47 @@ describe('store —— T3a 原子写入与合法 stale（T3 Preflight r3 §4）'
     if (selection === null) throw new Error('selection');
     const changed = changeSelection(core, selection);
     if (!changed.ok) throw new Error(changed.reason);
-    expect(setEditorSelection({ ...changed.core, session: { ...core.session } })).toEqual({ ok: false, reason: 'session-changed' });
+    expect(setEditorSelection({ ...changed.core, session: { ...core.session } }, core)).toEqual({ ok: false, reason: 'session-changed' });
     let notifications = 0;
     const unsubscribe = useMuseAppStore.subscribe(() => {
       notifications += 1;
     });
-    expect(setEditorSelection(changed.core)).toEqual({ ok: true });
+    expect(setEditorSelection(changed.core, core)).toEqual({ ok: true });
     unsubscribe();
     expect(notifications).toBe(1);
     expect(useMuseAppStore.getState().selection).toBe(selection);
     expect(useMuseAppStore.getState().session).toBe(core.session);
+  });
+
+  it('setEditorSelection 是对选区基线的三对象 CAS（M3 T3c，Q-C1(a)）：基线被取代时拒绝，旧选区不覆盖较新的状态', () => {
+    commitSession(candidateSession(), 'trusted');
+    const base = currentCore();
+    const first = sourceSelectionFromView(base.session, { start: 0, end: 1 });
+    const second = sourceSelectionFromView(base.session, { start: 2, end: 3 });
+    if (first === null || second === null) throw new Error('selection');
+    const older = changeSelection(base, first);
+    const newer = changeSelection(base, second);
+    if (!older.ok || !newer.ok) throw new Error('change');
+    // 较新的选区先写入：以同一基线计算的旧结果随后被拒绝。
+    expect(setEditorSelection(newer.core, base)).toEqual({ ok: true });
+    expect(setEditorSelection(older.core, base)).toEqual({ ok: false, reason: 'base-changed' });
+    expect(useMuseAppStore.getState().selection).toBe(second);
+    // 基线中任一对象不是当前对象都算基线已变（历史 / 选中）。
+    const now = currentCore();
+    const again = changeSelection(now, first);
+    if (!again.ok) throw new Error('change');
+    expect(setEditorSelection(again.core, { ...now, history: { ...now.history } })).toEqual({ ok: false, reason: 'base-changed' });
+    expect(setEditorSelection(again.core, { ...now, selection: base.selection })).toEqual({ ok: false, reason: 'base-changed' });
+    // 读取基线后解析快照被发布（会话换了对象、版本不变）：拒绝，由调用方以新鲜状态重算。
+    const published = acceptParsedSnapshot(now.session, { documentId: now.session.documentId, sourceVersion: now.session.sourceVersion, load: loadJcx(now.session.source) });
+    if (!published.ok) throw new Error('accept');
+    expect(publishParsedSession(published.session)).toEqual({ ok: true });
+    expect(setEditorSelection(again.core, now)).toEqual({ ok: false, reason: 'base-changed' });
+    const fresh = currentCore();
+    const recomputed = changeSelection(fresh, sourceSelectionFromView(fresh.session, { start: 0, end: 1 }) ?? first);
+    if (!recomputed.ok) throw new Error('change');
+    expect(setEditorSelection(recomputed.core, fresh)).toEqual({ ok: true });
+    expect(storeConsistencyProblems(useMuseAppStore.getState())).toEqual([]);
   });
 
   it('commitSession 重置历史、选中与编辑视图；publishEditorView 不触碰会话', () => {

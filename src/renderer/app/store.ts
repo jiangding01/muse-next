@@ -178,9 +178,13 @@ export function publishParsedSession(session: DocumentSession): StoreWriteResult
   return { ok: true };
 }
 
-/** 非编辑的选区变化：会话必须是当前同一个对象，只替换选中与（结束合并组后的）历史。 */
-export function setEditorSelection(core: EditorCore): StoreWriteResult {
-  const current = useMuseAppStore.getState().session;
+/**
+ * 非编辑的选区变化：只替换选中与（结束合并组后的）历史。先做与 `applyEditorStep` 相同的三对象 CAS（M3 T3c，用户裁决 Q-C1(a)）：
+ * 调用方计算所依据的会话、历史、选中必须就是当前 store 中的同一批对象，否则（基线已被其它写入取代）拒绝，旧选区不会覆盖较新的状态。
+ */
+export function setEditorSelection(core: EditorCore, base: EditorCore): StoreWriteResult {
+  const { session: current, history, selection } = useMuseAppStore.getState();
+  if (base.session !== current || base.history !== history || base.selection !== selection) return { ok: false, reason: 'base-changed' };
   if (core.session !== current) return { ok: false, reason: 'session-changed' };
   if (!historyBound(core.history, core.session)) return { ok: false, reason: 'history-unbound' };
   if (core.selection.basisVersion !== core.session.sourceVersion) return { ok: false, reason: 'selection-not-current' };

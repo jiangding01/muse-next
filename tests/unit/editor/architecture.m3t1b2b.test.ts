@@ -106,6 +106,9 @@ describe('M3 T1b-2b-1 架构守卫 —— smoke 复用生产实现', () => {
         'casesDialog.ts',
         // M3 T3b（G8）：菜单 / 按键派发的生产 UI 用例。
         'casesEditing.ts',
+        // M3 T3c（G8）：源码编辑的平台门控用例与编辑代码路径用例（只追加）。
+        'casesEditingGate.ts',
+        'casesEditingInput.ts',
         'casesEnvironment.ts',
         'casesIsolated.ts',
         'casesNavigation.ts',

@@ -45,7 +45,7 @@ const NOTICE_TEXT: Readonly<Record<EditorNoticeKind, string>> = {
   'open-candidate-dropped-dirty': '打开期间当前文档出现了修改，已放弃本次打开；当前文档未改变。',
   'open-commit-refused-dirty': '打开时检测到未保存的修改，没有替换当前文档；原文件授权未确认，重新打开文件即可恢复。',
   'command-ignored-composing': '正在输入，撤销 / 重做暂不可用。',
-  'command-ignored-replacing': '正在打开文件，撤销 / 重做暂不可用。',
+  'command-ignored-replacing': '正在打开文件，编辑与撤销 / 重做暂不可用。',
   'nothing-to-undo': '没有可撤销的操作。',
   'nothing-to-redo': '没有可重做的操作。',
   'reparse-ignored-composing': '正在输入，完成输入后再重新解析。',
@@ -54,6 +54,14 @@ const NOTICE_TEXT: Readonly<Record<EditorNoticeKind, string>> = {
   'editor-error': '编辑器发生内部错误，本次操作没有生效。',
   'unload-blocked-dirty': '有未保存的修改，窗口未关闭（本阶段不能保存；撤销到未修改状态后可关闭）。',
   'unload-blocked-composing': '正在输入，窗口未关闭；完成或取消输入后可关闭。',
+  'input-unsupported': '这个编辑操作暂不支持（例如按词或按行删除、拖放、字符换位），源码未改变。',
+  'input-rejected': '这次编辑没有生效：它会改动受保护的内容（文件开头的不可见标记、换行的一半），或没有可插入的内容。',
+  'input-reverted': '检测到绕过编辑器的修改，源码面板已恢复为文档内容。',
+  'edit-conflict': '编辑与另一项更新同时发生，本次输入没有生效，请再试一次。',
+  'edit-out-of-sync':
+    '源码编辑区与文档暂时不同步，已暂停编辑。文档内容未受影响；可以用菜单撤销 / 重做或重新打开文件来恢复，必要时关闭窗口后重新打开。',
+  'ime-not-applied': '输入法的这次输入没有生效，请重新输入。',
+  'source-readonly-platform': '此平台的源码编辑尚未通过实机验收，源码面板暂为只读。',
 };
 
 export function editorNoticeText(kind: EditorNoticeKind): string {

@@ -103,6 +103,11 @@ export const SMOKE_CASES: readonly CaseSpec[] = [
   isolated('ui.menu-routing', ALL_PASS),
   isolated('ui.key-intercept', ALL_PASS),
   isolated('ui.reload-keys-blocked', ALL_PASS),
+  // M3 T3c：编辑代码路径（Windows / Linux 经 UA 覆盖，只是自动化代码路径，不是该平台实机验收）与真实平台门控。
+  isolated('ui.edit-path-input', ALL_PASS),
+  isolated('ui.edit-path-ime', ALL_PASS),
+  isolated('ui.edit-path-guard', ALL_PASS),
+  isolated('ui.edit-gate-platform', ALL_PASS),
 ];
 
 export const RESULT_PREFIX = 'MUSE_IPC_SMOKE_RESULT ';

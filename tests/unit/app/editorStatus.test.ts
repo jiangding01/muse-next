@@ -83,6 +83,13 @@ describe('editorNoticeText —— 文案', () => {
     'editor-error',
     'unload-blocked-dirty',
     'unload-blocked-composing',
+    'input-unsupported',
+    'input-rejected',
+    'input-reverted',
+    'edit-conflict',
+    'edit-out-of-sync',
+    'ime-not-applied',
+    'source-readonly-platform',
   ];
 
   it('每种提示都有非空且互不相同的文案；T3 文案不写「先保存」', () => {
@@ -98,5 +105,13 @@ describe('editorNoticeText —— 文案', () => {
     expect(editorNoticeText('nothing-to-undo')).toBe('没有可撤销的操作。');
     expect(editorNoticeText('nothing-to-redo')).toBe('没有可重做的操作。');
     expect(editorNoticeText('reparsed')).toBe('已重新解析。');
+  });
+
+  it('M3 T3c：写回暂停的提示如实说明恢复途径，不承诺自动恢复；平台只读提示说明原因', () => {
+    const outOfSync = editorNoticeText('edit-out-of-sync');
+    expect(outOfSync).toContain('已暂停编辑');
+    expect(outOfSync).toContain('撤销 / 重做或重新打开文件');
+    expect(outOfSync).not.toContain('自动恢复');
+    expect(editorNoticeText('source-readonly-platform')).toContain('尚未通过实机验收');
   });
 });

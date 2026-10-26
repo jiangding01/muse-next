@@ -30,6 +30,8 @@ import type { CaseOutcome, CaseResult, Fixtures, SmokeCase, SmokeContext } from 
 import { CAPABILITY_CASES } from './casesCapability';
 import { DIALOG_CASES, FINAL_CASE } from './casesDialog';
 import { EDITING_CASES } from './casesEditing';
+import { EDITING_GATE_CASES } from './casesEditingGate';
+import { EDITING_INPUT_CASES } from './casesEditingInput';
 import { ENVIRONMENT_CASES } from './casesEnvironment';
 import { NAVIGATION_CASES } from './casesNavigation';
 import { ISOLATED_CASES } from './casesIsolated';
@@ -154,8 +156,8 @@ async function main(): Promise<number> {
   const clock = createTestClock();
   const scheduler = createManualScheduler(clock);
   const tokenFaults = createTokenFaults();
-  const isolated = [...ISOLATED_CASES, ...PRODUCTION_CASES, ...UI_CASES, ...EDITING_CASES].find((item) => item.id === config.mode);
-  const productionRenderer = [...PRODUCTION_CASES, ...UI_CASES, ...EDITING_CASES].some((item) => item.id === config.mode);
+  const isolated = [...ISOLATED_CASES, ...PRODUCTION_CASES, ...UI_CASES, ...EDITING_CASES, ...EDITING_INPUT_CASES, ...EDITING_GATE_CASES].find((item) => item.id === config.mode);
+  const productionRenderer = [...PRODUCTION_CASES, ...UI_CASES, ...EDITING_CASES, ...EDITING_INPUT_CASES, ...EDITING_GATE_CASES].some((item) => item.id === config.mode);
   // 激活应答扣留只包装交给生产 registerOpenIpc 的 registrar（M3 T1c-2）；未布置时完全透明。
   const faults = createActivationFaults();
   const realChooser = createOpenPathChooser((parent: BrowserWindow, options) => dialog.showOpenDialog(parent, options));

@@ -12,6 +12,10 @@
  *    menuBridge 只订阅、在 createRoot 之前安装一次；状态栏纯模块与组件的派发集合；`src/main/menu/**` 不 import electron；
  *    菜单只经 installAppMenu 安装、无危险 role；main 与 smoke 的 `new BrowserWindow` 与 `wireEditorWindow` 一一对应；
  *    `src/main/**` 无写盘 API。
+ * 7. M3 T3c（T3c Preflight r1 §10.4、r1.1 §1.7、勘误 E-1～E-3；G4 放宽的替代保护）：新纯模块（inputPlan / graphemes / imeMachine /
+ *    editingPlatform）只依赖 Editor Core 与彼此；SourceInspector 只经 `bindSourceEditor` ref 绑定、`readOnly` 只来自门控；DOM 写入
+ *    API 只在写回层、选区读取只在三个适配模块；`discard` 的调用者 × 理由精确；提交授权 API 的使用位置精确；产品编辑控制器的
+ *    imeView 接到输入法会话；开关表逐字冻结；输入 / 选区写入的 CAS 基线来自同一函数内的一次读取；编辑 smoke 的用例前缀与 UA 覆盖位置。
  * 每条附反例。
  */
 
@@ -24,6 +28,7 @@ import {
   isCallExpression,
   isConditionalExpression,
   isFunctionDeclaration,
+  isFunctionLike,
   isObjectLiteralExpression,
   isParenthesizedExpression,
   isPropertyAccessExpression,
@@ -484,5 +489,146 @@ describe('M3 T3b 架构守卫 —— main 菜单与窗口接线', () => {
     expect(offenders.map(posixPath)).toEqual([]);
     expect(WRITE_API.test("await writeFile(path, 'x');")).toBe(true);
     expect(WRITE_API.test('fs.renameSync(a, b);')).toBe(true);
+  });
+});
+
+const T3C_PURE = ['inputPlan.ts', 'graphemes.ts', 'imeMachine.ts', 'editingPlatform.ts'];
+const T3C_PURE_PATHS = T3C_PURE.map((name) => `src/renderer/app/editor/${name}`);
+
+/** T3c 纯模块：只依赖 Editor Core 或其它 T3c 纯模块（扩展，不放宽：集合封闭）。 */
+const t3cPureViolations = (file: string, source: string): string[] =>
+  pureViolations(file, source).filter((violation) => !T3C_PURE_PATHS.some((path) => violation.endsWith(`:${path}`)));
+
+/** src/renderer 中（不含构建产物）源码匹配 `pattern` 的文件。 */
+const rendererFilesMatching = (pattern: RegExp): string[] =>
+  collectTsFiles(RENDERER)
+    .filter((file) => pattern.test(stripComments(read(file))))
+    .map(posixPath);
+
+/** 每个文件里 `.discard('理由')` 的理由字面量。 */
+function discardCalls(): Record<string, string[]> {
+  const calls: Record<string, string[]> = {};
+  for (const file of collectTsFiles(RENDERER)) {
+    const reasons = [...stripComments(read(file)).matchAll(/\.discard\('([a-z-]+)'\)/g)].map((m) => m[1] ?? '');
+    if (reasons.length > 0) calls[posixPath(file)] = reasons;
+  }
+  return calls;
+}
+
+/** `deps.apply / deps.write / deps.writeSelection` 调用的第二实参是否都是同一函数内先前 `const base = deps.read()` 得到的 `base`。 */
+function casBaseProblems(fileName: string, source: string): string[] {
+  const file = parse(fileName, source);
+  const problems: string[] = [];
+  const visit = (node: Node): void => {
+    if (isCallExpression(node) && /^deps\.(apply|write|writeSelection)$/.test(node.expression.getText(file))) {
+      let owner: Node | undefined = node.parent;
+      while (owner !== undefined && !isFunctionLike(owner)) owner = owner.parent;
+      const prefix = owner === undefined ? '' : source.slice(owner.getStart(file), node.getStart(file));
+      const second = node.arguments[1]?.getText(file);
+      if (second !== 'base' || !prefix.includes('const base = deps.read();')) problems.push(node.getText(file));
+    }
+    forEachChild(node, visit);
+  };
+  visit(file);
+  return problems;
+}
+
+describe('M3 T3c 架构守卫 —— 源码编辑', () => {
+  it.each(T3C_PURE.map((name) => [name, join(EDITOR_ADAPTER, name)]))('%s：纯模块，只依赖 Editor Core 与其它 T3c 纯模块，不用平台全局', (_name, file) => {
+    const source = read(file);
+    expect(t3cPureViolations(file, source)).toEqual([]);
+    expect(forbiddenGlobalUses(file, source)).toEqual([]);
+  });
+
+  it('反例：纯模块导入 store / 编辑控制器、读 navigator、用 MessageChannel 都被识别', () => {
+    const fake = join(EDITOR_ADAPTER, '__fake__.ts');
+    expect(t3cPureViolations(fake, "import { useMuseAppStore } from '../store';")).toEqual(['value-import:src/renderer/app/store.ts']);
+    expect(t3cPureViolations(fake, "import type { ImeView } from './editorController';")).toEqual(['type-import:src/renderer/app/editor/editorController.ts']);
+    expect(t3cPureViolations(fake, "import { planInput } from './inputPlan';")).toEqual([]);
+    expect(forbiddenGlobalUses(fake, 'const p = navigator.platform;')).toHaveLength(1);
+    expect(forbiddenGlobalUses(fake, 'new MessageChannel();')).toHaveLength(1);
+  });
+
+  it('SourceInspector 只经 bindSourceEditor ref 绑定；readOnly 只来自 sourceEditingEnabled()；bindSourceEditor 只在该组件使用', () => {
+    const inspector = stripComments(read(join(RENDERER, 'components/SourceInspector.tsx')));
+    expect(inspector).toContain('const editable = sourceEditingEnabled();');
+    expect(inspector).toContain('ref={bindSourceEditor}');
+    expect(inspector).toContain('readOnly={!editable}');
+    expect(count(inspector, /readOnly/g)).toBe(1);
+    const users = rendererFilesMatching(/\bbindSourceEditor\b/).filter((file) => !file.endsWith('app/editor/sourceEditorBinding.ts'));
+    expect(users).toEqual(['src/renderer/components/SourceInspector.tsx']);
+  });
+
+  it('DOM 写入 API 只在写回层（含 value / readOnly 赋值）；textarea 选区读取只在写回层、选区同步与绑定层', () => {
+    expect(rendererFilesMatching(/\.(setRangeText|setSelectionRange)\(/)).toEqual(['src/renderer/app/editor/editorWriteBack.ts']);
+    expect(rendererFilesMatching(/\.(value|readOnly)\s*=(?!=)/)).toEqual(['src/renderer/app/editor/editorWriteBack.ts']);
+    expect(/\.(value|readOnly)\s*=(?!=)/.test('ta.value = view;')).toBe(true);
+    expect(/\.(value|readOnly)\s*=(?!=)/.test('if (ta.value === view) {}')).toBe(false);
+    expect(rendererFilesMatching(/\b(selectionStart|selectionEnd)\b/)).toEqual([
+      'src/renderer/app/editor/editorWriteBack.ts',
+      'src/renderer/app/editor/selectionSync.ts',
+      'src/renderer/app/editor/sourceEditorBinding.ts',
+    ]);
+    expect(/\.(setRangeText|setSelectionRange)\(/.test("textarea.setSelectionRange(0, 0);")).toBe(true);
+  });
+
+  it('discard 的调用者 × 理由精确（r1.1 §1.7）；所有 .discard( 调用都必须是单引号字面量理由（不能经变量绕过）', () => {
+    const total = collectTsFiles(RENDERER).reduce((n, file) => n + count(stripComments(read(file)), /\.discard\(/g), 0);
+    const literal = Object.values(discardCalls()).reduce((n, reasons) => n + reasons.length, 0);
+    expect(total).toBe(literal);
+    expect(discardCalls()).toEqual({
+      'src/renderer/app/editor/editorController.ts': ['open-commit'],
+      'src/renderer/app/editor/editorWriteBack.ts': ['store-changed-while-composing'],
+      'src/renderer/app/editor/sourceEditorBinding.ts': ['detach'],
+    });
+  });
+
+  it('提交授权 API 的使用位置精确：开始 / 中止只在绑定层，消费在绑定层与写回层，授权外结束只在写回层', () => {
+    expect(rendererFilesMatching(/\.beginCommit\(/)).toEqual(['src/renderer/app/editor/sourceEditorBinding.ts']);
+    expect(rendererFilesMatching(/\.abortCommit\(/)).toEqual(['src/renderer/app/editor/sourceEditorBinding.ts']);
+    expect(rendererFilesMatching(/\.consumeCommit\(/)).toEqual(['src/renderer/app/editor/editorWriteBack.ts', 'src/renderer/app/editor/sourceEditorBinding.ts']);
+    expect(rendererFilesMatching(/\.endCommitUnverified\(/)).toEqual(['src/renderer/app/editor/editorWriteBack.ts']);
+  });
+
+  it('产品编辑控制器：imeView 接到输入法会话（不再是常量）；Open 提交前以 open-commit 理由 discard', () => {
+    const controller = stripComments(read(join(EDITOR_ADAPTER, 'editorController.ts')));
+    const wiring = controller.slice(controller.indexOf('export const museEditorController'));
+    expect(wiring).toContain('imeView: () => museImeSession.view(),');
+    expect(wiring).toContain("museImeSession.discard('open-commit');");
+    expect(wiring).not.toMatch(/imeView: \(\) => '[a-z]+'/);
+  });
+
+  it('平台开关表逐字冻结；只在 editingPlatform.ts 定义', () => {
+    const platform = read(join(EDITOR_ADAPTER, 'editingPlatform.ts'));
+    expect(platform).toContain('Object.freeze({ macos: true, windows: false, linux: false, unknown: false })');
+    expect(rendererFilesMatching(/SOURCE_EDITING_ENABLED\s*[:=]/)).toEqual(['src/renderer/app/editor/editingPlatform.ts']);
+  });
+
+  it('输入与选区写入的 CAS 基线来自同一函数内的一次 deps.read()（CAS-1）', () => {
+    for (const name of ['sourceEditorBinding.ts', 'selectionSync.ts']) {
+      const file = join(EDITOR_ADAPTER, name);
+      expect(casBaseProblems(file, read(file))).toEqual([]);
+    }
+  });
+
+  it('反例：计算之后重新读取作为基线、或传入别的对象都会被识别', () => {
+    const fake = join(EDITOR_ADAPTER, '__fake__.ts');
+    expect(casBaseProblems(fake, 'function f() { const step = g(deps.read()); deps.apply(step.core, deps.read()); }')).toHaveLength(1);
+    expect(casBaseProblems(fake, 'function f() { const base = deps.read(); deps.apply(core, other); }')).toHaveLength(1);
+    expect(casBaseProblems(fake, 'function f() { const base = deps.read(); deps.apply(core, base); }')).toEqual([]);
+  });
+
+  it('编辑 smoke：代码路径用例以 ui.edit-path- 开头、门控用例以 ui.edit-gate- 开头；UA 覆盖只出现在代码路径模块', () => {
+    const input = stripComments(read(join(SMOKE_DIR, 'casesEditingInput.ts')));
+    const gate = stripComments(read(join(SMOKE_DIR, 'casesEditingGate.ts')));
+    const ids = (source: string): string[] => [...source.matchAll(/\bid: '([^']+)'/g)].map((m) => m[1] ?? '');
+    expect(ids(input).length).toBeGreaterThan(0);
+    expect(ids(input).every((id) => id.startsWith('ui.edit-path-'))).toBe(true);
+    expect(ids(gate).length).toBeGreaterThan(0);
+    expect(ids(gate).every((id) => id.startsWith('ui.edit-gate-'))).toBe(true);
+    const overriders = collectTsFiles(SMOKE_DIR)
+      .filter((file) => /setUserAgentOverride/.test(stripComments(read(file))))
+      .map((file) => posixPath(file));
+    expect(overriders).toEqual(['tests/electron/ipcSmoke/casesEditingInput.ts']);
   });
 });
