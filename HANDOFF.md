@@ -2,7 +2,7 @@
 
 > 面向后续实现 Agent 的项目交接文档  
 > 项目代号：`muse-next`  
-> 当前阶段：**M0–M1.8 已封板；M2 Notation Rendering T0–T9 已全部完成（Chord / Jianpu / TAB / Staff 四种记谱可渲染 + T8 render matrix 契约测试 + T9 文档封板），✅ 2026-09-22 封板（原始 seal CI run 35700198783；T8.1 post-seal 契约收紧 run 35702615344；当前 HEAD run 35702885112 三平台全绿）；UI 设计 Brief 已完成（`docs/UI_DESIGN_BRIEF.md` v1.3.8）；M2.5 Score System Layout 方案冻结为 v1.0，**T0 已完成（2026-10-04，`6e5a532` + 命名修订 `3f5b48c`），T1 声部视觉分组已完成（`2b9882c`），T2 跨声部 measure identity 已完成（`218d143`），T2.1 小节错位锁存已完成（`9037351`），T3 共享小节时间轴已完成（`7ee1e27`），T3.5 TAB / 简谱节奏刻印已完成（`d2486aa`），T4 公共几何编排已完成（2026-10-05，`9661810`），T5 三个 voice layout 的外部几何适配已完成（2026-10-05，`ed4ea88`），均三平台 CI 全绿；T5.S VexFlow shared timing spike 已完成（2026-10-05，结论 `feasible-with-cost` / no adapter merged，M2.5 只承诺 Staff tier 1）；T6 和弦图层水平规划已完成（2026-10-05，`c74094e`）；T8 最终系统纵向编排已完成（2026-10-05，`b513261`）；T9a 页面模型已完成（2026-10-05，`49b0e11`）；T9b renderer system 化已完成（2026-10-05，`9eb5722`）；T9b.S Staff 纵向需求已完成（2026-10-06，`17efec3`，T9b 与 T9c 之间插入的 pre-seal 阶段）；T9c A0 seal coverage 测试加固已完成（2026-10-06，`2c2634c`）；T9c.P 简谱歌词 / 弧线横向锚点补丁已完成（2026-10-06，code `1e7fb1c` + docs `42fb4df`，T9c Stage A 第一次 final smoke 发现行首歌词左侧不可达后插入）；T9c Stage A ✅ COMPLETE（validation base `42fb4df`，docs `9a1fd5d`，CI run 37452773013 attempt 1 completed / success，macOS / Windows / Ubuntu 全部 success；见 §30.1「M2.5 T9c Stage A 实际状态」与 `docs/VALIDATION.md`）——**M2.5 ✅ SEALED**（2026-10-06，Stage B final seal `30395fe` `docs: seal M2.5 Score System Layout`，CI run 37457437828 attempt 1，macOS / Windows / Ubuntu 全部 success）；**M3.P0 Editor Core Planning ✅ SEALED**（2026-10-07，`docs/M3_EDITOR_CORE_PLAN.md` v5，`c046260`，CI run 37513609019 三平台 success，见 §30.1「M3.P0 实际状态」）；**M3 T0 纯核心契约 ✅ SEALED**（2026-10-09，`bee1224`，CI run 37944766436 attempt 1 三平台 success，见 §30.1「M3 T0 实际状态」）；**M3 T1a 文件编解码边界 ✅ SEALED**（2026-10-10，code `cbba29c` / CI run 38035446020；docs seal `2cd118a` / CI run 38037437600，见 §30.1「M3 T1a 实际状态」）；**M3 T1b Open 能力激活与真实窗口 IPC ✅ SEALED**（2026-10-11 docs-only seal `bb9231d`，CI run 38151844787 attempt 1 三平台 success，2026-10-12 补记；T1b-1 `104b8e0` / CI run 38040120314、T1b-2a `b198bb1` / 38044009269、T1b-2a′ `1bb9755` / 38047444068、T1b-2b-1 code `158114d` / 38148415852，合并 main `1eb2289` / main CI run 38149886220，见 §30.1「M3 T1b 整体实际状态」）；**M3 T1c / M3 T1 整体 ✅ SEALED**（2026-10-12 docs-only seal `05359f0`，CI run 38233013156 attempt 1 三平台 success，2026-10-14 补记；按 2026-10-12 用户批准的**修订后阶段 Seal Gate**：macOS 真实 GUI 人工辅助验收 + Windows / Ubuntu 以三平台 CI 为阶段依据，**Windows / Ubuntu 真实 GUI 人工验收未执行**，是对应平台产品发布前的强制硬门，见 §30.1「M3 T1c-3 实际状态」）；Preflight r2 已裁决（三阶段 B′），**T1c-1 窗口安全加固代码验收通过**（2026-10-12，`b79172e`，CI run 38215803880 attempt 1 三平台 success；不封板，见 §30.1「M3 T1c-1 实际状态」）；**T1c-2 会话迁移与新 Open IPC 切换代码验收通过**（2026-10-12，`d8cb04e`，CI run 38220816649 attempt 1 三平台 success；旧 `muse:open-score` 已原子删除；不封板，见 §30.1「M3 T1c-2 实际状态」）；**T1c-3 人工验收按修订标准完成**（2026-10-12；macOS M1–M6 PASS、M7 N/A（系统模态阻止）、M8 PASS、M9 不适用）；**构建 / 打包问题 F1（renderer 输出路径错位）与 F2（`npm run package` 退出码 0 却无应用）待解决**（M3 整体 package smoke / Seal 前必须解决）；**M3 T2 History Core ✅ SEALED**（2026-10-14，code `1b2a1cf` / CI run 38559027099；docs-only seal `5363d38` / CI run 38562968395 三平台 success，见 §30.1「M3 T2 实际状态」）；**M3 T3a 编辑状态、历史接线与解析调度：实现与 CI Gate PASS，已合并 main**（2026-10-21，功能提交 `ffd37c9` / CI run 39581666437，PR #1 rebase 合并为 `087dc36` / main CI run 39585682584，均三平台 success；GPT r3b 独立复核 PASS；**源码面板在所有平台仍为只读，编辑尚未开放**，见 §30.1「M3 T3a 实际状态」）；**M3 T3b 菜单命令桥、快捷键与编辑状态栏：实现与三平台 CI 通过，已合并 main**（2026-10-23，功能提交 `6bf8faf` / CI run 39924238908，PR #2（PR CI 39925209353）rebase 合并为 `dfd3fcf` / main CI run 39928586564，三平台 success；GPT 复核 Conditional PASS 后授权合并；**源码面板在所有平台仍为只读**，见 §30.1「M3 T3b 实际状态」）；**M3 T3c NOT STARTED，T3 整体未封板（NOT SEALED），Q8 / Q9 待裁决；T4–T9 NOT STARTED，整个 M3 未封板，产品正式发布未批准**；**项目当前暂停**，恢复时 T3c 只读 preflight 需用户另行授权**（详见 §30 里程碑表、§30.1「M3.P0 实际状态」「M3 T0 实际状态」「M3 T1a 实际状态」「M3 T1b 整体实际状态」「M3 T1c-1 实际状态」「M3 T1c-2 实际状态」「M3 T1c-3 实际状态」「M3 T2 实际状态」「M3 T3a 实际状态」「M3 T3b 实际状态」、§69「当前明确的下一任务」）
+> 当前阶段：**M0–M1.8 已封板；M2 Notation Rendering T0–T9 已全部完成（Chord / Jianpu / TAB / Staff 四种记谱可渲染 + T8 render matrix 契约测试 + T9 文档封板），✅ 2026-09-22 封板（原始 seal CI run 35700198783；T8.1 post-seal 契约收紧 run 35702615344；当前 HEAD run 35702885112 三平台全绿）；UI 设计 Brief 已完成（`docs/UI_DESIGN_BRIEF.md` v1.3.8）；M2.5 Score System Layout 方案冻结为 v1.0，**T0 已完成（2026-10-04，`6e5a532` + 命名修订 `3f5b48c`），T1 声部视觉分组已完成（`2b9882c`），T2 跨声部 measure identity 已完成（`218d143`），T2.1 小节错位锁存已完成（`9037351`），T3 共享小节时间轴已完成（`7ee1e27`），T3.5 TAB / 简谱节奏刻印已完成（`d2486aa`），T4 公共几何编排已完成（2026-10-05，`9661810`），T5 三个 voice layout 的外部几何适配已完成（2026-10-05，`ed4ea88`），均三平台 CI 全绿；T5.S VexFlow shared timing spike 已完成（2026-10-05，结论 `feasible-with-cost` / no adapter merged，M2.5 只承诺 Staff tier 1）；T6 和弦图层水平规划已完成（2026-10-05，`c74094e`）；T8 最终系统纵向编排已完成（2026-10-05，`b513261`）；T9a 页面模型已完成（2026-10-05，`49b0e11`）；T9b renderer system 化已完成（2026-10-05，`9eb5722`）；T9b.S Staff 纵向需求已完成（2026-10-06，`17efec3`，T9b 与 T9c 之间插入的 pre-seal 阶段）；T9c A0 seal coverage 测试加固已完成（2026-10-06，`2c2634c`）；T9c.P 简谱歌词 / 弧线横向锚点补丁已完成（2026-10-06，code `1e7fb1c` + docs `42fb4df`，T9c Stage A 第一次 final smoke 发现行首歌词左侧不可达后插入）；T9c Stage A ✅ COMPLETE（validation base `42fb4df`，docs `9a1fd5d`，CI run 37452773013 attempt 1 completed / success，macOS / Windows / Ubuntu 全部 success；见 §30.1「M2.5 T9c Stage A 实际状态」与 `docs/VALIDATION.md`）——**M2.5 ✅ SEALED**（2026-10-06，Stage B final seal `30395fe` `docs: seal M2.5 Score System Layout`，CI run 37457437828 attempt 1，macOS / Windows / Ubuntu 全部 success）；**M3.P0 Editor Core Planning ✅ SEALED**（2026-10-07，`docs/M3_EDITOR_CORE_PLAN.md` v5，`c046260`，CI run 37513609019 三平台 success，见 §30.1「M3.P0 实际状态」）；**M3 T0 纯核心契约 ✅ SEALED**（2026-10-09，`bee1224`，CI run 37944766436 attempt 1 三平台 success，见 §30.1「M3 T0 实际状态」）；**M3 T1a 文件编解码边界 ✅ SEALED**（2026-10-10，code `cbba29c` / CI run 38035446020；docs seal `2cd118a` / CI run 38037437600，见 §30.1「M3 T1a 实际状态」）；**M3 T1b Open 能力激活与真实窗口 IPC ✅ SEALED**（2026-10-11 docs-only seal `bb9231d`，CI run 38151844787 attempt 1 三平台 success，2026-10-12 补记；T1b-1 `104b8e0` / CI run 38040120314、T1b-2a `b198bb1` / 38044009269、T1b-2a′ `1bb9755` / 38047444068、T1b-2b-1 code `158114d` / 38148415852，合并 main `1eb2289` / main CI run 38149886220，见 §30.1「M3 T1b 整体实际状态」）；**M3 T1c / M3 T1 整体 ✅ SEALED**（2026-10-12 docs-only seal `05359f0`，CI run 38233013156 attempt 1 三平台 success，2026-10-14 补记；按 2026-10-12 用户批准的**修订后阶段 Seal Gate**：macOS 真实 GUI 人工辅助验收 + Windows / Ubuntu 以三平台 CI 为阶段依据，**Windows / Ubuntu 真实 GUI 人工验收未执行**，是对应平台产品发布前的强制硬门，见 §30.1「M3 T1c-3 实际状态」）；Preflight r2 已裁决（三阶段 B′），**T1c-1 窗口安全加固代码验收通过**（2026-10-12，`b79172e`，CI run 38215803880 attempt 1 三平台 success；不封板，见 §30.1「M3 T1c-1 实际状态」）；**T1c-2 会话迁移与新 Open IPC 切换代码验收通过**（2026-10-12，`d8cb04e`，CI run 38220816649 attempt 1 三平台 success；旧 `muse:open-score` 已原子删除；不封板，见 §30.1「M3 T1c-2 实际状态」）；**T1c-3 人工验收按修订标准完成**（2026-10-12；macOS M1–M6 PASS、M7 N/A（系统模态阻止）、M8 PASS、M9 不适用）；**构建 / 打包问题 F1（renderer 输出路径错位）与 F2（`npm run package` 退出码 0 却无应用）待解决**（M3 整体 package smoke / Seal 前必须解决）；**M3 T2 History Core ✅ SEALED**（2026-10-14，code `1b2a1cf` / CI run 38559027099；docs-only seal `5363d38` / CI run 38562968395 三平台 success，见 §30.1「M3 T2 实际状态」）；**M3 T3a 编辑状态、历史接线与解析调度：实现与 CI Gate PASS，已合并 main**（2026-10-21，功能提交 `ffd37c9` / CI run 39581666437，PR #1 rebase 合并为 `087dc36` / main CI run 39585682584，均三平台 success；GPT r3b 独立复核 PASS；T3a 合并时源码面板在所有平台仍为只读，见 §30.1「M3 T3a 实际状态」）；**M3 T3b 菜单命令桥、快捷键与编辑状态栏：实现与三平台 CI 通过，已合并 main**（2026-10-23，功能提交 `6bf8faf` / CI run 39924238908，PR #2（PR CI 39925209353）rebase 合并为 `dfd3fcf` / main CI run 39928586564，三平台 success；GPT 复核 Conditional PASS 后授权合并；T3b 合并时源码面板在所有平台仍为只读，见 §30.1「M3 T3b 实际状态」）；**M3 T3c 源码编辑、输入法与写回：实现完成，已合并 main**（2026-10-26，功能提交 `d18dcb6`，PR #3（PR CI 40307209387）rebase 合并为 `ac21ffd` / main CI run 40308679683，三平台 success；Q8（macOS：Q8-B′、Q8-b(i)）与 Q9（Q9-A、Q9-S1）已裁决；Gate B1 PASS WITH DOCUMENTED EXCEPTIONS（仅限 macOS 15.3.2 实机）、B2 / B3 PASS；**macOS 开放源码编辑，Windows / Linux 源码面板保持只读**，见 §30.1「M3 T3c 实际状态 / T3 macOS Scope Seal Candidate」）；**T3（macOS 源码编辑范围）：Seal candidate**（2026-10-29 Gate C docs-only seal；该提交三平台 CI success 后为 ✅ SEALED，仅 macOS 范围）；**T3 跨平台完整范围 NOT SEALED**（G4-Windows / G4-Linux 未验收）；**T4–T9 NOT STARTED，整个 M3 未封板，产品正式发布未批准**；本 docs-only seal 提交三平台 CI 全绿后补记 run 号并正式标 T3（macOS 范围）SEALED，之后 Next = M3 T4 只读 preflight，需用户另行授权**（详见 §30 里程碑表、§30.1「M3.P0 实际状态」「M3 T0 实际状态」「M3 T1a 实际状态」「M3 T1b 整体实际状态」「M3 T1c-1 实际状态」「M3 T1c-2 实际状态」「M3 T1c-3 实际状态」「M3 T2 实际状态」「M3 T3a 实际状态」「M3 T3b 实际状态」「M3 T3c 实际状态 / T3 macOS Scope Seal Candidate」、§69「当前明确的下一任务」）
 >
 > 核心目标：以现代 TypeScript 技术栈重建已停止维护的 **Muse Pro 2.70** 的核心能力，并优先恢复其 `.jcx` 乐谱格式、谱面渲染、编辑与播放能力。
 
@@ -1819,9 +1819,11 @@ T1c-3 按 2026-10-12 修订后的阶段 Seal Gate 完成（macOS 真实 GUI 人�
 T1c / M3 T1 整体 ✅ 2026-10-12 SEALED（docs-only seal `05359f0`，CI run 38233013156 三平台 success）；F1 / F2 构建打包问题待解决；
 T2 History Core ✅ 2026-10-14 SEALED（code `1b2a1cf` / CI run 38559027099；docs-only seal `5363d38` / CI run 38562968395 三平台 success）；
 T3 源码输入 + 解析调度：Preflight r3 与实施 Gate 附录 v2 已裁决，拆为 T3a / T3b / T3c；T3a ✅ 2026-10-21 实现与 CI Gate PASS（`ffd37c9` / CI run 39581666437，
-PR #1 合并为 `087dc36` / main CI run 39585682584，三平台 success；源码面板仍只读）；T3b ✅ 2026-10-23 实现与三平台 CI 通过（`6bf8faf` / CI run 39924238908，
-PR #2 合并为 `dfd3fcf` / main CI run 39928586564，三平台 success；源码面板仍只读）；T3c NOT STARTED，T3 整体未封板；
-T4–T9 NOT STARTED，整个 M3 未封板；项目暂停，T3c 需用户授权）
+PR #1 合并为 `087dc36` / main CI run 39585682584，三平台 success；当时源码面板仍只读）；T3b ✅ 2026-10-23 实现与三平台 CI 通过（`6bf8faf` / CI run 39924238908，
+PR #2 合并为 `dfd3fcf` / main CI run 39928586564，三平台 success；当时源码面板仍只读）；T3c 2026-10-26 实现完成并已合并 main（仅 macOS 开放源码编辑；`d18dcb6`，
+PR #3 合并为 `ac21ffd` / main CI run 40308679683，三平台 success；Gate B1 PASS WITH DOCUMENTED EXCEPTIONS、B2 / B3 PASS；macOS 开放源码编辑，Windows / Linux 只读）；
+T3（macOS 源码编辑范围）Seal candidate（2026-10-29 Gate C docs-only seal，三平台 CI success 后为 SEALED，仅 macOS 范围）；T3 跨平台完整范围未封板（G4-Windows / G4-Linux 待验收）；
+T4–T9 NOT STARTED，整个 M3 未封板；Next = T4 只读 preflight，需用户授权）
 
 → M4
 Playback / MIDI
@@ -3210,7 +3212,7 @@ visual debt、T7 第 6 条），按 视觉 / 架构 / 测试 分类，每行注�
   用于拒绝旧 saving phase 的迟到 `SaveResult`；不阻止 P0 冻结。
 - 冻结后规则：不再启动新的 M3.P0 架构审查，不再扩写方案；post-M3 / LOW / robustness debt 保留在方案 §26；
   实现阶段发现的问题按 T0–T9 各阶段 gate 处理，不重新打开 P0。
-- 实施进度：T0 ✅ SEALED（见下方「M3 T0 实际状态」）；T1a ✅ SEALED（见下方「M3 T1a 实际状态」）；T1b-1 纯协议层已提交 `104b8e0`、CI run 38040120314 三平台 success（未单独封板，随 T1b 整体封板）；T1b-2a Electron Open IPC 接线已提交 `b198bb1`、CI run 38044009269 三平台 success；T1b-2a′ 原生对话框所有权定点修复已提交 `1bb9755`、CI run 38047444068 三平台 success（见下方「M3 T1b-2a′ 实际状态」）；T1b-2b-1 真实窗口 IPC smoke 代码验收通过（`158114d`，CI run 38148415852 三平台 success，已合并 main `1eb2289`，见下方「M3 T1b-2b-1 实际状态」）；**T1b：Seal candidate**（2026-10-11 docs-only seal 提交，本提交三平台 CI success 后正式 ✅ SEALED；Seal Preflight 裁决不新增 T1b-2b-2，见下方「M3 T1b 整体实际状态」）；T1c 与 T2–T9 NOT STARTED；**M3 T1 整体未封板**。（以上为 T1b 封板时的进度；2026-10-23 现状：M3 T1、T2 ✅ SEALED；T3a、T3b 实现与三平台 CI 通过并已合并 main；T3c NOT STARTED，T3 整体未封板；T4–T9 NOT STARTED，见 §69。）
+- 实施进度：T0 ✅ SEALED（见下方「M3 T0 实际状态」）；T1a ✅ SEALED（见下方「M3 T1a 实际状态」）；T1b-1 纯协议层已提交 `104b8e0`、CI run 38040120314 三平台 success（未单独封板，随 T1b 整体封板）；T1b-2a Electron Open IPC 接线已提交 `b198bb1`、CI run 38044009269 三平台 success；T1b-2a′ 原生对话框所有权定点修复已提交 `1bb9755`、CI run 38047444068 三平台 success（见下方「M3 T1b-2a′ 实际状态」）；T1b-2b-1 真实窗口 IPC smoke 代码验收通过（`158114d`，CI run 38148415852 三平台 success，已合并 main `1eb2289`，见下方「M3 T1b-2b-1 实际状态」）；**T1b：Seal candidate**（2026-10-11 docs-only seal 提交，本提交三平台 CI success 后正式 ✅ SEALED；Seal Preflight 裁决不新增 T1b-2b-2，见下方「M3 T1b 整体实际状态」）；T1c 与 T2–T9 NOT STARTED；**M3 T1 整体未封板**。（以上为 T1b 封板时的进度；2026-10-29 现状：M3 T1、T2 ✅ SEALED；T3a、T3b、T3c 实现完成并已合并 main；T3（macOS 源码编辑范围）Seal candidate，T3 跨平台完整范围未封板；T4–T9 NOT STARTED，见 §69。）
 
 **M3 T0 实际状态（2026-10-09，✅ SEALED：`bee1224`，CI run 37944766436 attempt 1 三平台 success；npm ci / typecheck / npm test / fixture report 四步均实际执行成功）**：
 - 范围：Pure Core Contracts，只新增文件（32 个），既有文件零改动；未改 renderer / main / preload / `package.json` / `.github/**`。
@@ -3813,7 +3815,114 @@ visual debt、T7 第 6 条），按 视觉 / 架构 / 测试 分类，每行注�
   6. 不变：T3c 的 CAS 真实基线（`applyEditorStep(core, base)` 用当次计算基线）、`setEditorSelection` 的选区事件交错、IME（Q8）、版本增量 Gate 未开始；
      F1 / F2 构建打包问题须在 M3 package smoke 与 Seal 前解决；T3–T5 只允许开发构建。
 - 阶段边界：T0–T2 ✅ SEALED；T3a、T3b 实现与三平台 CI 通过并已合并 main；**T3c NOT STARTED，T3 整体未封板（NOT SEALED）**；Q8 / Q9 待裁决。
-- **Next（当前暂停点）**：项目暂停。用户明确授权后才开始 T3c 只读 preflight；不自动开始 T3c 编码，不放宽 G9。
+- （以上为 T3b 合并时的状态；T3c 已于 2026-10-26 完成并合并 main，见下节。）当时的 Next：项目暂停，用户明确授权后才开始 T3c 只读 preflight；不自动开始 T3c 编码，不放宽 G9。
+
+**M3 T3c 实际状态 / T3 macOS Scope Seal Candidate（2026-10-26 实现合并 main；2026-10-29 Gate C docs-only seal candidate——本 docs-only seal 提交的三平台 CI success 后，T3 的 macOS 源码编辑范围正式 ✅ SEALED；T3 跨平台完整范围与整个 M3 未封板）**：
+- 过程：T3c 只读 Preflight r0 → r1 → r1.1 → r1.1 勘误（三轮外部复核（GPT）与内部独立审查，形成统一裁决方案）→ Gate B1 编码授权（38 个文件）→ 本地门禁、
+  变异、独立代码审查、/check → B1 第 ④ 步实机验收（Claude 经 Computer Use 操作 + 用户物理操作）→ 两轮独立复核（只读子代理、GPT）与程序化入口补测 →
+  B1 裁决 → 功能提交与 PR #3 三平台 CI、独立 PR 审查（B2）→ rebase 合并与本地 main 同步（B3）→ 本 Gate C。Preflight、实机证据、CI 原始日志与复核材料保存在
+  仓库外验收目录 `~/muse-acceptance/m3-t3c-preflight/`、`~/muse-acceptance/m3-t3c-b1/`、`~/muse-acceptance/m3-t3c-b2/`（各附 SHA256SUMS），不入库。
+- 用户裁决（T3c 统一裁决方案）：
+  - Q8-B′（只适用于 macOS）：组字提交后的 settled 窗口**只诊断、不吸收任何输入**（谓词 D1–D3，每个诊断窗口最多记录 3 条 `ime-trailing-suspect`）；
+    观测到同一提交的真实重复写入即 STOP、重议 Q8。
+  - Q8-b(i)：组字中失焦（点击别处 / 切窗）以拼音原文提交为一个可一步撤销的事务。
+  - Q9-A：平台判定 UA-CH 优先、`navigator.platform` 兜底；冻结开关表 `{ macos: true, windows: false, linux: false, unknown: false }`，只开放 macOS。
+  - Q9-S1：T3 可按「macOS 源码编辑范围」单独 Seal；Windows / Linux 源码编辑未开放，待 G4-Windows / G4-Linux；HANDOFF 与 §30 不写跨平台 T3 ✅。
+    Q9-S1 不改变 M3 整体封板条件（方案 §28 要求源码编辑可用，M3 Seal 时须再决定平台范围）。
+  - Q-C1(a)：`setEditorSelection(core, base)` 改为 session / history / selection 三对象 CAS；Q-C2：删除保持字素簇语义；Q-C3：38 个文件（另有
+    `windows.ts`、`global.css` 两个条件文件，未使用）；Q-C4：两个新 smoke 文件；接受 r1 §6.1 unload 合同（beforeunload 时 dirty 或组字即阻止；输入法
+    取消且 clean 时允许关闭）；Q-C5：G4-macOS 实机为当前办公室 Mac（macOS 15.3.2 / 24D81）。
+  - 追加授权：`tests/electron/ipcSmoke/casesEditing.ts` 中 T3b 旧断言「源码面板保持只读」与 T3c 冲突（STOP 后用户授权方案 (a)），只把期望改为
+    `process.platform !== 'darwin'` 并更新文件头注释；GPT 复核要求的 M-8 / U-5 程序化入口补测只在 `casesEditingInput.ts` 内增加断言。
+- 提交：基线 `8e360fa`；功能提交 `d18dcb6`（`feat(editor): 完成 M3 T3c 源码编辑、输入法与写回（仅 macOS 开放）`，父 `8e360fa`），push CI run 40307200670、
+  PR CI run 40307209387；PR #3 以 rebase 合并为 main `ac21ffd`（父 `8e360fa`，代码树 `a6d2800` 与 `d18dcb6` 完全相同），main CI run 40308679683；
+  三次均 macOS / Windows / Ubuntu 全部 success。38 个文件（修改 17、新增 21，+4562 −34）：
+  - 产品：新增 `src/renderer/app/editor/{inputPlan,graphemes,imeMachine,imeSession,editingPlatform,editorWriteBack,selectionSync,sourceEditorBinding}.ts`；
+    修改 `src/renderer/app/store.ts`、`src/renderer/app/editor/{editorController,editorStatus,editorTransitions}.ts`、`src/renderer/components/SourceInspector.tsx`、
+    `scripts/m3/electronIpcSmokeSummary.ts`。
+  - smoke：新增 `tests/electron/ipcSmoke/{casesEditingInput,casesEditingGate}.ts`；修改 `casesEditing.ts`（见上）、`smokeMain.entry.ts`。
+  - 单测 / 守卫：新增 `tests/unit/app/{graphemes,inputPlan,editingPlatform,imeMachine,imeSession,editorWriteBack,selectionSync,sourceEditorBinding,
+    sourceEditorBinding.ime,sourceEditorBinding.lifecycle,imeCommit.integration}.test.ts`；修改 `tests/unit/app/{store,editorStatus,editorController,unloadBlocker}.test.ts`、
+    `tests/unit/editor/architecture.{m3t1b2b,m3t1c,m3t1c1,m3t3}.test.ts`、`tests/unit/scripts/electronIpcSmokeSummary.test.ts`。守卫改动：`architecture.m3t1c`
+    第 6 条（T1c「SourceInspector 只读」）按 T3c 方案（G4，已授权的 38 个文件之一）把「`readOnly` + `value={view}`」与「订阅 `projection.view`」两条只读断言
+    改写为非受控守卫（不传 `value` / `defaultValue`、只经 `bindSourceEditor` ref 绑定），原有输入事件禁止项全部保留并追加 `onBeforeInput` / `onCut` /
+    `onComposition*`；`m3t1b2b`、`m3t1c1` 只追加；`m3t3` 新增 T3c 守卫；均附反例。
+  - `src/editor/**`、T0 / T2 合同、main / preload / shared、414 冻结文件、依赖与锁文件、Vite / Forge 配置均未改动；不新增 IPC；G9 / G12 未放宽。
+- 能力：
+  - 非受控 textarea：`SourceInspector` 只经 `bindSourceEditor` ref 绑定（无 `value` / `defaultValue`），`readOnly` 随平台门控；beforeinput 同步段先
+    `preventDefault`，经 `inputPlan` 生成补丁，再以同一次 `deps.read()` 取得的 base 调用 `applyEditorStep(core, base)`——兑现 T3a 遗留第 1 条（CAS 真实基线）。
+  - 输入：CRLF / 孤立 CR / 受保护开头 U+FEFF 按 SourceProjection 映射；粘贴的换行按文档 dominant EOL 规范；删除以字素簇为单位（`Intl.Segmenter`）；删词、删行、
+    Ctrl+K / Ctrl+Y / Ctrl+T 等不支持的类型 fail closed（`input-unsupported`），孤立 CR 后紧接回车等被拒（`input-rejected`）。
+  - IME：状态机 idle / composing / committing / discarded / settled；提交授权一次性（token、documentId、授权版本、期望 view，结果在授权时确定）；组字期间不解析、
+    不入历史；取消不建事务；Q8-B′ / Q8-b(i) 见上。
+  - DOM 写回：store 订阅驱动，文本与选区分开判定；模式 A 用 `setRangeText` 做局部替换，模式 B 在 DOM 已与新 view 一致时不写；写回失败进入 broken 并
+    fail closed，按基线有界恢复。
+  - 选区同步：DOM 选区 → store 三对象 CAS，两次即时尝试 + 一次延迟尝试，最后以 store 为准收束（T3a 遗留第 1 条中的选区事件交错已处理）。
+  - 平台门控：UI `readOnly` 与绑定层拒绝双重门控；Windows / Linux / unknown 只读，组字开始不进入状态机。
+  - 解析与卸载保护：组字中 Open 被拒（`open-refused-composing`）、Reparse 被忽略（`reparse-ignored-composing`）；beforeunload 按「dirty 优先、其次组字」阻止
+    关窗与重载（`unload-blocked-dirty` / `unload-blocked-composing`）；新增 7 种编辑提示（`input-unsupported`、`input-rejected`、`input-reverted`、`edit-conflict`、
+    `edit-out-of-sync`、`ime-not-applied`、`source-readonly-platform`）。
+- 本地 Gate B1（macOS 15.3.2，Claude 执行）：typecheck × 2；npm test 187 个测试文件 / 9005 个用例；renderer bundle PASS（modules = 290，T3b 为 279）；
+  codec 44/44；fixture 105/105；真实窗口 IPC smoke 67/67（程序化入口补测后连续两次完整运行 PASS）；必杀变异 36/36 KILLED（首轮 32/36，补强 4 处测试）；
+  独立代码审查 0 CRITICAL / 1 HIGH（T3b 旧 smoke 只读断言，经用户授权最小修改）/ 1 MEDIUM（卡死出口与 detach 未结束解析调度的组字状态，已修）/
+  4 LOW（均已修复或补强；其中 L4a 不同意并记录理由，L3 中 CAS 基线检查为文本匹配一项保留为已知局限）；/check 无阻断。
+  - 完整 smoke 的非确定性历史（如实保留）：修改 `casesEditing.ts` 后第 2 次完整运行 65/67（`ui.edit-path-input` / `ui.edit-path-ime` 失败，日志中出现
+    macOS `TSM AdjustCapsLockLEDForKeyTransitionHandling`，**推断**为 smoke 窗口抢焦点期间机器上有物理按键；该推断**未证实**，且后来一次通过的运行中也出现过该
+    日志行），第 3 次 66/67（与 T3c 无关的 T1 用例 `real.destroy-isolated` 失败）；两类用例隔离重复运行均通过，此后的完整运行全部 67/67。未修改任何断言；
+    失败日志原样保留在 `~/muse-acceptance/m3-t3c-b1/local-gate/flaky-runs/`；根因未确认。
+- Gate B1 实机验收（G4-macOS）：
+  - 环境：macOS 15.3.2（24D81）、Electron 44.3.0 / Chromium 152.0.7977.78；被测代码为候选改动的开发构建（仓库外临时 worktree，只加 `[T3CI]` 取证日志，
+    证据归档后已清理）；输入源 ABC、微信输入法 WeType 3.0.0（拼音）、Apple 简体拼音。
+  - 证据等级（不得混用）：SP-INPUT-I 的 I-1～I-10、SP-IME-I 的 M-1～M-5 与 M-8、SP-UNLOAD-I 的 U-1（Cmd+W / Cmd+Q / 菜单关闭）、U-2、U-3、U-5、U-7、U-8
+    由 Claude 经 Computer Use 注入系统级输入（**不是物理按键**）；I-11（Fn+Delete）、M-6（两种输入法下提交后经「表情与符号」插入 emoji、长按选重音）、
+    M-7（两种输入法组字中 Cmd+Z / Cmd+W，并补测 Cmd+O / Cmd+R）、U-1 关闭按钮、U-4、U-6 由用户物理键盘 / 鼠标操作，按「CU 准备 → 单次物理操作 →
+    收集证据 → 判定 → 用户确认」逐项执行。
+  - 结果：FAIL 0。四类真实文件（CRLF、孤立 CR、UTF-8 BOM、混合换行且末尾无换行）按原始字节、加载后 exact source、编辑后内存状态、投影映射四个层级核对；
+    T3 没有 Save，不做保存后文件字节验收；全程零写盘（夹具 SHA-256 不变）。U-4 实际走路径 A（点击标题栏关闭按钮不结束组字，clean 时由组字条件阻止）。
+  - Q8-B′：物理阶段窗口的 DevTools console 直接读数 `ime-trailing-suspect` 0 条（有正向对照）；Computer Use 阶段的窗口已关闭，**没有直接计数**，只有事件日志的
+    间接证据（每个非空提交恰好一次版本 +1，没有内容重复的递增）。未观测到同一提交的重复写入，未触发 STOP。（独立复核发现取证日志不转发 `[muse]` 诊断后，
+    原「记录数 0」的表述已撤回改写。）
+  - 干扰与作废：用户误触、工具抢焦点与来源未确认的点击都按时间记录；受影响的尝试作废重做，不据此推断产品缺陷。
+  - **Gate B1 裁决：PASS WITH DOCUMENTED EXCEPTIONS**（用户确认；GPT 对第 6 版报告与 171 项证据包独立复核）。适用范围**仅限**上述 macOS 15.3.2 /
+    Electron 44.3.0 / 三种输入源，不外推到 Windows / Linux 或其它输入方式。接受的有限例外（**不得改写为 PASS**）：
+    1. M-8（组字中 Open / Reparse）：物理快捷键路径 **INCONCLUSIVE**——两种输入法在组字中都拦下 Cmd+O / Cmd+R（WeType 吞掉，Apple 拼音并入组字），
+       点击菜单栏或工具栏会先以原文提交组字；真实产品菜单回调的**程序化入口测试 PASS**（`open-refused-composing`、`reparse-ignored-composing`，文件选择器未调用，
+       session / 版本 / History / DOM 不变）。
+    2. U-5（clean + 组字中的主进程 reload）：物理入口 **INCONCLUSIVE**（产品没有可在组字中触发主进程 reload 的入口）；真实主进程 `webContents.reload()` 路径的
+       **程序化入口测试 PASS**（`unload-blocked-composing`，页面未重载）。
+    3. 系统听写：**N/A**（未启用、未实测）。
+    4. Voice Control：**N/A**（可选项，未启用、未实测）。
+- Gate B2（三平台 CI 与独立审查）：
+  - CI 三平台结果（PR CI 40307209387、push CI 40307200670、main CI 40308679683 各项计数相同）：npm test 187 个测试文件、9005 个用例（macOS 9005 passed，
+    Windows / Ubuntu 9004 passed + 1 项既有 skip），其中 `architecture.m3t3` 48 个；typecheck × 2；renderer bundle PASS（modules = 290）；codec macOS / Ubuntu
+    44/44、Windows 43 + 1 项既有 skip；fixture 105/105；真实窗口 IPC smoke macOS 67/67、Windows 70 = 66 passed + 4 个已裁决 observed、Ubuntu 68 = 63 passed +
+    5 个已裁决 observed（observed 均为 T1 既有的 `real.*` 与 `risk.linux-force-crash-stall`）。以上均为自动化 CI，不是真实 GUI 验收。
+  - 平台边界：`ui.edit-gate-platform` 在 macOS 为 `editable:true`，在 Windows / Ubuntu 为 `editable:false`（真实只读门控）；`ui.edit-path-*` 在 Windows / Ubuntu
+    经 CDP `Emulation.setUserAgentOverride` 运行（`emulated:true`），**只证明编辑代码路径可执行，不是该平台的输入法、菜单、键盘或窗口验收，不构成
+    G4-Windows / G4-Linux**。
+  - 独立 PR 审查（只读子代理，审查 `d18dcb6` 全部 38 个文件与 PR CI 日志）：0 CRITICAL / 0 HIGH / 0 MEDIUM / 2 LOW（见下方遗留第 1、2 条）。B2 PASS。
+- Gate B3：合并前 origin/main 未移动，PR head 锁定 `d18dcb6`；rebase 合并为 `ac21ffd`，代码树与审查对象一致；main CI 三平台 success；本地 main 快进到 `ac21ffd`，
+  工作区干净，本地复验 typecheck、187 / 9005、IPC smoke 67/67、renderer bundle、codec 44/44、fixture 105/105 通过；开发分支保留。B3 PASS。
+- 遗留风险与技术债（非阻塞）：
+  1. B2 LOW L-1：`casesEditingInput.ts` 的「page has user activation before reload」前提恒为真（smoke 的 `window.call` 经 `executeJavaScript(code, true)` 授予
+     用户激活），只说明测试条件下有激活；U-5 程序化入口测试的结论不受影响。
+  2. B2 LOW L-2：两条「组字中」断言紧接 CDP 调用读取，单独不能证明组字已生效；后续的提示与版本断言间接覆盖，不会假通过。
+  3. 可维护性：超过约 350 行约定的文件——`sourceEditorBinding.ts` 511 行、`editorWriteBack.ts` 376 行、`architecture.m3t3.test.ts` 634 行、
+     `sourceEditorBinding.test.ts` 415 行、`editorWriteBack.test.ts` 404 行、`store.test.ts` 365 行、`imeCommit.integration.test.ts` 354 行、`casesEditing.ts` 366 行
+     （T3b 遗留的拆分未在 T3c 执行，编辑用例改为新增文件）；用户确认为非阻塞维护债，拆分需单独授权。T3b 遗留的 `openController.ts` 头注释过时问题仍在。
+  4. 守卫已知局限：CAS 基线检查是文本匹配（解构 `deps` 的写法不会被识别），由代码审查兜底。
+  5. beforeunload 依赖页面已有用户激活：对没有用户激活的页面与主进程强制退出仍不提供数据保护（T3a 遗留第 4 条的残余部分；macOS 关窗 / 退出路径已由
+     SP-UNLOAD-I 实测）。
+  6. Windows / Linux：源码编辑保持只读；真实 GUI、真实键盘与 IME（G4-Windows / G4-Linux）未验收，是开放这两个平台源码编辑与对应平台产品发布前的硬门；
+     T3b 记录的 Win / Linux 非拉丁布局 Ctrl+Z 观察项不变。
+  7. 构建 / 打包 F1（renderer 生产输出路径与 main 加载路径错位）与 F2（`npm run package` 退出码 0 却没有产出应用）仍未解决，须在 M3 整体 package smoke 与
+     M3 Seal 前解决；本 Gate C 不修改 Vite / Forge / main 加载路径，不启动打包修复。
+  8. 不变：T3–T5 只允许开发构建，不发布、不打 tag、不分发安装包；Save / Save As 属 T4，尚未实现（源码编辑后的修改目前不能写回磁盘）。
+- 阶段边界：T0–T2 ✅ SEALED；T3a / T3b / T3c 实现完成并已合并 main；Gate B1（PASS WITH DOCUMENTED EXCEPTIONS）/ B2 / B3 完成；**T3（macOS 源码编辑范围）：
+  Seal candidate**——本 docs-only seal 提交的三平台 CI success 后为 ✅ SEALED（仅 macOS 范围）；**T3 跨平台完整范围 NOT SEALED**（Windows / Linux 源码编辑未开放）；
+  **整个 M3 NOT SEALED**；T4–T9 NOT STARTED；产品正式发布 NOT APPROVED。
+- **Next**：本 docs-only seal 提交的三平台 CI 全绿后，T3（macOS 源码编辑范围）正式 ✅ SEALED（该次 CI 的 run 号在下一次文档同步补记）；之后 Next =
+  **M3 T4（Save / Save As + 守卫核心，方案 §22）只读 preflight**，须由用户单独授权，不自动开始 T4。Windows / Linux 的 G4 与 F1 / F2 按各自硬门另行安排。
 
 **M2 seal 与 M3 前置（T9 之后，恢复时从这里继续）**：**2026-09-22 追加裁决：M2 与 UI 目标版式确认之后、M3 之前先做 M2.5 Score System Layout（见 §30 路线表与 `docs/UI_DESIGN_BRIEF.md` §2.7.6、§10.17/10.18）；M2.5 的 System 模型 = overlay layers（chord diagrams）+ ordered voice layers（TAB/Jianpu/Staff 接受外部 system/measure 几何）+ attached layers（lyrics），chord 不是第四种声部 layout，system 高度由内容决定、分页只在 system 边界，`bracket` 只证明视觉分组、需定义 cross-voice measure mismatch policy。**原文：T0–T9 已全部完成并推送，
 下一步不是继续写渲染代码，而是：
@@ -5333,7 +5442,7 @@ JCX
 
 # 69. 当前明确的下一任务
 
-M0–M2.5、M3.P0、M3 T0、M3 T1a 已封板；M3 T1b-1 纯协议层与 M3 T1b-2a Electron Open IPC 接线三平台 CI 通过；M3 T1b-2a′ 原生对话框所有权定点修复已提交 `1bb9755`（CI run 38047444068 三平台 success）；M3 T1b-2b-1 真实 Electron 窗口 IPC smoke 代码验收通过（`158114d`，CI run 38148415852 三平台 success，合并 main `1eb2289` / CI run 38149886220）；**M3 T1b ✅ SEALED**（2026-10-11 docs-only seal `bb9231d`，CI run 38151844787 三平台 success，见 §30.1「M3 T1b 整体实际状态」）；**M3 T1c-1 窗口安全加固代码验收通过**（`b79172e`，CI run 38215803880 三平台 success，见 §30.1「M3 T1c-1 实际状态」）；**M3 T1c-2 会话迁移与新 Open IPC 切换代码验收通过**（`d8cb04e`，CI run 38220816649 三平台 success，见 §30.1「M3 T1c-2 实际状态」）；**M3 T1c-3 按修订后的阶段 Seal Gate 完成，T1c 与 M3 T1 整体 ✅ SEALED**（docs-only seal `05359f0`，CI run 38233013156 三平台 success；Windows / Ubuntu 真实 GUI 人工验收未执行，为发布前硬门；见 §30.1「M3 T1c-3 实际状态」）；**M3 T2 History Core ✅ SEALED**（code `1b2a1cf` / CI run 38559027099；docs-only seal `5363d38` / CI run 38562968395 三平台 success；见 §30.1「M3 T2 实际状态」）；**M3 T3a 编辑状态、历史接线与解析调度：实现与 CI Gate PASS，已合并 main**（`ffd37c9` / CI run 39581666437，PR #1 合并为 `087dc36` / main CI run 39585682584，三平台 success；GPT r3b 独立复核 PASS；源码面板在所有平台仍为只读；见 §30.1「M3 T3a 实际状态」）；F1 / F2 构建打包问题待解决；**T3b / T3c NOT STARTED，T3 整体未封板**；Q8 / Q9 待裁决；T4–T9 NOT STARTED，整个 M3 未封板。**当前暂停点**：项目暂停，用户明确要求继续时从 T3b 前置验证 SP-KEY-P 开始。
+M0–M2.5、M3.P0、M3 T0、M3 T1（T1a / T1b / T1c）、M3 T2 已封板（各阶段提交与 CI run 见 §30 与 §30.1）；**M3 T3a / T3b / T3c 实现完成并已合并 main**（T3a `087dc36` / main CI run 39585682584；T3b `dfd3fcf` / main CI run 39928586564；T3c `ac21ffd` / main CI run 40308679683；均三平台 success）；**T3（macOS 源码编辑范围）：Seal candidate**（2026-10-29 Gate C docs-only seal，该提交三平台 CI success 后为 ✅ SEALED，仅 macOS 范围；Gate B1 PASS WITH DOCUMENTED EXCEPTIONS，见 §30.1「M3 T3c 实际状态 / T3 macOS Scope Seal Candidate」）；macOS 开放源码编辑，**Windows / Linux 源码面板保持只读，T3 跨平台完整范围未封板**（G4-Windows / G4-Linux 未验收）；构建 / 打包 F1 / F2 待解决（M3 整体 package smoke 与 M3 Seal 前必须解决）；T4–T9 NOT STARTED，整个 M3 未封板，产品正式发布未批准（T3–T5 只允许开发构建）。（2026-10-23 时此处的「T3b / T3c NOT STARTED」「Q8 / Q9 待裁决」「从 SP-KEY-P 开始」均已过期。）**当前暂停点**：本 docs-only seal 提交的三平台 CI 全绿后，补记该次 CI run 号并正式标 T3（macOS 范围）SEALED；之后 Next = M3 T4 只读 preflight，须用户单独授权。
 
 恢复时：
 
@@ -5376,13 +5485,20 @@ M0–M2.5、M3.P0、M3 T0、M3 T1a 已封板；M3 T1b-1 纯协议层与 M3 T1b-2
    构建 / 打包问题 F1、F2 待解决（M3 整体 package smoke / Seal 前必须解决）。整个 M3 未封板；产品正式发布未批准，不发布、不打 tag、不分发安装包。
    **M3 T2 History Core**：Preflight r3（Q1–Q7、C1–C2 已裁决）→ 代码 `1b2a1cf`（CI run 38559027099 三平台 success）→ **✅ SEALED**
    （docs-only seal `5363d38`，CI run 38562968395 三平台 success）。
-   **M3 T3**（源码输入 + 解析调度，§22）：Preflight r3 与实施 Gate 附录 v2 已裁决（Q1–Q7；Q8 未最终裁决，Q9 待裁决；G4 分平台），拆为 T3a / T3b / T3c。
+   **M3 T3**（源码输入 + 解析调度，§22）：Preflight r3 与实施 Gate 附录 v2 已裁决（Q1–Q7；G4 分平台），拆为 T3a / T3b / T3c；T3c Preflight 中
+   Q8（只适用于 macOS：Q8-B′ settled 只诊断不吸收、Q8-b(i) 失焦时原文提交为一个事务）与 Q9（Q9-A UA-CH 平台判定、Q9-S1 macOS 限定范围 Seal）已裁决。
    **T3a ✅ 实现与 CI Gate PASS，已合并 main**（`ffd37c9` / CI run 39581666437 → PR #1 → `087dc36` / main CI run 39585682584，三平台 success；
-   见 §30.1「M3 T3a 实际状态」，含遗留技术债）；源码面板在所有平台仍为只读。
+   见 §30.1「M3 T3a 实际状态」，含遗留技术债）；T3a 合并时源码面板在所有平台仍为只读。
    **T3b ✅ 实现与三平台 CI 通过，已合并 main**（SP-KEY-P 通过 → `6bf8faf` / CI run 39924238908 → PR #2 → `dfd3fcf` / main CI run 39928586564，三平台 success；
-   见 §30.1「M3 T3b 实际状态」，含证据等级与遗留风险）。**T3c NOT STARTED，T3 整体未封板（不得标 SEALED）。**
-   **Next（当前暂停点）**：项目暂停。用户明确授权后才开始 T3c 只读 preflight（CAS 真实基线、可编辑 textarea、IME、写回、SP-IME / SP-INPUT / SP-UNLOAD、
-   Q8 macOS 裁决、Q9 Seal 范围、G4-macOS）；不自动开始 T3c 编码，不改 G9。
+   见 §30.1「M3 T3b 实际状态」，含证据等级与遗留风险）；T3b 合并时源码面板仍为只读。
+   **T3c 实现完成，已合并 main（仅 macOS 开放源码编辑）**（2026-10-26：Preflight r0 → r1.1 勘误与统一裁决 → Gate B1 → `d18dcb6` / PR CI 40307209387 → PR #3 rebase 合并为
+   `ac21ffd` / main CI run 40308679683，三平台 success；Gate B1 PASS WITH DOCUMENTED EXCEPTIONS（仅限 macOS 15.3.2 实机；M-8、U-5 主进程 reload 的物理路径
+   INCONCLUSIVE 而程序化入口测试 PASS，听写 / Voice Control N/A）、B2 / B3 PASS；见 §30.1「M3 T3c 实际状态 / T3 macOS Scope Seal Candidate」）。
+   macOS 开放源码编辑；Windows / Linux 源码面板保持只读（`ui.edit-path-*` 在这两个平台经 UA 覆盖只证明代码路径可执行，不构成 G4）。
+   **T3（macOS 源码编辑范围）：Seal candidate**——2026-10-29 Gate C docs-only seal 提交的三平台 CI success 后为 ✅ SEALED（仅 macOS 范围）；
+   **T3 跨平台完整范围不得标 SEALED**，整个 M3 未封板。
+   **Next（当前暂停点）**：本 docs-only seal 提交的三平台 CI 全绿后，补记该次 CI run 号并正式标 T3（macOS 范围）SEALED。之后 Next =
+   **M3 T4（Save / Save As + 守卫核心）只读 preflight**，须用户单独授权；不自动开始 T4，不改 G9；Windows / Linux 的 G4 与 F1 / F2 按各自硬门另行安排。
    （历史）T1b 启动前已冻结 capability 激活协议（candidate → renderer accepted → activation ack → old revoked；失败 / 超时清理；
    并发 Open 时序，见 §30.1「M3 T1b-1 实际状态」）；之后 T1c，再 T2–T9 按方案 §22。每阶段按方案 §29 的节奏：只读 preflight → 用户裁决 → 实现 → gate →
    独立 review → 变异 → /check → 提交 → 三平台 CI → 文档 → 停下；
@@ -5484,13 +5600,13 @@ Unknown patterns: 0
 级，见 §30.1「M1.7 实际状态」），`jcx:fixture-report` 输出六项指标且
 `unexpected: 0`（见 §30.1「M1.8 实际状态」），`test:electron-codec` 输出 `cases=44` 且 `failed=0`
 （只有 `file.symlink-realpath` / `file.permission-denied` 允许因平台条件 skip，见 §30.1「M3 T1a 实际状态」），`test:electron-ipc` 输出
-`verdict=PASS`（macOS 45 cases = 44 passed + 1 observed；Windows 47 = 42 + 5；Linux 46 = 40 + 6；observed 只记录事实、不计入 passed，
-见 §30.1「M3 T1b-2b-1 实际状态」）。Linux 上该 smoke 需要 X 显示（Xvfb）；Ubuntu 24.04 这类限制非特权 user namespace 的系统还需要
+`verdict=PASS`（截至 M3 T3c：macOS 67 cases 全部 passed；Windows 70 = 66 passed + 4 observed；Linux 68 = 63 passed + 5 observed；observed 只记录事实、
+不计入 passed，见 §30.1「M3 T3c 实际状态 / T3 macOS Scope Seal Candidate」；T1b-2b-1 时的计数见「M3 T1b-2b-1 实际状态」）。Linux 上该 smoke 需要 X 显示（Xvfb）；Ubuntu 24.04 这类限制非特权 user namespace 的系统还需要
 为 Electron 可执行文件加载专用 AppArmor profile（做法见 `.github/workflows/ci.yml`）；在本地这需要 sudo 修改系统安全配置，必须先经用户批准，
 不得自行执行，也不得关闭 sandbox。**确认 push 后 GitHub Actions
 三平台（macOS/Windows/Ubuntu）是否已经跑绿**——本地全绿不等于 CI 已确认，
 见 §60 DoD 逐条勾选表最后一条。
 
 然后按顺序阅读：§69「当前明确的下一任务」（当前阶段与下一步）→ §30.1 的「M3.P0 实际状态」「M3 T0 实际状态」
-「M3 T1a 实际状态」「M3 T1b-1 / T1b-2a / T1b-2a′ / T1b-2b-1 实际状态」「M3 T1b 整体实际状态」「M3 T1c-1 实际状态」「M3 T1c-2 实际状态」「M3 T1c-3 实际状态」「M3 T2 实际状态」「M3 T3a 实际状态」「M3 T3b 实际状态」→ `docs/M3_EDITOR_CORE_PLAN.md`（M3 Editor Core 冻结方案，阶段拆分见 §22、实施纪律见 §29）。
+「M3 T1a 实际状态」「M3 T1b-1 / T1b-2a / T1b-2a′ / T1b-2b-1 实际状态」「M3 T1b 整体实际状态」「M3 T1c-1 实际状态」「M3 T1c-2 实际状态」「M3 T1c-3 实际状态」「M3 T2 实际状态」「M3 T3a 实际状态」「M3 T3b 实际状态」「M3 T3c 实际状态 / T3 macOS Scope Seal Candidate」→ `docs/M3_EDITOR_CORE_PLAN.md`（M3 Editor Core 冻结方案，阶段拆分见 §22、实施纪律见 §29）。
 M1–M2.5 的历史状态仍在 §30.1 对应小节；不要从 M2 重新开始。

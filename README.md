@@ -33,8 +33,11 @@ CI 不得永久替代）；**T1c 与 M3 T1 整体 ✅ SEALED**（2026-10-12 docs
 **M3 T3a 编辑状态、历史接线与解析调度：实现与 CI Gate PASS，已合并 main**（2026-10-21；`ffd37c9` / CI run 39581666437，PR #1 合并为 `087dc36` / CI run 39585682584，
 三平台 success）：store 接线、解析调度、Open 安全防线与 beforeunload 已完成。
 **M3 T3b 菜单命令桥、快捷键与编辑状态栏：实现与三平台 CI 通过，已合并 main**（2026-10-23；`6bf8faf` / CI run 39924238908，PR #2 合并为 `dfd3fcf` /
-CI run 39928586564，三平台 success）：产品菜单、撤销 / 重做唯一派发、reload 键拦截、命令桥与编辑状态栏已接通，但**源码面板在所有平台仍为只读，编辑尚未开放**（T3c）。
-M3 T3c 尚未开始，T3 整体未封板；T4–T9 尚未开始，整个 M3 未封板，产品正式发布未批准。详见 §5「路线图」。
+CI run 39928586564，三平台 success）：产品菜单、撤销 / 重做唯一派发、reload 键拦截、命令桥与编辑状态栏已接通（T3b 合并时源码面板仍只读）。
+**M3 T3c 源码编辑、输入法与写回：实现完成，已合并 main**（2026-10-26；`d18dcb6`，PR #3 合并为 `ac21ffd` / main CI run 40308679683，三平台 success）：
+**macOS 上源码面板可以直接编辑**（键入、删除、粘贴、剪切、系统输入法组字，撤销 / 重做走统一历史）；**Windows / Linux 源码面板保持只读**。
+**T3（macOS 源码编辑范围）：Seal candidate**（2026-10-29 Gate C docs-only seal，该提交三平台 CI success 后为 SEALED，仅 macOS 范围）；T3 跨平台完整范围未封板。
+**尚不能保存**：Save / Save As 属 T4，编辑结果目前不能写回磁盘。构建 / 打包问题 F1 / F2（见 §5 T1c 段）仍是 M3 整体 package smoke 与 M3 Seal 前的硬门。T4–T9 尚未开始，整个 M3 未封板，产品正式发布未批准（T3–T5 只允许开发构建）。详见 §5「路线图」。
 
 ## 2. 核心发现与设计原则
 
@@ -243,12 +246,20 @@ projectionEquals(before, after); // true 表示语义往返无损
   `ffd37c9` / CI run 39581666437，PR #1 合并为 `087dc36` / main CI run 39585682584，三平台 success；外部独立代码复核 PASS）：renderer store 把会话、
   History 与选中成对存放并只经原子写入替换（编辑写入对计算基线做 CAS）；500 ms 解析调度、显式 Reparse 强制解析、组字期间不解析；undo / redo /
   Reparse 只经一个编辑命令入口；Open 在 dirty 或组字时拒绝、控制器异常 fail closed；beforeunload 在 dirty 或组字时阻止关闭 / 刷新；开发期模块更新改为
-  整页刷新。**源码面板在所有平台仍为只读，界面撤销 / 重做入口属 T3b。** 遗留技术债见 `HANDOFF.md` §30.1「M3 T3a 实际状态」。
+  整页刷新。（T3a 合并时源码面板在所有平台仍为只读，界面撤销 / 重做入口属 T3b。）遗留技术债见 `HANDOFF.md` §30.1「M3 T3a 实际状态」。
   **T3b 实现与三平台 CI 通过，已合并 main**（2026-10-23，`6bf8faf` / CI run 39924238908，PR #2 合并为 `dfd3fcf` / main CI run 39928586564，三平台 success；
   GPT 复核 Conditional PASS）：替换 Electron 默认菜单（无 Reload、Undo / Redo 无原生 role）；撤销 / 重做只有一条派发路径（main 拦截快捷键，菜单点击照常，
   加速键只在未被拦截时兜底，DevTools 有焦点时加速键不派发）；Cmd/Ctrl+R = Reparse，F5 等刷新键不刷新页面；白名单校验的命令桥；编辑状态栏。macOS 实机
-  按键由 Claude 经 Computer Use 验证，CI 用例为菜单项回调与合成按键（都不是原生交互）。**源码面板仍为只读。** 遗留风险见 `HANDOFF.md` §30.1「M3 T3b 实际状态」。
-  **T3c 尚未开始，T3 整体未封板，Q8 / Q9 待裁决；T4–T9 尚未开始。项目当前暂停，T3c 只读 preflight 待用户授权。**
+  按键由 Claude 经 Computer Use 验证，CI 用例为菜单项回调与合成按键（都不是原生交互）。（T3b 合并时源码面板仍为只读。）遗留风险见 `HANDOFF.md` §30.1「M3 T3b 实际状态」。
+  **T3c 实现完成，已合并 main**（2026-10-26，`d18dcb6` / PR CI 40307209387，PR #3 合并为 `ac21ffd` / main CI run 40308679683，三平台 success）：非受控 textarea +
+  beforeinput（补丁以当次读取的基线做 CAS 写入）、字素簇删除、粘贴按主换行规范、系统输入法状态机（组字中不解析、不入历史，提交恰好一个事务，失焦时原文提交为
+  一个可撤销事务，尾随输入只诊断不吸收）、store → DOM 写回与选区 CAS、平台门控（UA-CH 判定，冻结开关表只开放 macOS）、组字中 Open 被拒 / Reparse 被忽略、
+  关窗与重载在已修改或组字时被阻止。Gate B1 实机验收 **PASS WITH DOCUMENTED EXCEPTIONS**（仅限 macOS 15.3.2、Electron 44.3.0 与 ABC / 微信输入法 / Apple
+  简体拼音；M-8、U-5 主进程 reload 的物理路径 INCONCLUSIVE 而程序化入口测试 PASS，听写与 Voice Control 为 N/A），B2 三平台 CI 与独立审查、B3 合并核验通过。
+  **T3 平台支持边界**：macOS 开放源码编辑；Windows / Linux（及无法识别的平台）源码面板只读——可以打开、查看、选择复制、Reparse，不能键入 / 删除 / 粘贴 / 组字；
+  CI 中这两个平台的编辑用例经 UA 覆盖只证明代码路径可执行，**不是真实 GUI / 输入法验收**（G4-Windows / G4-Linux 未完成）。
+  **T3（macOS 源码编辑范围）：Seal candidate**（2026-10-29 Gate C docs-only seal，三平台 CI success 后为 SEALED，仅 macOS 范围）；T3 跨平台完整范围未封板。
+  Save / Save As（T4）尚未实现；T4–T9 尚未开始，整个 M3 未封板，产品正式发布未批准。详见 `HANDOFF.md` §30.1「M3 T3c 实际状态 / T3 macOS Scope Seal Candidate」。
 - **M4 及以后 — Playback / Import-Export / Layout**：播放、MIDI 导入导出、页面布局
   与打包分发。以 `HANDOFF.md` §61 的规划为准，本文档不重复展开、不提前承诺细节。
 
@@ -276,7 +287,7 @@ npm ci
 | `npm run jcx:fixture-report` | 对 `tests/fixtures/jcx/**` 跑同一套 fixture 矩阵检查，输出显式分母的六项指标 | 否（不含真实语料内容） |
 | `npm run test:electron-codec` | 用 vite 打包 codec probe，交给开发依赖中的 Electron 以 `ELECTRON_RUN_AS_NODE=1` 执行，验证 main 运行时的 UTF-8 / GB18030 编解码与 Open 管线（44 个固定用例；普通 Node 的 codec 结果不能代替它） | 否 |
 | `npm run typecheck:electron-ipc` | 用 `tsconfig.electron-ipc.json` 类型检查真实窗口 IPC smoke 的 runner 与判定器（根 `tsconfig.json` 不含 `scripts/m3`） | 否 |
-| `npm run test:electron-ipc` | 在真实 Electron 窗口（默认 sandbox + 生产 preload，完整 Electron 而非 RunAsNode）中跑 Open IPC smoke；每个平台有固定 Case 清单（macOS 58 / Windows 61 / Linux 59；生产 UI 用例 `ui.*` 在 macOS / Linux 各 7 个、Windows 8 个），observed 用例只记录事实、不计入 passed。Linux 需要 X 显示（CI 用 `xvfb-run -a`） | 否 |
+| `npm run test:electron-ipc` | 在真实 Electron 窗口（默认 sandbox + 生产 preload，完整 Electron 而非 RunAsNode）中跑 Open IPC smoke；每个平台有固定 Case 清单（截至 M3 T3c：macOS 67 / Windows 70 / Linux 68；生产 UI 用例 `ui.*` 在 macOS / Linux 各 16 个、Windows 17 个，含 T3c 的编辑用例，其中 `ui.edit-path-*` 在 Windows / Linux 经 UA 覆盖只跑代码路径），observed 用例只记录事实、不计入 passed。Linux 需要 X 显示（CI 用 `xvfb-run -a`） | 否 |
 | `npm run jcx:scan` | 本地语料发现扫描器，生成 `docs/generated/` 下的统计报告 | 是 |
 | `npm run dev` | 启动 Electron + Vite 开发环境 | 否 |
 | `npm run make` | 打包本地可分发产物（当前打包流程未验证：`npm run package` 未产出应用、renderer 输出路径与 main 加载路径错位，见 `HANDOFF.md` §30.1「M3 T1c-3 实际状态」） | 否 |
