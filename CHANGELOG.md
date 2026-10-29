@@ -91,7 +91,21 @@ F5 / Shift+F5 / Ctrl+F5 / Shift+Cmd/Ctrl+R 不刷新页面；命令经白名单�
 8781 passed + 1 项既有 skip），renderer bundle（279 模块）、codec、fixture 105/105、真实窗口 IPC smoke（新增 5 个菜单 / 按键用例）全部通过；变异 36/36
 杀死；独立代码审查无 CRITICAL，GPT 复核 Conditional PASS。证据等级：macOS 实机按键由 Claude 经 Computer Use 注入系统级按键（长按为用户物理键盘），CI 的
 菜单 / 按键用例是菜单项回调与合成按键，**都不是原生交互**。**源码面板在所有平台仍为只读，编辑尚未开放。** T3c 尚未开始，T3 整体未封板，Q8 / Q9 待裁决；
-T4–T9 尚未开始，整个 M3 未封板，产品正式发布未批准。项目当前暂停，T3c 只读 preflight 待用户授权。
+T4–T9 尚未开始，整个 M3 未封板，产品正式发布未批准。项目当前暂停，T3c 只读 preflight 待用户授权。（以上为 T3b 合并时的状态。）
+
+**M3 T3c 源码编辑、输入法与写回：实现完成，已合并 main（2026-10-26；功能提交 `d18dcb6`，PR CI run 40307209387；PR #3 rebase 合并为 `ac21ffd`，
+main CI run 40308679683，三平台 success）；T3（macOS 源码编辑范围）Seal candidate（2026-10-29 Gate C docs-only seal，该提交三平台 CI success 后为 SEALED，
+仅 macOS 范围）**：**macOS 上源码面板可以直接编辑**——键入、删除（按字素簇）、粘贴（换行按文档主换行规范）、剪切、撤销 / 重做都走统一历史，CRLF、孤立 CR
+与受保护开头 U+FEFF 只改动被编辑处；系统输入法组字期间不解析、不入历史，提交恰好一个事务，组字中失焦以原文提交为一个可撤销事务（Q8-b(i)），提交后的尾随
+输入只诊断、不吸收（Q8-B′）；store 写入与选区同步都做 CAS；组字中 Open 被拒、Reparse 被忽略，关窗 / 重载在文档已修改或正在组字时被阻止。**Windows / Linux
+（以及无法识别的平台）源码面板保持只读**（UA-CH 平台判定、冻结开关表只开放 macOS，Q9-A / Q9-S1）。38 个文件（修改 17、新增 21）；`src/editor/**`、
+main / preload / shared、414 冻结文件与依赖均未改动。验证：npm test 187 个测试文件、9005 个用例（Windows / Ubuntu 9004 passed + 1 项既有 skip），renderer
+bundle（290 模块）、codec、fixture 105/105、真实窗口 IPC smoke（macOS 67/67、Windows 66 + 4 observed、Ubuntu 63 + 5 observed）三平台通过；本地变异 36/36 杀死；
+独立代码审查的 HIGH / MEDIUM 已处置，PR 审查无 CRITICAL / HIGH / MEDIUM。Gate B1 实机验收：**PASS WITH DOCUMENTED EXCEPTIONS**，仅限 macOS 15.3.2（24D81）、
+Electron 44.3.0 与 ABC / 微信输入法 WeType 3.0.0 / Apple 简体拼音（Claude 经 Computer Use 操作 + 用户物理操作，FAIL 0，零写盘）；接受的例外：M-8（组字中
+Open / Reparse）与 U-5（组字中主进程 reload）的物理路径 INCONCLUSIVE、程序化入口测试 PASS，系统听写与 Voice Control 为 N/A（未启用、未实测）。Windows / Linux
+上的编辑 smoke 经 UA 覆盖只证明代码路径可执行，**不是这两个平台的真实 GUI / 输入法验收**。T3 跨平台完整范围未封板；T4–T9 尚未开始，整个 M3 未封板，
+产品正式发布未批准（T3–T5 只允许开发构建；Save / Save As 属 T4，尚未实现）。详见 `HANDOFF.md` §30.1「M3 T3c 实际状态 / T3 macOS Scope Seal Candidate」。
 
 ### Added
 
@@ -168,16 +182,24 @@ T4–T9 尚未开始，整个 M3 未封板，产品正式发布未批准。项�
 - M3 T2 History Core（纯核心，尚未接入产品界面）：`src/editor/history/{types,stack,selection,coalesce,history}.ts`——`createHistory`、
   `commitTransaction`、`undo`、`redo`、`endCoalescing`、`canUndo` / `canRedo` 与撤销 / 重做标签；新增 history 测试 9 个文件与架构守卫
   `architecture.m3t2`（不设目录白名单，只精确拒绝错误拼写）；`architecture.m3t0` 的目录断言由「恰好四个目录」改为「四个 T0 目录都存在」（M3 T2）。
-- M3 T3a renderer 编辑状态与调度（源码面板仍只读）：`src/renderer/app/editor/{editorTransitions,parseSchedule,parseController,editorController,unloadBlocker}.ts`、
+- M3 T3a renderer 编辑状态与调度（当时源码面板仍只读）：`src/renderer/app/editor/{editorTransitions,parseSchedule,parseController,editorController,unloadBlocker}.ts`、
   `src/renderer/app/fatalError.ts` 与开发期整页刷新插件 `vite.renderer.reload.ts`；store 新增原子写入 `applyEditorStep(core, base)`（CAS）/
   `publishParsedSession` / `setEditorSelection`；Open 状态机新增 dirty 字段与 `replacement-refused` / `controller-failed` / `commit-failed`；新增架构守卫
   `architecture.m3t3`（M3 T3a）。
-- M3 T3b 菜单与命令桥（源码面板仍只读）：`src/main/menu/{appMenu,wireEditorWindow}.ts`（菜单唯一安装函数、按键拦截与菜单派发路由）、
+- M3 T3b 菜单与命令桥（当时源码面板仍只读）：`src/main/menu/{appMenu,wireEditorWindow}.ts`（菜单唯一安装函数、按键拦截与菜单派发路由）、
   `src/shared/menuContracts.ts`（`muse:menu-command` 消息契约与校验）、preload `onMenuCommand`、`src/renderer/app/editor/{menuBridge,editorStatus}.ts`、
   `src/renderer/components/EditorStatusBar.tsx`；真实窗口 smoke 新增 `ui.menu-template` / `ui.menu-click-dispatch` / `ui.menu-routing` / `ui.key-intercept` /
   `ui.reload-keys-blocked`；`architecture.m3t3` 新增 T3b 守卫（M3 T3b）。
+- M3 T3c 源码编辑（只在 macOS 开放）：`src/renderer/app/editor/{inputPlan,graphemes,imeMachine,imeSession,editingPlatform,editorWriteBack,selectionSync,
+  sourceEditorBinding}.ts`——inputType 计划与字素簇删除、输入法状态机与一次性提交授权、平台门控、store → DOM 写回、DOM 选区同步、textarea 绑定；新增
+  7 种编辑提示；真实窗口 smoke 新增 `ui.edit-path-input` / `ui.edit-path-ime` / `ui.edit-path-guard`（编辑代码路径；Windows / Linux 经 UA 覆盖运行）与
+  `ui.edit-gate-platform`（真实平台门控）；`architecture.m3t3` 新增 T3c 守卫（M3 T3c）。
 
 ### Changed
+
+- M3 T3c（2026-10-26，`ac21ffd`）：SourceInspector 改为非受控 textarea，只经 ref 绑定，macOS 上可编辑，Windows / Linux / 未识别平台只读并显示说明；
+  `setEditorSelection(core, base)` 改为 session / history / selection 三对象 CAS；经用户授权，T3b 用例 `ui.menu-click-dispatch` 的「源码面板只读」期望改为
+  只在门控平台成立。
 
 - M3 T1c-2（2026-10-12，`d8cb04e`）：产品 Open 切换到新 IPC（`openDocument → activateDocument`），renderer store 以 T0 `DocumentSession` 为唯一数据源；
   状态栏显示文件名、编码、BOM、往返安全与「授权未确认」；SourceInspector 改为只读，Reparse 暂时隐藏。删除旧 Open 通道 `muse:open-score`、旧的
@@ -298,12 +320,26 @@ M3 T3a 的限制与遗留技术债：
 - Open 的「已提交」判据依赖每次 Open 的 documentId 唯一，扩展重载 / 恢复 / 保存协议时须复核。
 - beforeunload 依赖页面已有用户激活，对无用户激活的页面与主进程强制退出不提供数据保护；关窗 / 退出路径待 T3c 实测。
 - `tests/unit/app/openController.test.ts` 544 行，拆分属可维护性债务。
+  （以上为 T3a 合并时的记录；源码编辑已于 T3c 在 macOS 开放，CAS 真实基线与选区事件交错已由 T3c 处理，关窗 / 退出路径已在 macOS 实测，见下方 T3c。）
 
 M3 T3b 的限制与遗留风险：
 
 - Windows / Linux 真实 GUI、真实键盘与 IME 未验收（G4 硬门）；Win / Linux 非拉丁布局下 Ctrl+Z 可能不派发（G4 观察项）。
 - macOS 实机 Close / Cmd+W 未完整验证；DevTools 自身的 Cmd+R 会重载页面，只靠阶段性 beforeunload 保护。
 - `openController.ts` 头注释关于 `window.museDesktop` 唯一使用者的说法已过时；`casesEditing.ts` 超过 350 行约定，T3c 追加用例时拆分。
+  （以上为 T3b 合并时的记录；macOS 关窗 / Cmd+W 已由 T3c 实机验收覆盖，`casesEditing.ts` 的拆分未在 T3c 执行，见下。）
+
+M3 T3c 的限制与遗留风险：
+
+- 源码编辑只在 macOS 开放；Windows / Linux 源码面板保持只读，真实 GUI、真实键盘与 IME（G4-Windows / G4-Linux）未验收，是开放这两个平台编辑与对应平台
+  产品发布前的硬门；CI 中这两个平台的编辑用例只证明代码路径可执行。
+- Gate B1 的有限验收例外：M-8、U-5（组字中主进程 reload）的物理路径 INCONCLUSIVE（程序化入口测试 PASS）；系统听写、Voice Control 为 N/A；验收结论只适用于
+  macOS 15.3.2 / Electron 44.3.0 / 三种输入源。
+- 本地完整 smoke 曾两次出现非确定性失败（日志保留，未改断言；CapsLock 物理按键只是推断，根因未确认）；三平台 CI 未复现。
+- B2 审查 2 条 LOW：smoke 中「重载前已有用户激活」前提恒为真（激活由测试授予）；两条「组字中」断言不能单独证明组字已生效。
+- beforeunload 对没有用户激活的页面与主进程强制退出仍不提供数据保护；Save / Save As 尚未实现（T4），编辑结果目前不能写回磁盘。
+- 可维护性债务：`sourceEditorBinding.ts`、`editorWriteBack.ts`、`casesEditing.ts` 与若干测试 / 守卫文件超过约 350 行；CAS 基线守卫是文本匹配。
+- 构建 / 打包 F1、F2 仍未解决（见上方「构建 / 打包」），须在 M3 整体 package smoke 与 M3 Seal 前解决。
 
 ### Quality
 
