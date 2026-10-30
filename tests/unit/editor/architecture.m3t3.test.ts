@@ -483,10 +483,13 @@ describe('M3 T3b 架构守卫 —— main 菜单与窗口接线', () => {
     expect(smoke).toContain('sendMenuCommand(contents, message);');
   });
 
-  it('src/main/** 不出现写盘 API（T3 零写盘）', () => {
+  it('src/main/** 中只有写 port 的 Node 实现调用写盘 API（M3 T4 受控放宽：T3 零写盘 → 单文件白名单；补偿见 architecture.m3t4）', () => {
     const WRITE_API = /\b(writeFile|appendFile|createWriteStream|rename|unlink|rmdir|rm|mkdir|copyFile|truncate|ftruncate|symlink|chmod|utimes|cp)(Sync)?\s*\(/;
-    const offenders = collectTsFiles(join(REPO_ROOT, 'src/main')).filter((file) => WRITE_API.test(stripComments(read(file))));
-    expect(offenders.map(posixPath)).toEqual([]);
+    // 是否持有 Node fs 能力按 AST 导入记录判定（含 import type、再导出、require、动态 import），不按字符串匹配。
+    const FS_MODULES: ReadonlySet<string> = new Set(['fs', 'node:fs', 'fs/promises', 'node:fs/promises', 'original-fs']);
+    const importsFs = (file: string): boolean => parseImports(file, read(file)).some((record) => FS_MODULES.has(record.specifier));
+    const offenders = collectTsFiles(join(REPO_ROOT, 'src/main')).filter((file) => importsFs(file) && WRITE_API.test(stripComments(read(file))));
+    expect(offenders.map(posixPath)).toEqual(['src/main/document/nodeWriteFileSystem.ts']);
     expect(WRITE_API.test("await writeFile(path, 'x');")).toBe(true);
     expect(WRITE_API.test('fs.renameSync(a, b);')).toBe(true);
   });

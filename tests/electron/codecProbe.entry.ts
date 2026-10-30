@@ -13,6 +13,7 @@
 import { runCodecVectors } from './codecVectors';
 import { runFileCases } from './fileCases';
 import { createRecorder } from './probeHarness';
+import { runSaveCases } from './saveCases';
 
 function selfCheck(): string | null {
   if (process.versions.electron === undefined) return 'not running inside Electron (process.versions.electron missing)';
@@ -35,6 +36,7 @@ async function main(): Promise<number> {
   const recorder = createRecorder();
   await runCodecVectors(recorder);
   await runFileCases(recorder);
+  await runSaveCases(recorder);
 
   const cases = recorder.cases;
   const skipped = cases.filter((item) => item.skipped === true).length;
