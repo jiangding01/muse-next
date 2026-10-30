@@ -30,7 +30,7 @@ import {
 import type { Node } from 'typescript';
 import { describe, expect, it } from 'vitest';
 
-import { collectTsFiles, parse, posixPath, REPO_ROOT } from './staticAnalysis';
+import { collectTsFiles, parse, parseImports, posixPath, REPO_ROOT, resolveSpecifier } from './staticAnalysis';
 
 const MAIN_DIR = join(REPO_ROOT, 'src/main');
 const OPEN_DIR = join(REPO_ROOT, 'src/main/open');
@@ -148,13 +148,25 @@ describe('M3 T4 B2 守卫 —— R19 不授权（S3）', () => {
     expect(files.flatMap((file) => sourceInAuthorization(file, read(file)).map((hit) => `${posixPath(file)}:${hit}`))).toEqual([]);
   });
 
-  it('src/main/open/** 中读取 sourceCapabilityId 的表达式都是 anchorMatchesSource 的直接实参', () => {
-    const files = collectTsFiles(OPEN_DIR);
+  it('src/main/open/** 中读取 sourceCapabilityId 的表达式都是 anchorMatchesSource 的直接实参（载荷形状校验除外）', () => {
+    // ipcValidation.ts 只做不可信载荷的形状校验（读取字段、构造请求对象），不接触能力表与协调器状态——下一条用例钉住这一点。
+    const files = collectTsFiles(OPEN_DIR).filter((file) => posixPath(file) !== 'src/main/open/ipcValidation.ts');
     const reads = files.flatMap((file) => sourceReadsOutsideCheck(file, read(file)).map((fn) => `${posixPath(file)}#${fn}`));
     expect(reads).toEqual([]);
     // 不空跑：saveCoordinator 中确实存在这类读取（阶段 1 开始、授予前复核、阶段 2）。
     const text = read(join(OPEN_DIR, 'saveCoordinator.ts')).replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
     expect(text.match(/anchorMatchesSource\([^)]*sourceCapabilityId\)/g)?.length).toBe(3);
+  });
+
+  it('ipcValidation.ts 不导入能力表、协调器与锚点链（S3 例外的前提）', () => {
+    const file = join(OPEN_DIR, 'ipcValidation.ts');
+    const imports = parseImports(file, read(file)).map((record) => {
+      const resolved = resolveSpecifier(file, record.specifier);
+      return resolved === null || resolved === undefined ? record.specifier : posixPath(resolved);
+    });
+    const forbidden = ['src/main/document/capabilities.ts', 'src/main/open/openCoordinator.ts', 'src/main/open/saveCoordinator.ts', 'src/main/open/anchorChain.ts'];
+    expect(imports.filter((path) => forbidden.includes(path))).toEqual([]);
+    expect(imports.length).toBeGreaterThan(0);
   });
 
   it('S3 反例：授权查询实参中的 sourceCapabilityId、以及不经等值核对的读取都被识别', () => {

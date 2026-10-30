@@ -68,6 +68,10 @@ export function releaseSaveOperation(state: OpenCoordinatorState, ownerId: numbe
 }
 
 /** 删除同 owner 的 save-target token（F2：一次性消费在任何业务判定之前）；不是同 owner 的 save-target 时不动表。 */
+export function discardSaveTarget(state: OpenCoordinatorState, ownerId: number, token: string): OpenCoordinatorState {
+  return consumeIfSaveTarget(state, ownerId, token).state;
+}
+
 function consumeIfSaveTarget(state: OpenCoordinatorState, ownerId: number, token: string): { readonly state: OpenCoordinatorState; readonly target: SaveTargetRecord | null } {
   const record = state.table.get(token);
   if (record === undefined || record.ownerId !== ownerId || record.purpose !== 'save-target') return { state, target: null };

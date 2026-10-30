@@ -8,7 +8,7 @@
  * - W2：`src/main/**` 不导入 child_process / worker_threads / cluster / module（createRequire），不使用 `process.binding` /
  *   `process.dlopen` / `process._linkedBinding`，不出现非字面量的动态 import / require；
  * - W3：只读 port 不出现任何写类 API 名与非只读 open flag；
- * - W4：写 port 的 Node 实现在产品源码中没有值导入者（B1 不接线）；写 port 接口只被保存模块以 `import type` 使用；
+ * - W4：写 port 的 Node 实现在产品源码中只有 main.ts 一个值导入者（B1 不接线；M3 T4 B2 G-10 起由 main.ts 接线）；写 port 接口只被保存模块以 `import type` 使用；
  *   Node 实现只导入 fs 模块与写 port 接口，且不再导出 fs 绑定；
  * - W5：提交前同步临界区的函数是同步函数，无 await / then / Promise，对 port 只调用 `*Sync` 方法；
  * - W6：初始不存在目标的提交不调用 `renameSync`；已存在目标的提交在 `renameSync` 之前做内容核验（SHA-256）；
@@ -221,9 +221,9 @@ describe('M3 T4 守卫 —— 只读 port 与写 port 的边界（W3 / W4）', (
     expect(writeTraces('x.ts', "const flags = constants.O_WRONLY;")).toEqual(['name:O_WRONLY']);
   });
 
-  it('W4：写 port 的 Node 实现在产品源码中没有值导入者（B1 不接线）', () => {
+  it('W4：写 port 的 Node 实现在产品源码中只有 main.ts 一个值导入者（M3 T4 B2 G-10：B2 接线）', () => {
     const importers = srcFiles.filter((file) => srcImports(file).some((item) => item.path === WRITE_IMPL && !item.typeOnly)).map(posixPath);
-    expect(importers).toEqual([]);
+    expect(importers).toEqual(['src/main/main.ts']);
   });
 
   it('W9（BY-16）：白名单之外的模块值导入 Node 写实现会被识别；import type 不算值导入', () => {
@@ -238,7 +238,14 @@ describe('M3 T4 守卫 —— 只读 port 与写 port 的边界（W3 / W4）', (
     const users = srcFiles.flatMap((file) => srcImports(file).filter((item) => item.path === WRITE_PORT).map((item) => ({ file: posixPath(file), typeOnly: item.typeOnly })));
     expect(users.every((user) => user.typeOnly)).toBe(true);
     expect([...new Set(users.map((user) => user.file))].sort()).toEqual(
-      ['src/main/document/atomicWrite.ts', 'src/main/document/nodeWriteFileSystem.ts', 'src/main/document/savePipeline.ts', 'src/main/document/saveTargetResolve.ts'].sort(),
+      // M3 T4 B2（G-11）：保存 IPC 执行体以 import type 使用写 port。
+      [
+        'src/main/document/atomicWrite.ts',
+        'src/main/document/nodeWriteFileSystem.ts',
+        'src/main/document/savePipeline.ts',
+        'src/main/document/saveTargetResolve.ts',
+        'src/main/ipc/saveIpc.ts',
+      ].sort(),
     );
     expect(exportedNames(WRITE_PORT, read(join(REPO_ROOT, WRITE_PORT))).values).toEqual([]);
   });

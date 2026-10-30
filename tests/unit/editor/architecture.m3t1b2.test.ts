@@ -72,9 +72,9 @@ function enclosingFunctionName(node: Node): string | null {
   return null;
 }
 
-/** try 语句的 try 块里是否 await 了 `deps.chooseOpenPath(...)`。 */
+/** try 语句的 try 块里是否 await 了 `deps.chooseOpenPath(...)`（M3 T4 B2 G-3：或 `deps.chooseSavePath(...)`）。 */
 function awaitsChooser(statement: Node | undefined, file: SourceFile): boolean {
-  return statement !== undefined && isTryStatement(statement) && /await deps\.chooseOpenPath\(/.test(statement.tryBlock.getText(file));
+  return statement !== undefined && isTryStatement(statement) && /await deps\.(chooseOpenPath|chooseSavePath)\(/.test(statement.tryBlock.getText(file));
 }
 
 /**
@@ -143,10 +143,14 @@ function nativeDialogOwnershipWrites(file: SourceFile): string[] {
   return findings.sort();
 }
 
+/** M3 T4 B2（G-3）：Open 与 Save As 两个选择器各有一组登记 / 释放；释放函数中的 delete 仍各一次。 */
 const OWNERSHIP_EXPECTED = [
+  'add before try',
   'add before try',
   'dialogByWindow.delete in releaseNativeDialog',
   'release first in finally of chooser try',
+  'release first in finally of chooser try',
+  'set before try',
   'set before try',
   'unsettledDialogs.delete in releaseNativeDialog',
 ];
@@ -158,7 +162,8 @@ describe('M3 T1b-2a 架构守卫 —— src/main/ipc', () => {
   const files = collectTsFiles(IPC_DIR);
 
   it('扫到接线、窗口事件接线与页面身份三个模块', () => {
-    expect(files.map(posixPath)).toEqual(['src/main/ipc/pageIdentity.ts', 'src/main/ipc/registerOpenIpc.ts', 'src/main/ipc/wireOpenIpcWindow.ts']);
+    // M3 T4 B2（G-2）：另加保存 IPC 执行体 saveIpc.ts。
+    expect(files.map(posixPath)).toEqual(['src/main/ipc/pageIdentity.ts', 'src/main/ipc/registerOpenIpc.ts', 'src/main/ipc/saveIpc.ts', 'src/main/ipc/wireOpenIpcWindow.ts']);
   });
 
   it.each(files.map((f) => [posixPath(f), f]))('%s 不 import electron / editor / renderer / formats', (_rel, file) => {
@@ -197,6 +202,17 @@ describe('M3 T1b-2a 架构守卫 —— src/main/ipc', () => {
     ]);
     expect(check("dialogByWindow['delete'](w);")).toEqual(["unexpected reference: dialogByWindow['delete']"]);
     expect(check('forget(unsettledDialogs);')).toEqual(['unexpected reference: forget(unsettledDialogs)']);
+    // M3 T4 B2（G-3）：保存选择器同样受约束；await 其它函数的 try 不被视为选择器。
+    expect(check('async function f() { dialogByWindow.set(window, operation); unsettledDialogs.add(operation); try { return await deps.chooseSavePath(w, p); } finally { releaseNativeDialog(operation); } }')).toEqual([
+      'add before try',
+      'release first in finally of chooser try',
+      'set before try',
+    ]);
+    expect(check('async function f() { dialogByWindow.set(window, operation); unsettledDialogs.add(operation); try { await deps.other(w); } finally { releaseNativeDialog(operation); } }')).toEqual([
+      'unexpected release: releaseNativeDialog(operation)',
+      'unexpected write: dialogByWindow.set(window, operation)',
+      'unexpected write: unsettledDialogs.add(operation)',
+    ]);
   });
 
   it('反例：识别 electron、editor、renderer 导入', () => {
@@ -239,7 +255,8 @@ describe('M3 T1b-2a 架构守卫 —— preload 白名单', () => {
     // M3 T1c-2：旧 openScore 已删除，白名单收敛为三个方法。
     // M3 T3b（用户裁决 Q1 / S1，T3 Preflight r3 §10.1 G5）：另有 onMenuCommand（订阅，不是 invoke），其方法体调用集合由
     // architecture.m3t3 精确钉住；下面「恰一个 invoke 调用」只对三个 invoke 方法断言。
-    expect([...calls.keys()].sort()).toEqual(['activateDocument', 'onMenuCommand', 'openDocument', 'rejectDocument']);
+    // M3 T4 B2（G-4）：增加 requestSaveTarget、saveDocument 两个 invoke 方法。
+    expect([...calls.keys()].sort()).toEqual(['activateDocument', 'onMenuCommand', 'openDocument', 'rejectDocument', 'requestSaveTarget', 'saveDocument']);
     for (const [method, list] of [...calls].filter(([name]) => name !== 'onMenuCommand')) {
       expect(list).toHaveLength(1);
       expect(list[0]?.callee).toBe('ipcRenderer.invoke');
@@ -249,16 +266,25 @@ describe('M3 T1b-2a 架构守卫 —— preload 白名单', () => {
     for (const method of ['activateDocument', 'rejectDocument']) {
       expect(calls.get(method)?.[0]?.args).toEqual([`IPC.${method}`, '{ capabilityId: ticket.capabilityId, documentId: ticket.documentId }']);
     }
+    // M3 T4 B2：保存方法逐字段转发对象字面量（不展开、不透传页面对象）。
+    expect(calls.get('requestSaveTarget')?.[0]?.args).toEqual([
+      'IPC.requestSaveTarget',
+      '{ suggestedName: request.suggestedName, encoding: request.encoding, sourceCapabilityId: request.sourceCapabilityId, }',
+    ]);
+    expect(calls.get('saveDocument')?.[0]?.args).toEqual([
+      'IPC.saveDocument',
+      "'sourceCapabilityId' in request ? { capabilityId: request.capabilityId, documentId: request.documentId, source: request.source, encoding: request.encoding, sourceCapabilityId: request.sourceCapabilityId, } : { capabilityId: request.capabilityId, documentId: request.documentId, source: request.source, encoding: request.encoding }",
+    ]);
   });
 
   it('不经别名 / 下标间接取得 ipcRenderer 的方法', () => {
     expect(/ipcRenderer\s*\[|=\s*ipcRenderer\b|\{[^}]*\}\s*=\s*ipcRenderer/.test(source)).toBe(false);
   });
 
-  it('只经三个白名单通道 invoke，每个恰好一处', () => {
+  it('只经三个白名单通道 invoke，每个恰好一处（M3 T4 B2 G-4：另加两个保存通道，共五个）', () => {
     const channels = [...source.matchAll(/ipcRenderer\.invoke\(\s*IPC\.(\w+)/g)].map((m) => m[1]);
-    expect(channels.sort()).toEqual(['activateDocument', 'openDocument', 'rejectDocument']);
-    expect(count(source, /ipcRenderer\.invoke\(/g)).toBe(3);
+    expect(channels.sort()).toEqual(['activateDocument', 'openDocument', 'rejectDocument', 'requestSaveTarget', 'saveDocument']);
+    expect(count(source, /ipcRenderer\.invoke\(/g)).toBe(5);
   });
 
   it('不使用 send / on / sendSync / postMessage / 动态通道', () => {
@@ -293,6 +319,8 @@ describe('M3 T1b-2a 架构守卫 —— MuseDesktopApi 不接受路径', () => {
       'onMenuCommand',
       'openDocument',
       'rejectDocument',
+      'requestSaveTarget',
+      'saveDocument',
     ]);
     expect(api.members.length).toBe(methods.length);
     for (const method of methods) {

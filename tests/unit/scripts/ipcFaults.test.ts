@@ -19,6 +19,7 @@ import type { InvokeEventLike, IpcRegistrarLike, SenderLike } from '../../../src
 import { IPC } from '../../../src/shared/ipc';
 import { collectTsFiles, posixPath, REPO_ROOT } from '../editor/staticAnalysis';
 import { createFakeFileSystem } from '../main/fakeFileSystem';
+import { rejectingWriteFs } from '../main/openIpcHarness';
 
 type Listener = (event: InvokeEventLike<SenderLike>, payload: unknown) => unknown;
 
@@ -79,7 +80,7 @@ describe('createActivationFaults', () => {
     expect(faults.records()).toHaveLength(1);
   });
 
-  it('包装后交给生产 registerOpenIpc：恰好注册 3 个通道，open / reject 的 listener 与未包装时逐字相同', () => {
+  it('包装后交给生产 registerOpenIpc：恰好注册 5 个通道（M3 T4 B2 G-13：含两条保存通道），open / reject / 保存的 listener 与未包装时逐字相同', () => {
     const register = (wrap: boolean): Map<string, Listener> => {
       const { registrar, handlers } = innerRegistrar();
       registerOpenIpc<SenderLike, null>({
@@ -92,15 +93,18 @@ describe('createActivationFaults', () => {
         now: () => 0,
         issueToken: () => 't',
         schedule: () => undefined,
+        chooseSavePath: () => Promise.resolve(null),
+        writeFs: rejectingWriteFs(),
+        tempName: () => 'tmp',
       });
       return handlers;
     };
     const wrapped = register(true);
     const plain = register(false);
-    expect([...wrapped.keys()].sort()).toEqual([IPC.activateDocument, IPC.openDocument, IPC.rejectDocument].sort());
+    expect([...wrapped.keys()].sort()).toEqual([IPC.activateDocument, IPC.openDocument, IPC.rejectDocument, IPC.requestSaveTarget, IPC.saveDocument].sort());
     expect([...plain.keys()].sort()).toEqual([...wrapped.keys()].sort());
     // registerOpenIpc 每次注册的 listener 是新闭包，因此比较源码文本：open / reject 原样转交，只有 activate 被包装。
-    for (const channel of [IPC.openDocument, IPC.rejectDocument]) expect(String(wrapped.get(channel))).toBe(String(plain.get(channel)));
+    for (const channel of [IPC.openDocument, IPC.rejectDocument, IPC.requestSaveTarget, IPC.saveDocument]) expect(String(wrapped.get(channel))).toBe(String(plain.get(channel)));
     expect(String(wrapped.get(IPC.activateDocument))).not.toBe(String(plain.get(IPC.activateDocument)));
   });
 });

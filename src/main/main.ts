@@ -3,9 +3,10 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { createNodeReadOnlyFileSystem } from './document/fileSystemPort';
+import { createNodeWriteFileSystem } from './document/nodeWriteFileSystem';
 import { resolvePageEntry } from './ipc/pageIdentity';
 import { registerOpenIpc } from './ipc/registerOpenIpc';
-import { createOpenPathChooser, wireOpenIpcWindow } from './ipc/wireOpenIpcWindow';
+import { createOpenPathChooser, createSavePathChooser, wireOpenIpcWindow } from './ipc/wireOpenIpcWindow';
 import { installAppMenu } from './menu/appMenu';
 import { createEditorCommandRouter, sendMenuCommand, wireEditorWindow } from './menu/wireEditorWindow';
 import { matchesPageIdentity } from './open/ipcValidation';
@@ -18,12 +19,18 @@ const pageEntry = resolvePageEntry({
   platform: process.platform,
 });
 
-/** M3 Open 协议：产品唯一的 Open 通道（M3 T1c-2 起 UI 已切换，M3 前的过渡通道已删除）。进程内只注册一次。 */
+/**
+ * M3 Open 协议：产品唯一的 Open 通道（M3 T1c-2 起 UI 已切换，M3 前的过渡通道已删除）。进程内只注册一次。
+ * M3 T4 B2：同一次注册挂上保存通道；本文件是产品中唯一值导入写 port Node 实现的地方（architecture.m3t4 W4）。
+ */
 const openIpc = registerOpenIpc({
   ipc: ipcMain,
   windowForSender: (sender) => BrowserWindow.fromWebContents(sender),
   pageIdentity: pageEntry.identity,
   chooseOpenPath: createOpenPathChooser((parent: BrowserWindow, options) => dialog.showOpenDialog(parent, options)),
+  chooseSavePath: createSavePathChooser((parent: BrowserWindow, options) => dialog.showSaveDialog(parent, options)),
+  writeFs: createNodeWriteFileSystem(),
+  tempName: () => `.muse-save-${randomUUID()}.tmp`,
   fs: createNodeReadOnlyFileSystem(),
   platform: process.platform,
   now: () => performance.now(),

@@ -1,7 +1,8 @@
 /**
  * Open IPC 接线（M3 T1b-2a，`docs/M3_EDITOR_CORE_PLAN.md` §13；T1b preflight 裁决 1–10，T1b-2 preflight 裁决 1–8）。
  *
- * 注册 `muse:open-document` / `muse:activate-document` / `muse:reject-document` 三个 handler，持有进程内唯一的协调器状态、
+ * 注册 `muse:open-document` / `muse:activate-document` / `muse:reject-document` 三个 handler（M3 T4 B2：并经 `registerSaveIpc`
+ * 在同一闭包中注册 `muse:request-save-target` / `muse:save-document`），持有进程内唯一的协调器状态、
  * documentId 分配器与 TTL 清理定时器。**本模块不 import electron**：`ipcMain`、`BrowserWindow.fromWebContents`、原生对话框、
  * 文件系统、单调时钟、定时器与 token 生成都由 main 注入，因此整个异常边界可以用 fake 精确测试；main 只负责把窗口事件转发进来。
  *
@@ -60,6 +61,8 @@ import { parseActivationTicket, parseOpenRequest, validateSender } from '../open
 import type { PageIdentity } from '../open/ipcValidation';
 import type { ActivateDocumentReply, OpenDocumentReply, RejectDocumentReply } from '../../shared/activationContracts';
 import { IPC } from '../../shared/ipc';
+import { registerSaveIpc } from './saveIpc';
+import type { SaveIpcDeps } from './saveIpc';
 
 /** `event.senderFrame` / `webContents.mainFrame` 中本模块用到的部分。 */
 export interface FrameLike {
@@ -83,7 +86,7 @@ export interface IpcRegistrarLike<S extends SenderLike> {
   handle(channel: string, listener: (event: InvokeEventLike<S>, payload: unknown) => unknown): void;
 }
 
-export interface OpenIpcDeps<S extends SenderLike, W> {
+export interface OpenIpcDeps<S extends SenderLike, W> extends SaveIpcDeps {
   readonly ipc: IpcRegistrarLike<S>;
   /** `BrowserWindow.fromWebContents`；只在 handler 同步段、sender 未销毁时调用。 */
   windowForSender(sender: S): W | null;
@@ -91,6 +94,8 @@ export interface OpenIpcDeps<S extends SenderLike, W> {
   readonly pageIdentity: PageIdentity;
   /** 父窗口模态的原生打开对话框；取消返回 null。 */
   chooseOpenPath(parent: W): Promise<string | null>;
+  /** M3 T4：父窗口模态的原生保存对话框；取消返回 null。 */
+  chooseSavePath(parent: W, defaultPath: string): Promise<string | null>;
   readonly fs: ReadOnlyFileSystem;
   readonly platform: string;
   /** 单调时钟（毫秒）。 */
@@ -292,9 +297,31 @@ export function registerOpenIpc<S extends SenderLike, W>(deps: OpenIpcDeps<S, W>
     if (ticket !== undefined) releaseDialog(ticket);
   }
 
+  /** M3 T4：保存对话框的物理所有权，形态与 Open 相同（登记 → await 选择器的 try → finally 首句释放）。 */
+  async function chooseSavePathOwned(ownerId: number, window: W, defaultPath: string): Promise<string | null> {
+    const operation: NativeDialogOperation<W> = { ownerId, window };
+    dialogByWindow.set(window, operation);
+    unsettledDialogs.add(operation);
+    try {
+      return await deps.chooseSavePath(window, defaultPath);
+    } finally {
+      releaseNativeDialog(operation);
+    }
+  }
+
   deps.ipc.handle(IPC.openDocument, (event, payload) => openDocument(event, payload));
   deps.ipc.handle(IPC.activateDocument, (event, payload) => activate(event, payload));
   deps.ipc.handle(IPC.rejectDocument, (event, payload) => reject(event, payload));
+  registerSaveIpc({
+    deps,
+    authenticate,
+    getState: () => state,
+    setState: (next) => (state = next),
+    hasNativeDialog: (window) => dialogByWindow.has(window),
+    chooseSavePath: chooseSavePathOwned,
+    isCurrentWindow,
+    expire: () => (state = expireCandidates(state, deps.now()).state),
+  });
 
   return {
     attachWindow(ownerId, window) {

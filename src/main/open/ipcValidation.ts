@@ -10,6 +10,7 @@
  */
 
 import type { DocumentActivationTicket, OpenDocumentRequest } from '../../shared/activationContracts';
+import type { RequestSaveTargetRequest, SaveAsDocumentRequest, SaveDocumentRequest } from '../../shared/saveContracts';
 
 /** handler 同步段从 Electron 事件提取的可信快照。 */
 export interface SenderSnapshot {
@@ -110,5 +111,53 @@ export function parseActivationTicket(payload: unknown): DocumentActivationTicke
     if (typeof capabilityId !== 'string' || !CAPABILITY_ID_PATTERN.test(capabilityId)) return null;
     if (typeof documentId !== 'number' || !Number.isSafeInteger(documentId) || documentId < 0) return null;
     return { capabilityId, documentId };
+  });
+}
+
+const ENCODINGS: ReadonlySet<unknown> = new Set(['utf-8', 'gb18030']);
+/** 建议文件名的形状上限；清洗（basename、控制字符、长度）在 main 的对话框接线中完成（Q-B2-9）。 */
+const MAX_SUGGESTED_NAME_LENGTH = 1024;
+/**
+ * `source` 的形状上限（UTF-16 码元）。每个码元编码后至少 1 字节，超过读写上限（1 MiB）的文本由保存管线报
+ * `file-too-large`；这里只拒绝远超上限、显然非法的载荷，避免无界的编码开销。
+ */
+export const MAX_SAVE_SOURCE_LENGTH = 4 * 1_048_576;
+
+const isToken = (value: unknown): value is string => typeof value === 'string' && CAPABILITY_ID_PATTERN.test(value);
+const isSourceToken = (value: unknown): value is string | null => value === null || isToken(value);
+const isEncoding = (value: unknown): value is SaveDocumentRequest['encoding'] => ENCODINGS.has(value);
+const isDocumentId = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+
+/** `request-save-target`（Save As 阶段 1）的输入：恰为 `{ suggestedName, encoding, sourceCapabilityId }`（r1.2 ERRATA §3）。 */
+export function parseRequestSaveTarget(payload: unknown): RequestSaveTargetRequest | null {
+  return safely(() => {
+    if (!hasExactKeys(payload, ['suggestedName', 'encoding', 'sourceCapabilityId'])) return null;
+    const { suggestedName, encoding, sourceCapabilityId } = payload;
+    if (typeof suggestedName !== 'string' || suggestedName.length > MAX_SUGGESTED_NAME_LENGTH) return null;
+    if (!isEncoding(encoding) || !isSourceToken(sourceCapabilityId)) return null;
+    return { suggestedName, encoding, sourceCapabilityId };
+  });
+}
+
+export type ParsedSaveDocument =
+  | { readonly kind: 'save'; readonly request: SaveDocumentRequest }
+  | { readonly kind: 'saveAs'; readonly request: SaveAsDocumentRequest };
+
+/**
+ * `save-document` 的输入：分支只由键集合决定（Q-B2-11）——恰为 `{ capabilityId, documentId, source, encoding }` 是普通 Save；
+ * 另加 `sourceCapabilityId` 是 Save As 阶段 2。其它键集合（含多余键、缺键）一律非法。
+ */
+export function parseSaveDocument(payload: unknown): ParsedSaveDocument | null {
+  return safely(() => {
+    const saveAs = hasExactKeys(payload, ['capabilityId', 'documentId', 'source', 'encoding', 'sourceCapabilityId']);
+    if (!saveAs && !hasExactKeys(payload, ['capabilityId', 'documentId', 'source', 'encoding'])) return null;
+    const { capabilityId, documentId, source, encoding } = payload;
+    if (!isToken(capabilityId) || !isDocumentId(documentId) || !isEncoding(encoding)) return null;
+    if (typeof source !== 'string' || source.length > MAX_SAVE_SOURCE_LENGTH) return null;
+    const request: SaveDocumentRequest = { capabilityId, documentId, source, encoding };
+    if (!saveAs) return { kind: 'save', request };
+    const { sourceCapabilityId } = payload;
+    if (!isSourceToken(sourceCapabilityId)) return null;
+    return { kind: 'saveAs', request: { ...request, sourceCapabilityId } };
   });
 }

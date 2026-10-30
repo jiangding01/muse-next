@@ -266,7 +266,15 @@ describe('M3 T1b-2b-1 架构守卫 —— 产品隔离与 CI', () => {
     const ipc = stripComments(read(join(REPO_ROOT, 'src/shared/ipc.ts')));
     expect(ipc).not.toContain('muse:open-score');
     // M3 T3b（G7）：另有 main → renderer 的 menuCommand（只在 main 菜单模块发送、只在 preload 接收，由 architecture.m3t3 钉住）。
-    expect([...ipc.matchAll(/^\s+(\w+): 'muse:[\w-]+',$/gm)].map((m) => m[1]).sort()).toEqual(['activateDocument', 'menuCommand', 'openDocument', 'rejectDocument']);
+    // M3 T4 B2（G-5）：另加 requestSaveTarget / saveDocument 两条保存通道。
+    expect([...ipc.matchAll(/^\s+(\w+): 'muse:[\w-]+',$/gm)].map((m) => m[1]).sort()).toEqual([
+      'activateDocument',
+      'menuCommand',
+      'openDocument',
+      'rejectDocument',
+      'requestSaveTarget',
+      'saveDocument',
+    ]);
     expect(ipc).toContain("menuCommand: 'muse:menu-command',");
     expect(stripComments(read(join(REPO_ROOT, 'src/preload/preload.ts')))).not.toContain('openScore');
     const main = stripComments(read(join(REPO_ROOT, 'src/main/main.ts')));

@@ -98,3 +98,56 @@ export function createOpenPathChooser<W>(
     return result.canceled ? null : (result.filePaths[0] ?? null);
   };
 }
+
+// ———————————— M3 T4 B2：保存对话框（与 Open 选择器对称；产品与 smoke 共用同一份实现） ————————————
+
+/** `dialog.showSaveDialog` 的选项中本模块用到的部分。 */
+export interface SaveDialogOptionsLike {
+  title: string;
+  defaultPath: string;
+  properties: ('showOverwriteConfirmation' | 'createDirectory')[];
+  filters: { name: string; extensions: string[] }[];
+}
+
+export interface SaveDialogResultLike {
+  readonly canceled: boolean;
+  readonly filePath?: string;
+}
+
+const DEFAULT_NAME = 'untitled.jcx';
+const MAX_NAME_LENGTH = 200;
+
+/** 建议文件名清洗（Q-B2-9）：只取最后一段，去掉控制字符，按码点截到 200 个 UTF-16 码元以内；空名用 `untitled.jcx`。 */
+export function sanitizeSuggestedName(suggested: string): string {
+  const last = suggested.split(/[\\/]/).pop() ?? '';
+  const cleaned = last.replace(/[\u0000-\u001f\u007f]/g, '').trim();
+  let name = '';
+  for (const char of cleaned) {
+    if (name.length + char.length > MAX_NAME_LENGTH) break;
+    name += char;
+  }
+  return name === '' || name === '.' || name === '..' ? DEFAULT_NAME : name;
+}
+
+export function saveDocumentDialogOptions(defaultPath: string): SaveDialogOptionsLike {
+  return {
+    title: 'Save Muse Score As',
+    defaultPath,
+    // Linux 上须显式设置覆盖确认（DR1 Q14）。
+    properties: ['showOverwriteConfirmation', 'createDirectory'],
+    filters: [
+      { name: 'Muse score', extensions: ['jcx'] },
+      { name: 'All files', extensions: ['*'] },
+    ],
+  };
+}
+
+/** 生产用选择器：取消、没有路径都返回 null；异常原样抛出（由调用方按取消处理）。 */
+export function createSavePathChooser<W>(
+  showSaveDialog: (parent: W, options: SaveDialogOptionsLike) => Promise<SaveDialogResultLike>,
+): (parent: W, defaultPath: string) => Promise<string | null> {
+  return async (parent, defaultPath) => {
+    const result = await showSaveDialog(parent, saveDocumentDialogOptions(defaultPath));
+    return result.canceled || result.filePath === undefined || result.filePath === '' ? null : result.filePath;
+  };
+}

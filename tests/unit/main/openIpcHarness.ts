@@ -12,6 +12,32 @@ import { IPC } from '../../../src/shared/ipc';
 import { bytesOf, createFakeFileSystem } from './fakeFileSystem';
 import type { FakeFileSystem } from './fakeFileSystem';
 import type { ReadOnlyFileSystem } from '../../../src/main/document/fileSystemPort';
+import type { WriteFileSystem } from '../../../src/main/document/writeFileSystemPort';
+import type { SaveIpcEvent } from '../../../src/main/ipc/saveIpc';
+
+/** M3 T4 B2：不涉及保存的用例使用的写 port——任何调用都抛错，证明没有意外写盘。 */
+export function rejectingWriteFs(): WriteFileSystem {
+  const fail = (): never => {
+    throw new Error('write fs must not be used');
+  };
+  return {
+    stat: fail,
+    lstat: fail,
+    isWritable: fail,
+    openExclusive: fail,
+    removeFile: fail,
+    syncDirectory: fail,
+    openReadSync: fail,
+    fstatSync: fail,
+    readSync: fail,
+    closeSync: fail,
+    statSync: fail,
+    realpathSync: fail,
+    renameSync: fail,
+    linkSync: fail,
+    unlinkSync: fail,
+  };
+}
 
 export const APP_URL = 'file:///app/renderer/main_window/index.html';
 
@@ -33,8 +59,12 @@ interface Deferred {
 export interface Harness {
   readonly handle: OpenIpcHandle<FakeWindow>;
   readonly fs: FakeFileSystem;
-  /** 每次对话框调用收到的父窗口。 */
+  /** 每次对话框调用收到的父窗口（Open 与 Save As 共用一个序列）。 */
   readonly dialogParents: FakeWindow[];
+  /** M3 T4：每次保存对话框收到的 defaultPath。 */
+  readonly saveDefaults: string[];
+  /** M3 T4：保存诊断事件。 */
+  readonly saveEvents: SaveIpcEvent[];
   /** 已排程的 TTL 清理任务。 */
   readonly timers: { readonly at: number; readonly delay: number; readonly task: () => void }[];
   clock: number;
@@ -53,6 +83,10 @@ export interface HarnessOptions {
   readonly windowForSender?: (sender: FakeSender) => FakeWindow | null;
   /** 覆盖默认的可控对话框（例如同步抛错的选择器）。 */
   readonly chooseOpenPath?: (parent: FakeWindow) => Promise<string | null>;
+  /** M3 T4：覆盖默认的可控保存对话框。 */
+  readonly chooseSavePath?: (parent: FakeWindow, defaultPath: string) => Promise<string | null>;
+  /** M3 T4：写 port（默认 `rejectingWriteFs`）。 */
+  readonly writeFs?: WriteFileSystem;
   /** 覆盖默认的内存文件系统（例如读取悬挂的 fs）。 */
   readonly fs?: ReadOnlyFileSystem;
 }
@@ -68,6 +102,9 @@ export function createHarness(options: HarnessOptions = {}): Harness {
   });
   const dialogs: Deferred[] = [];
   const dialogParents: FakeWindow[] = [];
+  const saveDefaults: string[] = [];
+  const saveEvents: SaveIpcEvent[] = [];
+  let temps = 0;
   const timers: { at: number; delay: number; task: () => void; done: boolean }[] = [];
   const windows = new Map<number, { sender: FakeSender; window: FakeWindow }>();
   let tokens = 0;
@@ -100,6 +137,22 @@ export function createHarness(options: HarnessOptions = {}): Harness {
     schedule: (delay, task) => {
       timers.push({ at: state.clock + delay, delay, task, done: false });
     },
+    chooseSavePath: (parent, defaultPath) => {
+      dialogParents.push(parent);
+      saveDefaults.push(defaultPath);
+      if (options.chooseSavePath !== undefined) return options.chooseSavePath(parent, defaultPath);
+      return new Promise<string | null>((resolve, reject) => {
+        dialogs.push({ resolve, reject });
+      });
+    },
+    writeFs: options.writeFs ?? rejectingWriteFs(),
+    tempName: () => {
+      temps += 1;
+      return `.muse-save-${String(temps)}.tmp`;
+    },
+    logSave: (event) => {
+      saveEvents.push(event);
+    },
   };
   const handle = registerOpenIpc(deps);
 
@@ -113,6 +166,8 @@ export function createHarness(options: HarnessOptions = {}): Harness {
     handle,
     fs,
     dialogParents,
+    saveDefaults,
+    saveEvents,
     timers,
     get clock() {
       return state.clock;

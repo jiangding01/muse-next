@@ -20,9 +20,10 @@ import { join } from 'node:path';
 import { app, BrowserWindow, dialog, ipcMain, Menu } from 'electron';
 
 import { createNodeReadOnlyFileSystem } from '../../../src/main/document/fileSystemPort';
+import { createNodeWriteFileSystem } from '../../../src/main/document/nodeWriteFileSystem';
 import { resolvePageEntry } from '../../../src/main/ipc/pageIdentity';
 import { registerOpenIpc } from '../../../src/main/ipc/registerOpenIpc';
-import { createOpenPathChooser } from '../../../src/main/ipc/wireOpenIpcWindow';
+import { createOpenPathChooser, createSavePathChooser } from '../../../src/main/ipc/wireOpenIpcWindow';
 import { installAppMenu } from '../../../src/main/menu/appMenu';
 import { createEditorCommandRouter, sendMenuCommand } from '../../../src/main/menu/wireEditorWindow';
 import { createMenuCommandLog, createSecurityLog, residueProblems, SECOND_SOURCE, STAFF_SOURCE, UTF8_SOURCE } from './context';
@@ -161,6 +162,9 @@ async function main(): Promise<number> {
   // 激活应答扣留只包装交给生产 registerOpenIpc 的 registrar（M3 T1c-2）；未布置时完全透明。
   const faults = createActivationFaults();
   const realChooser = createOpenPathChooser((parent: BrowserWindow, options) => dialog.showOpenDialog(parent, options));
+  // M3 T4 B2：保存对话框同样分为与产品完全相同的真实选择器与 main 持有的受控选择器。
+  const saveChooser = createScriptedChooser<BrowserWindow>();
+  const realSaveChooser = createSavePathChooser((parent: BrowserWindow, options) => dialog.showSaveDialog(parent, options));
 
   const openIpc = registerOpenIpc({
     ipc: faults.registrar(ipcMain),
@@ -173,6 +177,9 @@ async function main(): Promise<number> {
     now: () => clock.now(),
     issueToken: () => tokenFaults.issue(() => randomUUID()),
     schedule: (delayMs, task) => scheduler.schedule(delayMs, task),
+    chooseSavePath: isolated?.realDialog === true ? realSaveChooser : (parent) => saveChooser.choose(parent),
+    writeFs: createNodeWriteFileSystem(),
+    tempName: () => `.muse-save-${randomUUID()}.tmp`,
   });
   const security = createSecurityLog((ownerId) => openIpc.currentState().owners.get(ownerId)?.generation ?? null);
   // M3 T3b：与产品 main 相同的编辑命令路由与菜单；发送函数仍是生产 sendMenuCommand，外层只记录实际发出的命令。

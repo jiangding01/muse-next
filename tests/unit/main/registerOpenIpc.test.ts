@@ -7,7 +7,8 @@ import { describe, expect, it } from 'vitest';
 
 import { registerOpenIpc } from '../../../src/main/ipc/registerOpenIpc';
 import type { InvokeEventLike } from '../../../src/main/ipc/registerOpenIpc';
-import { ACTIVATE, APP_URL, createHarness, DIALOG, flush, mainFrameEvent, OPEN, REJECT } from './openIpcHarness';
+import { ACTIVATE, APP_URL, createHarness, DIALOG, flush, mainFrameEvent, OPEN, REJECT, rejectingWriteFs } from './openIpcHarness';
+import { IPC } from '../../../src/shared/ipc';
 import type { FakeSender } from './openIpcHarness';
 
 const READ_FAILED = { kind: 'failed', error: { code: 'read-failed', message: 'The file could not be read.' } };
@@ -40,9 +41,13 @@ describe('registerOpenIpc —— 注册', () => {
       now: () => 0,
       issueToken: () => 't',
       schedule: () => undefined,
+      chooseSavePath: async () => null,
+      writeFs: rejectingWriteFs(),
+      tempName: () => 'tmp',
     };
     registerOpenIpc(deps);
-    expect(handled).toEqual([OPEN, ACTIVATE, REJECT]);
+    // M3 T4 B2（G-12）：同一次注册另挂两条保存通道。
+    expect(handled).toEqual([OPEN, ACTIVATE, REJECT, IPC.requestSaveTarget, IPC.saveDocument]);
     expect(() => registerOpenIpc(deps)).toThrow('duplicate');
   });
 });
