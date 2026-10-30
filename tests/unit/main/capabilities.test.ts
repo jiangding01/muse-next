@@ -13,7 +13,7 @@ import {
   revoke,
   revokeOwner,
 } from '../../../src/main/document/capabilities';
-import type { CapabilityTable, OpenCapabilityRecord } from '../../../src/main/document/capabilities';
+import type { CapabilityRecord, CapabilityTable, OpenCapabilityRecord } from '../../../src/main/document/capabilities';
 import { createDocumentIdAllocator } from '../../../src/main/document/documentIds';
 
 function record(token: string, ownerId = 1, documentId = 1): OpenCapabilityRecord {
@@ -34,6 +34,9 @@ function record(token: string, ownerId = 1, documentId = 1): OpenCapabilityRecor
   };
 }
 
+/** open 记录的状态；墓碑与 save-target 没有 state（判别联合收窄）。 */
+const stateOf = (rec: CapabilityRecord | undefined | null): string | undefined => (rec?.purpose === 'open' ? rec.state : undefined);
+
 function mustAdd(table: CapabilityTable, rec: OpenCapabilityRecord): CapabilityTable {
   const result = addPending(table, rec);
   if (!result.ok) throw new Error(result.reason);
@@ -51,14 +54,14 @@ describe('能力表 —— addPending / lookupActive', () => {
     const empty = createCapabilityTable();
     const table = mustAdd(empty, record('t1'));
     expect(empty.size).toBe(0);
-    expect(table.get('t1')?.state).toBe('pending');
+    expect(stateOf(table.get('t1'))).toBe('pending');
     expect(lookupActive(table, 1, 't1')).toBeNull();
   });
 
   it('token 重复（任何 owner / 状态）→ duplicate-token；非 pending 记录 → not-pending', () => {
     const table = mustAdd(createCapabilityTable(), record('t1', 1));
     expect(addPending(table, record('t1', 2))).toEqual({ ok: false, reason: 'duplicate-token' });
-    expect(addPending(table, { ...record('t2'), state: 'active' })).toEqual({ ok: false, reason: 'not-pending' });
+    expect(addPending(table, { ...record('t2'), state: 'active', prevCommitted: { kind: 'none' } })).toEqual({ ok: false, reason: 'not-pending' });
   });
 
   it('登记的记录被冻结', () => {
@@ -72,7 +75,7 @@ describe('能力表 —— activate', () => {
     const base = mustAdd(createCapabilityTable(), record('t1', 1));
     const { table, superseded } = mustActivate(base, 1, 't1');
     expect(superseded).toEqual([]);
-    expect(base.get('t1')?.state).toBe('pending');
+    expect(stateOf(base.get('t1'))).toBe('pending');
     expect(lookupActive(table, 1, 't1')?.state).toBe('active');
     expect(lookupActive(table, 2, 't1')).toBeNull();
     expect(lookupActive(table, 1, 'missing')).toBeNull();
@@ -101,7 +104,7 @@ describe('能力表 —— activate', () => {
     expect(revoked.removed).toEqual(['old']);
     expect(lookupActive(revoked.table, 1, 'old')).toBeNull();
     expect(lookupActive(revoked.table, 2, 'other-owner')).not.toBeNull();
-    expect(revoked.table.get('still-pending')?.state).toBe('pending');
+    expect(stateOf(revoked.table.get('still-pending'))).toBe('pending');
   });
 });
 

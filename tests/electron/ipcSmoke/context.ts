@@ -191,15 +191,24 @@ export function expectTrue(problems: string[], label: string, condition: boolean
 
 export interface CapabilityView {
   readonly token: string;
-  readonly state: string;
-  readonly documentId: number;
+  /** M3 T4 B2：open / tombstone / save-target。 */
+  readonly purpose: string;
+  /** 只有 open 记录有状态；墓碑与 save-target 为 null。 */
+  readonly state: string | null;
+  /** save-target 没有 documentId（null）。 */
+  readonly documentId: number | null;
 }
 
-/** 某窗口当前的能力记录（token / 状态 / documentId）。 */
+/** 某窗口当前的能力记录（token / 用途 / 状态 / documentId）。 */
 export function capabilitiesOf(ctx: SmokeContext, ownerId: number): CapabilityView[] {
   return [...ctx.openIpc.currentState().table.values()]
     .filter((record) => record.ownerId === ownerId)
-    .map((record) => ({ token: record.token, state: record.state, documentId: record.documentId }));
+    .map((record) => ({
+      token: record.token,
+      purpose: record.purpose,
+      state: record.purpose === 'open' ? record.state : null,
+      documentId: record.purpose === 'save-target' ? null : record.documentId,
+    }));
 }
 
 export function ownerMeta(ctx: SmokeContext, ownerId: number): OwnerMeta | undefined {

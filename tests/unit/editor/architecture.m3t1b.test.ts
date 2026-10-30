@@ -53,8 +53,9 @@ const openFiles = collectTsFiles(OPEN_DIR);
 const rows = (files: readonly string[]): [string, string][] => files.map((file) => [posixPath(file), file]);
 
 describe('M3 T1b 架构守卫 —— src/main/open 纯协议层', () => {
-  it('扫到了协调器、不变量与校验三个模块', () => {
+  it('扫到了协调器、不变量与校验三个模块（M3 T4 B2 G-1：另加锚点链与保存协调器）', () => {
     expect(openFiles.map(posixPath)).toEqual([
+      'src/main/open/anchorChain.ts',
       'src/main/open/coordinatorInvariants.ts',
       'src/main/open/ipcValidation.ts',
       'src/main/open/openCoordinator.ts',

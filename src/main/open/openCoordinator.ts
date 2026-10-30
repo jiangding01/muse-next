@@ -12,6 +12,12 @@
  * - 激活成功只表示 main 已把能力设为 active，不表示 renderer 已提交切换（见 `src/shared/activationContracts.ts`）。
  * - **一张票只能完成一次**：`beginOpen` 记下 `inFlightSeq`，`completeOpen` 消费它；同一张票的重复完成一律 `superseded`。
  * - 本模块不 import electron；sender 校验在 `ipcValidation.ts`，Electron 接线属 T1b-2。
+ * - **锚点链**（M3 T4 B2，r1 ERRATA §2.3、B2 r0.1 勘误 §1）：`OwnerMeta.committed` 由 main 推出，不接受 renderer 自报。
+ *   激活成功（A1）时被取代的 active 转墓碑而不是删除；reject 当前锚点（A2 / A2'）回退到 `prevCommitted`；跨文档导航开始 /
+ *   渲染进程退出（A4，`resetOwner`）把 active 转墓碑、`committed` 不变；页面已重建（A5，`rebuildOwner`）清空墓碑与锚点。
+ *   墓碑永不授权：`authorizeCapability` 只返回 active open，墓碑 token 出现在任何请求中都与「不存在」不可区分。
+ * - **保存操作**（B2 r0.1 勘误 §2）：`saveOperation` 是保存的逻辑锁，由 `saveCoordinator.ts` 以不可复用的操作 id 获取 / 释放；
+ *   A4 / A5 清空它（旧操作的 generation 已失效，不可能再提交），A6 随 owner 一并删除。保存进行中 Open 回复 `busy`。
  *
  * **T1b-2 接线约束**（不可变状态 + 异步 handler）：
  * - 每次迁移都必须基于**当前最新**状态；不得在 `await` 之后复用 `await` 之前取得的状态对象。
@@ -22,8 +28,9 @@
  * - `beginOpen` 的 `unknown-owner` 如何映射为 IPC 回复由 T1b-2 preflight 决定（窗口未登记即非法 sender）。
  */
 
-import { activate, addPending, discardPending, lookupActive, revoke, revokeOwner } from '../document/capabilities';
-import type { CapabilityTable, OpenCapabilityRecord } from '../document/capabilities';
+import { addPending, discardPending, lookupActive, removeWhere, revokeOwner } from '../document/capabilities';
+import type { ActiveOpenRecord, AnchorRef, CapabilityTable, OpenCapabilityRecord } from '../document/capabilities';
+import { clearAnchors, commitActivation, NO_ANCHOR, rollbackAnchor, tombstoneOwner } from './anchorChain';
 import type { OpenAtPathResult } from '../document/openDocument';
 import type { ActivateDocumentReply, DocumentActivationTicket, OpenDocumentReply, RejectDocumentReply } from '../../shared/activationContracts';
 
@@ -47,12 +54,28 @@ export interface OwnerMeta {
   readonly inFlightSeq: number | null;
   /** pending 候选的协调元数据，key 为 token；能力事实本身在 `CapabilityTable` 中。 */
   readonly candidates: ReadonlyMap<string, CandidateMeta>;
+  /**
+   * main 侧推出的已提交锚点：最近一次激活成功（A1）或回退（A2）后的 open 记录（active 或墓碑）。它不是 renderer 自报的
+   * 「已提交」事实——renderer 是否真的切换了会话，只在下一次请求时由 R19 的等值核对检验。
+   */
+  readonly committed: AnchorRef;
+  /** 当前持有保存逻辑锁的操作；只由 `saveCoordinator.ts` 获取 / 释放。 */
+  readonly saveOperation: SaveOperation | null;
+}
+
+/** 一次保存操作的身份（B2 r0.1 勘误 §2.1）：`id` 进程内单调递增、从不复用；只有完全相同的票据才能释放锁。 */
+export interface SaveOperation {
+  readonly id: number;
+  readonly generation: number;
+  readonly kind: 'save' | 'save-as-dialog' | 'save-as-write';
 }
 
 export interface OpenCoordinatorState {
   readonly table: CapabilityTable;
   readonly owners: ReadonlyMap<number, OwnerMeta>;
   readonly ttlMs: number;
+  /** 下一个保存操作 id；只增不减，不随 reset / dispose 归零。 */
+  readonly nextOperationId: number;
 }
 
 /** 一次被接受的 Open 请求的身份；`completeOpen` / `endDialog` 凭它判断请求是否仍然是最新的。 */
@@ -76,14 +99,14 @@ interface Step<R> {
 
 export function createOpenCoordinator(ttlMs: number = PENDING_TTL_MS): OpenCoordinatorState {
   if (!Number.isSafeInteger(ttlMs) || ttlMs <= 0) throw new RangeError('createOpenCoordinator: ttlMs must be a positive safe integer');
-  return { table: new Map(), owners: new Map(), ttlMs };
+  return { table: new Map(), owners: new Map(), ttlMs, nextOperationId: 1 };
 }
 
 function assertNow(now: number): void {
   if (!Number.isFinite(now)) throw new RangeError('open coordinator: now must be a finite monotonic timestamp');
 }
 
-function withOwner(state: OpenCoordinatorState, ownerId: number, meta: OwnerMeta, table: CapabilityTable = state.table): OpenCoordinatorState {
+export function withOwner(state: OpenCoordinatorState, ownerId: number, meta: OwnerMeta, table: CapabilityTable = state.table): OpenCoordinatorState {
   const owners = new Map(state.owners);
   owners.set(ownerId, meta);
   return { ...state, table, owners };
@@ -95,6 +118,11 @@ function withoutCandidate(meta: OwnerMeta, token: string): OwnerMeta {
   return { ...meta, candidates };
 }
 
+/** 删除该 owner 的 save-target（DR1 Q6：Open 开始、Open 激活、reset、dispose 时失效）。 */
+export function withoutSaveTargets(table: CapabilityTable, ownerId: number): CapabilityTable {
+  return removeWhere(table, (record) => record.ownerId === ownerId && record.purpose === 'save-target').table;
+}
+
 /** 丢弃一个 pending 候选：能力表与元数据同步移除。 */
 function dropCandidate(state: OpenCoordinatorState, ownerId: number, meta: OwnerMeta, token: string): OpenCoordinatorState {
   const { table } = discardPending(state.table, ownerId, token);
@@ -104,16 +132,24 @@ function dropCandidate(state: OpenCoordinatorState, ownerId: number, meta: Owner
 /** 窗口创建时登记 owner；已登记则不变。 */
 export function registerOwner(state: OpenCoordinatorState, ownerId: number): OpenCoordinatorState {
   if (state.owners.has(ownerId)) return state;
-  return withOwner(state, ownerId, { generation: 1, latestRequestSeq: 0, dialogOpen: false, inFlightSeq: null, candidates: new Map() });
+  return withOwner(state, ownerId, {
+    generation: 1,
+    latestRequestSeq: 0,
+    dialogOpen: false,
+    inFlightSeq: null,
+    candidates: new Map(),
+    committed: NO_ANCHOR,
+    saveOperation: null,
+  });
 }
 
-/** 接受一次新的 Open 请求：占用新代次、标记对话框打开，并作废该窗口所有 pending 候选。 */
+/** 接受一次新的 Open 请求：占用新代次、标记对话框打开，并作废该窗口所有 pending 候选与 save-target。保存进行中 → `busy`。 */
 export function beginOpen(state: OpenCoordinatorState, ownerId: number): Step<BeginOpenOutcome> {
   const meta = state.owners.get(ownerId);
   if (meta === undefined) return { state, result: { kind: 'unknown-owner' } };
-  if (meta.dialogOpen) return { state, result: { kind: 'busy' } };
+  if (meta.dialogOpen || meta.saveOperation !== null) return { state, result: { kind: 'busy' } };
   const discarded = [...meta.candidates.keys()];
-  let table = state.table;
+  let table = withoutSaveTargets(state.table, ownerId);
   for (const token of discarded) table = discardPending(table, ownerId, token).table;
   const requestSeq = meta.latestRequestSeq + 1;
   const next: OwnerMeta = { ...meta, latestRequestSeq: requestSeq, dialogOpen: true, inFlightSeq: requestSeq, candidates: new Map() };
@@ -169,11 +205,12 @@ export function completeOpen(state: OpenCoordinatorState, ticket: OpenTicket, co
 const INVALID: ActivateDocumentReply = { ok: false, code: 'capability-invalid' };
 
 /**
- * renderer 确认接受候选：校验通过则 pending → active，并吊销同窗口被取代的旧 active。
+ * renderer 确认接受候选：校验通过则 pending → active（A1），同窗口被取代的旧 active 转墓碑（不再授权），`committed` 前移。
  *
- * 判定顺序：未知 owner / 未知 token / 跨窗口 → `capability-invalid`；documentId 不符 → `document-mismatch`（不改状态）；
- * 已是 active → 幂等 `{ ok: true }`（不确定结果的重试据此得到确定答案）；候选已过期、generation 已变或不再是最新请求
- * → 丢弃候选并 `capability-invalid`。只有最后一步成功才吊销旧 active。
+ * 判定顺序：未知 owner / 未知 token / 跨窗口 / 不是 open 记录（墓碑、save-target）→ `capability-invalid`；documentId 不符
+ * → `document-mismatch`（不改状态）；已是 active → 幂等 `{ ok: true }`（不确定结果的重试据此得到确定答案）；候选已过期、
+ * generation 已变或不再是最新请求 → 丢弃候选并 `capability-invalid`。只有最后一步成功才改变锚点。
+ * `revoked`：本次失去授权的 token（被取代的旧 active）。
  */
 export function activateDocument(
   state: OpenCoordinatorState,
@@ -184,7 +221,7 @@ export function activateDocument(
   assertNow(now);
   const meta = state.owners.get(ownerId);
   const record = state.table.get(ticket.capabilityId);
-  if (meta === undefined || record === undefined || record.ownerId !== ownerId) return { state, result: { reply: INVALID, revoked: [] } };
+  if (meta === undefined || record === undefined || record.ownerId !== ownerId || record.purpose !== 'open') return { state, result: { reply: INVALID, revoked: [] } };
   if (record.documentId !== ticket.documentId) return { state, result: { reply: { ok: false, code: 'document-mismatch' }, revoked: [] } };
   if (record.state === 'active') return { state, result: { reply: { ok: true }, revoked: [] } };
 
@@ -196,18 +233,20 @@ export function activateDocument(
     now < candidate.expiresAt;
   if (!live) return { state: dropCandidate(state, ownerId, meta, record.token), result: { reply: INVALID, revoked: [] } };
 
-  const activated = activate(state.table, ownerId, record.token);
-  if (!activated.ok) throw new Error(`activateDocument: pending capability could not be activated (${activated.reason})`);
-  const { table, removed } = revoke(activated.table, ownerId, activated.superseded);
+  const step = commitActivation(withoutSaveTargets(state.table, ownerId), ownerId, record.token, meta.committed);
   return {
-    state: withOwner(state, ownerId, withoutCandidate(meta, record.token), table),
-    result: { reply: { ok: true }, revoked: removed },
+    state: withOwner(state, ownerId, { ...withoutCandidate(meta, record.token), committed: step.committed }, step.table),
+    result: { reply: { ok: true }, revoked: step.deauthorized },
   };
 }
 
 /**
- * renderer 放弃候选（准备失败，或已激活后放弃新会话）：pending → 丢弃；active → 吊销（不恢复任何被取代的旧能力）。
- * 未知 / 跨窗口 / documentId 不符 → 不改状态。恒回复 `{ ok: true }`。
+ * renderer 放弃候选（准备失败，或已激活后放弃新会话）：
+ * - pending → 丢弃（A3），`committed` 不变；
+ * - 票据指向当前锚点（active 或墓碑，`committed = record(t)`）→ A2 / A2'：回退到 `prevCommitted`（可能是 `unresolved`），
+ *   active 转墓碑；**不恢复**任何被取代记录的授权；
+ * - 其它（未知、跨窗口、documentId 不符、不是当前锚点的墓碑、已被修剪 / 重建清除）→ 不改状态。
+ * 恒回复 `{ ok: true }`：它只表示 main 已处理该请求，不表示锚点已收敛（Gate A 补充要求）。`removed`：本次失去授权的 token。
  */
 export function rejectDocument(
   state: OpenCoordinatorState,
@@ -217,19 +256,23 @@ export function rejectDocument(
   const reply: RejectDocumentReply = { ok: true };
   const meta = state.owners.get(ownerId);
   const record = state.table.get(ticket.capabilityId);
-  if (meta === undefined || record === undefined || record.ownerId !== ownerId || record.documentId !== ticket.documentId) {
+  if (meta === undefined || record === undefined || record.ownerId !== ownerId || record.purpose === 'save-target' || record.documentId !== ticket.documentId) {
     return { state, result: { reply, removed: [] } };
   }
-  if (record.state === 'pending') return { state: dropCandidate(state, ownerId, meta, record.token), result: { reply, removed: [record.token] } };
-  const { table, removed } = revoke(state.table, ownerId, [record.token]);
-  return { state: { ...state, table }, result: { reply, removed } };
+  if (record.purpose === 'open' && record.state === 'pending') {
+    return { state: dropCandidate(state, ownerId, meta, record.token), result: { reply, removed: [record.token] } };
+  }
+  const step = rollbackAnchor(state.table, ownerId, record.token, meta.committed);
+  if (step === null) return { state, result: { reply, removed: [] } };
+  return { state: withOwner(state, ownerId, { ...meta, committed: step.committed }, step.table), result: { reply, removed: step.deauthorized } };
 }
 
-/** 丢弃所有已过期（`now >= expiresAt`）的 pending 候选。 */
+/** 丢弃所有已过期（`now >= expiresAt`）的 pending 候选与 save-target。 */
 export function expireCandidates(state: OpenCoordinatorState, now: number): Step<readonly string[]> {
   assertNow(now);
-  let next = state;
-  const expired: string[] = [];
+  const targets = removeWhere(state.table, (record) => record.purpose === 'save-target' && now >= record.expiresAt);
+  let next: OpenCoordinatorState = targets.removed.length === 0 ? state : { ...state, table: targets.table };
+  const expired: string[] = [...targets.removed];
   for (const [ownerId, meta] of state.owners) {
     let current = meta;
     for (const [token, candidate] of meta.candidates) {
@@ -242,12 +285,26 @@ export function expireCandidates(state: OpenCoordinatorState, now: number): Step
   return { state: next, result: expired };
 }
 
-/** 页面重载 / 渲染进程退出：generation + 1，清空该窗口全部能力（pending 与 active）与候选。`dialogOpen` 保持，避免并发对话框。 */
+/**
+ * A4（主 frame 跨文档导航开始 / 渲染进程退出，页面可能仍存活）：generation + 1；active 转墓碑，pending 与 save-target 丢弃；
+ * `committed` 不变（存活的页面仍可 reject 当前墓碑而合法回退）；保存逻辑锁清空。`dialogOpen` 保持，避免并发对话框。
+ * 返回本次失去授权的 token。
+ */
 export function resetOwner(state: OpenCoordinatorState, ownerId: number): Step<readonly string[]> {
   const meta = state.owners.get(ownerId);
   if (meta === undefined) return { state, result: [] };
-  const { table, removed } = revokeOwner(state.table, ownerId);
-  return { state: withOwner(state, ownerId, { ...meta, generation: meta.generation + 1, candidates: new Map() }, table), result: removed };
+  const step = tombstoneOwner(state.table, ownerId, meta.committed);
+  const next: OwnerMeta = { ...meta, generation: meta.generation + 1, candidates: new Map(), committed: step.committed, saveOperation: null };
+  return { state: withOwner(state, ownerId, next, step.table), result: step.deauthorized };
+}
+
+/** A5（`did-navigate`：页面已重建）：A4 之后删除全部墓碑，`committed = none`。旧页面的迟到 reject 之后找不到记录，不改变状态。 */
+export function rebuildOwner(state: OpenCoordinatorState, ownerId: number): Step<readonly string[]> {
+  const meta = state.owners.get(ownerId);
+  if (meta === undefined) return { state, result: [] };
+  const step = clearAnchors(state.table, ownerId, meta.committed);
+  const next: OwnerMeta = { ...meta, generation: meta.generation + 1, candidates: new Map(), committed: step.committed, saveOperation: null };
+  return { state: withOwner(state, ownerId, next, step.table), result: step.deauthorized };
 }
 
 /** 窗口销毁：清空该窗口全部能力并移除 owner 元数据（幂等）。 */
@@ -258,7 +315,7 @@ export function disposeOwner(state: OpenCoordinatorState, ownerId: number): Step
   return { state: { ...state, table, owners }, result: removed };
 }
 
-/** 授权查询（供 T4 的 Save 使用）：只认同窗口的 active 能力；pending、跨窗口、未知一律 null。 */
-export function authorizeCapability(state: OpenCoordinatorState, ownerId: number, token: string): OpenCapabilityRecord | null {
+/** 授权查询（供 T4 的 Save 使用）：只认同窗口的 active open；pending、墓碑、save-target、跨窗口、未知一律 null。 */
+export function authorizeCapability(state: OpenCoordinatorState, ownerId: number, token: string): ActiveOpenRecord | null {
   return lookupActive(state.table, ownerId, token);
 }

@@ -106,7 +106,9 @@ describe('重复确认与不确定结果（T1c fail-closed 恢复合同）', () 
     expect(abandoned.result).toEqual({ reply: { ok: true }, removed: ['a'] });
     expect(authorizeCapability(abandoned.state, W, 'a')).toBeNull();
     expect(authorizeCapability(abandoned.state, W, 'old')).toBeNull();
-    expect(abandoned.state.table.size).toBe(0);
+    // M3 T4 B2（A2 + 修剪）：锚点回退到 old（墓碑，不恢复授权）；a 不在锚点链上，被修剪。
+    expect([...abandoned.state.table.values()].map((r) => [r.token, r.purpose])).toEqual([['old', 'tombstone']]);
+    expect(abandoned.state.owners.get(W)?.committed).toEqual({ kind: 'record', token: 'old' });
     expectConsistent(abandoned.state);
   });
 
@@ -240,8 +242,8 @@ describe('coordinatorInvariantViolations 自检（能识别分叉）', () => {
       ...state,
       owners: new Map([...state.owners, [W, { ...meta, candidates: new Map() }]]),
       table: new Map([
-        ['a', { ...record, state: 'active' }],
-        ['b', { ...record, token: 'b', state: 'active' }],
+        ['a', { ...record, state: 'active', prevCommitted: { kind: 'none' } }],
+        ['b', { ...record, token: 'b', state: 'active', prevCommitted: { kind: 'none' } }],
       ]),
     };
     expect(coordinatorInvariantViolations(twoActive)).toContain('owner 1 has more than one active capability');

@@ -10,7 +10,8 @@
  * - **同步校验**：每个 handler 在第一个 `await` 之前用 `authenticate` 把 Electron 事件转换成可信快照并校验（登记窗口、未销毁、
  *   主 frame、页面身份），再校验 payload；任一失败都抛出固定文案的 `Request rejected`，不改任何状态、不泄露细节。
  * - **对话框锁**：`beginOpen` 置 `dialogOpen`；选择器结束（选中 / 取消 / 抛错）后在 `finally` 中对最新状态 `endDialog(ticket)`。
- *   主 frame 跨文档导航**开始**与**提交**时、以及渲染进程退出时，都先 `resetOwner`（作废能力、generation + 1），再用该窗口
+ *   主 frame 跨文档导航**开始**与**提交**时、以及渲染进程退出时，都先作废能力、generation + 1（导航开始与渲染进程退出为
+ *   `resetOwner`，即 M3 T4 的 A4：active 转墓碑、锚点保留；导航提交为 `rebuildOwner`，即 A5：页面已重建，清空墓碑与锚点），再用该窗口
  *   进行中的票据 `endDialog` 释放逻辑锁。提交时再失效一次是必要的：导航开始到提交之间旧文档仍然存活，它发出的 Open 会拿到
  *   开始时 reset 之后的新 generation（实测）；提交时的失效把这类请求一并作废，并释放它占用的
  *   **逻辑**锁——这不表示原生对话框已关闭（实测 reload 后 sheet 仍挂在原窗口上，destroy 后 promise 永不结束）。
@@ -38,7 +39,7 @@ import { createDocumentIdAllocator } from '../document/documentIds';
 import type { ReadOnlyFileSystem } from '../document/fileSystemPort';
 import { openDocumentAtPath, openDocumentError } from '../document/openDocument';
 import type { OpenAtPathResult } from '../document/openDocument';
-import type { OpenCapabilityRecord } from '../document/capabilities';
+import type { ActiveOpenRecord } from '../document/capabilities';
 import {
   activateDocument,
   authorizeCapability,
@@ -49,6 +50,7 @@ import {
   endDialog,
   expireCandidates,
   PENDING_TTL_MS,
+  rebuildOwner,
   registerOwner,
   rejectDocument,
   resetOwner,
@@ -113,7 +115,7 @@ export interface OpenIpcHandle<W> {
   /** `closed` / `destroyed` 转发（幂等）。 */
   disposeWindow(ownerId: number): void;
   /** 授权查询（T4 Save 使用）：只认 active。 */
-  authorize(ownerId: number, token: string): OpenCapabilityRecord | null;
+  authorize(ownerId: number, token: string): ActiveOpenRecord | null;
   /** 只读诊断快照（测试与日志）；不是授权入口。 */
   currentState(): OpenCoordinatorState;
   /** 进程内尚未 settle 的原生对话框操作数（诊断，不是准入条件）。 */
@@ -283,9 +285,9 @@ export function registerOpenIpc<S extends SenderLike, W>(deps: OpenIpcDeps<S, W>
     return step.result.reply;
   }
 
-  /** 页面代次失效：作废能力，并释放该窗口进行中对话框的逻辑锁。 */
-  function invalidateOwner(ownerId: number): void {
-    state = resetOwner(state, ownerId).state;
+  /** 页面代次失效：作废能力（A4；页面已重建时 A5），并释放该窗口进行中对话框的逻辑锁。 */
+  function invalidateOwner(ownerId: number, rebuilt: boolean): void {
+    state = (rebuilt ? rebuildOwner : resetOwner)(state, ownerId).state;
     const ticket = dialogTickets.get(ownerId);
     if (ticket !== undefined) releaseDialog(ticket);
   }
@@ -300,13 +302,13 @@ export function registerOpenIpc<S extends SenderLike, W>(deps: OpenIpcDeps<S, W>
       state = registerOwner(state, ownerId);
     },
     handleNavigation(ownerId, navigation) {
-      if (navigation.isMainFrame && !navigation.isSameDocument) invalidateOwner(ownerId);
+      if (navigation.isMainFrame && !navigation.isSameDocument) invalidateOwner(ownerId, false);
     },
     handleNavigationCommitted(ownerId) {
-      invalidateOwner(ownerId);
+      invalidateOwner(ownerId, true);
     },
     handleRendererGone(ownerId) {
-      invalidateOwner(ownerId);
+      invalidateOwner(ownerId, false);
     },
     disposeWindow(ownerId) {
       windows.delete(ownerId);

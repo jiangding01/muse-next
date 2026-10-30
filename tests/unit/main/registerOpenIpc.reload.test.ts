@@ -33,7 +33,7 @@ function ticketOf(reply: unknown): { capabilityId: string; documentId: number } 
 }
 
 function pendingTokens(h: Harness): string[] {
-  return [...h.handle.currentState().table.values()].filter((r) => r.state === 'pending').map((r) => r.token);
+  return [...h.handle.currentState().table.values()].filter((r) => r.purpose === 'open' && r.state === 'pending').map((r) => r.token);
 }
 
 describe('reload 期间对话框仍在显示', () => {
@@ -158,6 +158,11 @@ describe('reload 期间对话框仍在显示', () => {
     h.handle.handleNavigation(1, CROSS_DOCUMENT);
     expect(h.handle.authorize(1, ticket.capabilityId)).toBeNull();
     expect(await h.invoke(ACTIVATE, mainFrameEvent(sender), ticket)).toEqual({ ok: false, code: 'capability-invalid' });
+    // M3 T4 B2：导航开始（A4）只把它转为墓碑；导航提交（A5）后墓碑被删除。
+    expect(h.handle.currentState().table.get(ticket.capabilityId)?.purpose).toBe('tombstone');
+    h.handle.handleNavigationCommitted(1);
+    expect(h.handle.currentState().table.has(ticket.capabilityId)).toBe(false);
+    expect(h.handle.currentState().owners.get(1)?.committed).toEqual({ kind: 'none' });
   });
 
   it('渲染进程退出：等同 reload（作废能力并释放逻辑锁）；旧选择器结束前同窗口 busy，结束后可以 Open', async () => {
@@ -248,6 +253,7 @@ describe('pending TTL（120 s）', () => {
     h.runDueTimers();
     expect(h.handle.authorize(1, b.capabilityId)?.state).toBe('active');
     expect(h.handle.authorize(1, a.capabilityId)).toBeNull();
+    expect(h.handle.currentState().table.get(a.capabilityId)?.purpose).toBe('tombstone');
     h.expectConsistent();
   });
 

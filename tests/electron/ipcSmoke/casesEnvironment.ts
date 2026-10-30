@@ -68,7 +68,7 @@ const bridgeNoAutoActivate: SmokeCase = {
     if (reply.kind !== 'opened') return verdict([`expected opened, got ${describeOpen(reply)}`]);
     await delay(300);
     expectEqual(problems, 'capabilities after open', capabilitiesOf(ctx, window.ownerId), [
-      { token: reply.ticket.capabilityId, state: 'pending', documentId: reply.ticket.documentId },
+      { token: reply.ticket.capabilityId, purpose: 'open', state: 'pending', documentId: reply.ticket.documentId },
     ]);
     expectEqual(problems, 'authorize(pending)', ctx.openIpc.authorize(window.ownerId, reply.ticket.capabilityId), null);
     return verdict(problems);

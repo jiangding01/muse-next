@@ -67,5 +67,5 @@ export function acceptedTicket(outcome: { readonly kind: string; readonly ticket
 
 /** 某 owner 的 pending / active token 列表（直接读能力表，即单一事实来源）。 */
 export function tokensOf(state: OpenCoordinatorState, ownerId: number, kind: 'pending' | 'active'): string[] {
-  return [...state.table.values()].filter((r) => r.ownerId === ownerId && r.state === kind).map((r) => r.token);
+  return [...state.table.values()].filter((r) => r.ownerId === ownerId && r.purpose === 'open' && r.state === kind).map((r) => r.token);
 }

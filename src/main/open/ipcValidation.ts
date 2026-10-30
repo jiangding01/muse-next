@@ -99,13 +99,16 @@ export function parseOpenRequest(payload: unknown): OpenDocumentRequest | null {
 /** 能力 id 的形状上限：main 签发的不透明串（UUID）只含字母、数字与连字符。 */
 const CAPABILITY_ID_PATTERN = /^[A-Za-z0-9-]{1,64}$/;
 
-/** `activate-document` / `reject-document` 的输入：恰为 `{ capabilityId, documentId }`。 */
+/**
+ * `activate-document` / `reject-document` 的输入：恰为 `{ capabilityId, documentId }`。M3 T4 Gate A R9：`documentId ≥ 0`——
+ * 从 demo（documentId 0）Save As 得到的候选沿用 0。
+ */
 export function parseActivationTicket(payload: unknown): DocumentActivationTicket | null {
   return safely(() => {
     if (!hasExactKeys(payload, ['capabilityId', 'documentId'])) return null;
     const { capabilityId, documentId } = payload;
     if (typeof capabilityId !== 'string' || !CAPABILITY_ID_PATTERN.test(capabilityId)) return null;
-    if (typeof documentId !== 'number' || !Number.isSafeInteger(documentId) || documentId < 1) return null;
+    if (typeof documentId !== 'number' || !Number.isSafeInteger(documentId) || documentId < 0) return null;
     return { capabilityId, documentId };
   });
 }
