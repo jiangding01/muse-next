@@ -59,6 +59,7 @@ describe('M3 T1b 架构守卫 —— src/main/open 纯协议层', () => {
       'src/main/open/coordinatorInvariants.ts',
       'src/main/open/ipcValidation.ts',
       'src/main/open/openCoordinator.ts',
+      'src/main/open/saveCoordinator.ts',
     ]);
   });
 
