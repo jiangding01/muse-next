@@ -8,6 +8,12 @@
  *   在 `src/main/**` 中它不得出现在任何授权查询（`lookupActive` / `authorizeCapability` / `authorize` / `beginSave` /
  *   `isActiveOpen` / `saveStillCurrent` / `holdsSaveOperation`）的实参里。
  *
+ * - S4：保存锁只经 `saveIpc.ts` 的 `release` helper 以 CAS 释放，实参只能是本请求获取的票据（勘误 §2.5）。
+ * - S5：写 port 的写类同步方法恰为 rename / link / unlink；提交原语恰为 rename / link，且被 `trackCommits` 完整包装
+ *   （勘误 §3.1：B1 新增提交原语时本守卫失败）。
+ * - S6：I6——授权查询与授权结果字段的类型不含墓碑（`anchorFacts` 只提供文件事实，不在此列，见 B2 审查处置）。
+ * - S7：`saveIpc.ts` 只调用一次 `runSavePipeline`。
+ *
  * 每条规则都有反例，证明守卫能识别违规。
  */
 
@@ -176,5 +182,65 @@ describe('M3 T4 B2 守卫 —— R19 不授权（S3）', () => {
     expect(sourceReadsOutsideCheck(fake, 'function h(t: T) { const token = t.sourceCapabilityId; return token; }')).toEqual(['h']);
     expect(sourceReadsOutsideCheck(fake, 'function k(t: T) { return anchorMatchesSource(c, t.sourceCapabilityId); }')).toEqual([]);
     expect(sourceReadsOutsideCheck(fake, 'function m(sourceCapabilityId: string | null) { return anchorMatchesSource(c, sourceCapabilityId) || sourceCapabilityId === "a"; }')).toEqual(['m']);
+  });
+});
+
+/** 调用的实参文本（规范空白）。 */
+function callArgs(file: string, source: string, callee: string): { fn: string; args: string }[] {
+  const found: { fn: string; args: string }[] = [];
+  const sf = parse(file, source);
+  walk(sf, (node) => {
+    if (isCallExpression(node) && calleeName(node) === callee) {
+      found.push({ fn: enclosingFunction(node), args: node.arguments.map((arg) => arg.getText(sf).replace(/\s+/g, ' ')).join(', ') });
+    }
+  });
+  return found;
+}
+
+const stripComments = (text: string): string => text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+const SAVE_IPC = join(MAIN_DIR, 'ipc', 'saveIpc.ts');
+
+describe('M3 T4 B2 守卫 —— 释放、提交原语、I6（S4–S7）', () => {
+  it('S4：releaseSaveOperation 在 saveIpc 中只出现在 release helper；release 的实参只能是本请求获取的票据', () => {
+    expect(callArgs(SAVE_IPC, read(SAVE_IPC), 'releaseSaveOperation')).toEqual([{ fn: 'release', args: 'ctx.getState(), ownerId, operation' }]);
+    expect(callArgs(SAVE_IPC, read(SAVE_IPC), 'release').map((call) => `${call.fn}(${call.args})`).sort()).toEqual([
+      'requestSaveTarget(ownerId, operation)',
+      'saveDocument(ownerId, prepared.operation)',
+    ]);
+    const text = stripComments(read(SAVE_IPC));
+    expect(text).toContain('const { operation, anchor, anchorFacts } = begun.result;');
+    expect(text.match(/\boperation = /g) ?? []).toEqual([]);
+    const coordinator = join(OPEN_DIR, 'saveCoordinator.ts');
+    expect(callArgs(coordinator, read(coordinator), 'releaseSaveOperation')).toEqual([{ fn: 'refuse', args: 'state, ownerId, operation' }]);
+  });
+
+  it('S4 反例：其它位置或其它实参的释放都被识别', () => {
+    const fake = join(MAIN_DIR, 'ipc', '__fake__.ts');
+    expect(callArgs(fake, 'async function f() { release(ownerId, stale); }', 'release')).toEqual([{ fn: 'f', args: 'ownerId, stale' }]);
+  });
+
+  it('S5：写类同步方法恰为 rename / link / unlink；提交原语 rename / link 被 trackCommits 完整包装', () => {
+    const port = read(join(MAIN_DIR, 'document', 'writeFileSystemPort.ts'));
+    const syncMethods = [...stripComments(port).matchAll(/^\s+(\w+Sync)\(/gm)].map((m) => m[1]).sort();
+    const reads = new Set(['openReadSync', 'fstatSync', 'readSync', 'closeSync', 'statSync', 'realpathSync']);
+    expect(syncMethods.filter((name) => !reads.has(name ?? ''))).toEqual(['linkSync', 'renameSync', 'unlinkSync']);
+    const atomic = stripComments(read(join(MAIN_DIR, 'document', 'atomicWrite.ts')));
+    expect([...atomic.matchAll(/\bfs\.(renameSync|linkSync)\(/g)].map((m) => m[1]).sort()).toEqual(['linkSync', 'renameSync']);
+    const ipc = stripComments(read(SAVE_IPC));
+    const wrapper = ipc.slice(ipc.indexOf('export function trackCommits'), ipc.indexOf('const factsOf'));
+    expect([...wrapper.matchAll(/^\s{4}(\w+): \(/gm)].map((m) => m[1]).sort()).toEqual(['linkSync', 'renameSync']);
+    expect(wrapper).toContain('...fs,');
+  });
+
+  it('S6（I6）：授权查询与授权结果字段的类型不含墓碑', () => {
+    expect(stripComments(read(join(MAIN_DIR, 'document', 'capabilities.ts')))).toMatch(/export function lookupActive\([^)]*\): ActiveOpenRecord \| null \{/);
+    expect(stripComments(read(join(OPEN_DIR, 'openCoordinator.ts')))).toMatch(/export function authorizeCapability\([^)]*\): ActiveOpenRecord \| null \{/);
+    const coordinator = stripComments(read(join(OPEN_DIR, 'saveCoordinator.ts')));
+    expect(coordinator).toContain('{ readonly ok: true; readonly record: ActiveOpenRecord; readonly operation: SaveOperation }');
+    expect(coordinator).toContain('readonly target: SaveTargetRecord;');
+  });
+
+  it('S7：saveIpc.ts 只调用一次 runSavePipeline', () => {
+    expect(stripComments(read(SAVE_IPC)).match(/runSavePipeline\(/g)?.length).toBe(1);
   });
 });

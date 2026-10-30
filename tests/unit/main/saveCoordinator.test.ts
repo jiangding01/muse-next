@@ -124,6 +124,10 @@ describe('保存操作票据（勘误 §2）', () => {
     const forged: SaveOperation = { ...b.operation, generation: a.operation.generation };
     expect(releaseSaveOperation(b.state, W, forged)).toBe(b.state);
     expect(holdsSaveOperation(b.state, W, forged)).toBe(false);
+    // 同 generation、不同 id（未签发或已失效的操作）同样不能释放。
+    const otherId: SaveOperation = { ...b.operation, id: b.operation.id + 100 };
+    expect(releaseSaveOperation(b.state, W, otherId)).toBe(b.state);
+    expect(holdsSaveOperation(b.state, W, otherId)).toBe(false);
     const ids = new Set<number>();
     let state = fresh();
     for (let i = 0; i < 5; i += 1) {
@@ -154,6 +158,8 @@ describe('普通 Save 授权', () => {
     const op = step.result.operation;
     expect(saveStillCurrent(step.state, W, op, 'X')).toBe(true);
     expect(saveStillCurrent(resetOwner(step.state, W).state, W, op, 'X')).toBe(false);
+    // 保存中途 reject 当前 active（A2）：锁仍在，但 token 已不是 active → 失效。
+    expect(saveStillCurrent(rejectDocument(step.state, W, { capabilityId: 'X', documentId: 11 }).state, W, op, 'X')).toBe(false);
   });
 
   it.each([

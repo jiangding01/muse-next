@@ -137,14 +137,15 @@ export function createSaveIpcHandlers<S extends SenderLike, W>(ctx: SaveIpcConte
     } catch {} // 诊断失败不影响结果
   };
 
-  const scheduleExpiry = (): void => {
-    deps.schedule(SAVE_TARGET_TTL_MS, () => {
-      try {
-        ctx.expire();
-      } catch {
-        // 时钟异常时不清理；消费仍按时钟 fail closed。
-      }
-    });
+  // 只做清理（消费与激活都按 expiresAt fail closed）；调度失败也不改变已提交的状态与回复。
+  const scheduleExpiry = (delayMs: number): void => {
+    try {
+      deps.schedule(delayMs, () => {
+        try {
+          ctx.expire();
+        } catch {} // 时钟异常时不清理
+      });
+    } catch {} // 调度失败：记录保留到 TTL 之后的下一次清理或 Open
   };
 
   async function requestSaveTarget(ownerId: number, window: W, request: RequestSaveTargetRequest): Promise<RequestSaveTargetReply> {
@@ -186,6 +187,7 @@ export function createSaveIpcHandlers<S extends SenderLike, W>(ctx: SaveIpcConte
       const displayPath = resolve(chosen);
       const token = deps.issueToken();
       // F2：登记之前在最新状态上重新验证票据、R19 与锚点（grantSaveTarget 内）。
+      if (!ctx.isCurrentWindow(ownerId, window)) return refused('capability-invalid'); // 与 Open 对称：fs await 之后复查实例
       const granted = grantSaveTarget(
         ctx.getState(),
         ownerId,
@@ -195,7 +197,7 @@ export function createSaveIpcHandlers<S extends SenderLike, W>(ctx: SaveIpcConte
       );
       ctx.setState(granted.state);
       if (!granted.result.ok) return refused(granted.result.code);
-      scheduleExpiry();
+      scheduleExpiry(SAVE_TARGET_TTL_MS);
       return { kind: 'granted', capabilityId: token, displayName: basename(displayPath), displayPath, sameAsCurrent };
     } catch {
       return refused('capability-invalid');
@@ -265,7 +267,7 @@ export function createSaveIpcHandlers<S extends SenderLike, W>(ctx: SaveIpcConte
       ctx.setState(next);
       if (candidate !== null) {
         ticket = { capabilityId: candidate.token, documentId: candidate.documentId };
-        scheduleExpiry();
+        scheduleExpiry(ctx.getState().ttlMs);
       }
     } catch {
       log('settle-failed');

@@ -210,8 +210,9 @@ export type ConsumeSaveTargetResult =
  * `boundDocumentId` 比较）→ encoding-mismatch。全部通过：持有 `save-as-write` 锁，占用新的 Open 请求序号并丢弃旧 pending 候选。
  */
 export function consumeSaveTarget(state: OpenCoordinatorState, ownerId: number, ticket: SaveAsTicket, now: number): Step<ConsumeSaveTargetResult> {
-  if (!Number.isFinite(now)) throw new RangeError('consumeSaveTarget: now must be finite');
+  // F2：先消费，再做任何判定（含时钟异常——异常时钟下 G 同样不可重用，按 capability-invalid 拒绝）。
   const consumed = consumeIfSaveTarget(state, ownerId, ticket.capabilityId);
+  if (!Number.isFinite(now)) return { state: consumed.state, result: { ok: false, code: 'capability-invalid' } };
   const acquired = acquireSaveOperation(consumed.state, ownerId, 'save-as-write');
   if (acquired.result.kind !== 'acquired') return { state: acquired.state, result: { ok: false, code: acquired.result.kind === 'busy' ? 'busy' : 'capability-invalid' } };
   const operation = acquired.result.operation;

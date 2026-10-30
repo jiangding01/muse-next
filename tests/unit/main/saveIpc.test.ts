@@ -147,6 +147,16 @@ describe('Save As（经 IPC）', () => {
     expect(await h.invoke(ACTIVATE, ev, result.ticket)).toEqual({ ok: true });
   });
 
+  it('M37：锚点文件无法解析（符号链接环）时 unknown 不当作「不是同一文件」→ identity-unknown，不登记', async () => {
+    const { disk, h, ev } = world();
+    const a = await openActive(h, ev, A);
+    disk.remove(A);
+    disk.symlink(A, P('docs', 'loop.jcx'));
+    disk.symlink(P('docs', 'loop.jcx'), A);
+    expect(await requestTarget(h, ev, a.capabilityId, B)).toMatchObject({ kind: 'refused', error: { code: 'identity-unknown' } });
+    expect([...h.handle.currentState().table.values()].some((r) => r.purpose === 'save-target')).toBe(false);
+  });
+
   it('取消 → canceled，不登记；悬空符号链接 → not-a-regular-file（M42）', async () => {
     const { disk, h, ev } = world();
     const a = await openActive(h, ev, A);
