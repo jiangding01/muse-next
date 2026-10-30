@@ -4,6 +4,7 @@
  * 每个用例都从产品 UI 入口出发：点击 Toolbar 的 Open 按钮 → 生产 preload → main 的新 IPC → renderer 准备候选 → 激活 → commitSession
  * → UI。页面状态只从 DOM 读取（文件状态区的 `data-document-id` / `data-capability-trust`、Open 按钮的 `data-open-phase`、提示条、
  * 只读源码面板），main 状态只从生产 handle 的诊断出口读取。激活应答扣留只经 smoke 的 `ipcFaults`（产品没有测试通道）。
+ * M3 T4 B3a-1：reject 应答故障（`hold` 执行但扣留应答 / `swallow` 不执行）同样只经 `ipcFaults`，只在本文件布置。
  */
 
 import { stat } from 'node:fs/promises';
@@ -14,6 +15,7 @@ import type { IsolatedCase } from './casesIsolated';
 import { pageCondition, productionWindow } from './casesSecurity';
 import { deferred, delay, waitFor } from './harness';
 import { isRecord } from './replies';
+import type { RejectFault } from './ipcFaults';
 import type { SmokeWindow } from './windows';
 
 interface UiDoc {
@@ -279,6 +281,91 @@ const uiActivationUnresolved: IsolatedCase = {
   },
 };
 
+/** 编辑器状态栏上的提示（产品数据属性 `data-editor-notice`）。 */
+async function editorNotice(window: SmokeWindow): Promise<string | null> {
+  const result = await window.call(`(() => document.querySelector('.editor-status')?.getAttribute('data-editor-notice') ?? null)()`, 2_000);
+  return result.ok && typeof result.value === 'string' && result.value !== '' ? result.value : null;
+}
+
+async function waitNotice(window: SmokeWindow, kind: string, timeoutMs: number): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if ((await editorNotice(window)) === kind) return true;
+    await delay(100);
+  }
+  return false;
+}
+
+/**
+ * M3 T4 B3a-1（只覆盖 **Open 部分**；Save / Save As 部分属 B3a-2，不在此验收）：激活应答三次全部丢失 → 事务不确定，
+ * renderer 经产品账本发 reject，reject 按 `fault` 丢失 → 下一次 Open 被送达门拒绝（不弹对话框、不调用选择器）→ 故障解除后
+ * 送达门重发 reject、送达，Open 进入对话框并正常提交。
+ * - `swallow`：main 未处理 reject，候选 Y 仍是 active（T-H7-7 Open 部分）。
+ * - `hold`：main 已处理 reject（候选已吊销），但 renderer 收不到确认，仍必须拒绝（T-H7-8 Open 部分，M65）。
+ */
+async function openWithLostReject(ctx: SmokeContext, fault: Exclude<RejectFault, 'none'>): Promise<{ problems: string[]; detail: Record<string, unknown> }> {
+  const { window } = await productionWindow(ctx);
+  const problems: string[] = [];
+  const opened = await openViaUi(ctx, window, ctx.fixtures.utf8);
+  expectTrue(problems, 'X opened', opened !== null);
+  ctx.faults.reset();
+  ctx.faults.holdNextActivations(3);
+  ctx.faults.setRejectFault(fault);
+  ctx.chooser.enqueue({ kind: 'path', path: ctx.fixtures.second });
+  await clickOpen(window);
+  const unresolved = await waitUi(window, (doc) => doc.phase === 'idle' && doc.notice === 'activation-unresolved', 22_000);
+  expectEqual(problems, 'unresolved: old session kept', unresolved === null ? null : [unresolved.documentId, unresolved.trust], [opened?.documentId, 'unverified']);
+  const lost = [...ctx.faults.rejectRecords()];
+  expectTrue(problems, `${fault}: the renderer sent the reject`, lost.length > 0);
+  expectEqual(problems, `${fault}: every reject so far hit the fault`, lost.map((r) => [r.fault, r.executed]), lost.map(() => [fault, fault === 'hold']));
+  // swallow：main 未处理 reject，候选仍 active；hold：main 已处理，候选已吊销（两种模式可区分）。
+  expectEqual(problems, `${fault}: main active capabilities after the lost reject`, active(ctx, window).length, fault === 'swallow' ? 1 : 0);
+
+  // 等首次 reject 尝试超时（产品账本单次 5 s）：之后的送达门必须在故障下重发，而不是复用进行中的尝试（R-3）。
+  await delay(6_000);
+  // 送达门：下一次 Open 不进入对话框（不调用选择器、无原生对话框），给出未送达提示，会话不变。
+  const chooserCalls = ctx.chooser.calls.length;
+  expectEqual(problems, 'refused Open: click', await clickOpen(window), 'clicked');
+  expectTrue(problems, 'refused Open: reject-pending notice', await waitNotice(window, 'open-refused-reject-pending', 15_000));
+  expectEqual(problems, 'refused Open: chooser not called', ctx.chooser.calls.length, chooserCalls);
+  expectEqual(problems, 'refused Open: no native dialog', ctx.openIpc.pendingNativeDialogs(), 0);
+  const refused = await readUi(window);
+  expectEqual(problems, 'refused Open: session unchanged', refused === null ? null : [refused.documentId, refused.phase], [opened?.documentId, 'idle']);
+  const resent = ctx.faults.rejectRecords().length;
+  const gateResent = ctx.faults.rejectRecords().slice(lost.length);
+  expectTrue(problems, 'refused Open: the gate re-sent the reject under the fault', gateResent.length > 0 && gateResent.every((r) => r.fault === fault && r.executed === (fault === 'hold')));
+  expectEqual(problems, `${fault}: main state unchanged by the refused Open`, active(ctx, window).length, fault === 'swallow' ? 1 : 0);
+
+  // 恢复：故障解除 → 送达门重发并送达（main 的 reject 幂等）→ Open 进入对话框并提交。
+  ctx.faults.setRejectFault('none');
+  const reopened = await openViaUi(ctx, window, ctx.fixtures.utf8);
+  const delivered = ctx.faults.rejectRecords().slice(resent);
+  expectTrue(problems, 'recovery: reject delivered without fault', delivered.length > 0 && delivered.every((r) => r.fault === 'none' && r.executed));
+  expectEqual(problems, 'recovery: chooser called once', ctx.chooser.calls.length, chooserCalls + 1);
+  problems.push(...sameDocumentProblems(ctx, window, reopened, 'recovery'));
+  return { problems, detail: { fault, lostRejects: lost.length, resentRejects: resent - lost.length, deliveredRejects: delivered.length } };
+}
+
+const uiOpenActivationLostLedger: IsolatedCase = {
+  id: 'ui.open-activation-lost-ledger',
+  realDialog: false,
+  timeoutMs: 60_000,
+  run: async (ctx) => {
+    const { problems, detail } = await openWithLostReject(ctx, 'swallow');
+    return verdict(problems, detail);
+  },
+};
+
+const uiOpenRejectGate: IsolatedCase = {
+  id: 'ui.open-reject-gate',
+  realDialog: false,
+  timeoutMs: 60_000,
+  run: async (ctx) => {
+    const { problems, detail } = await openWithLostReject(ctx, 'hold');
+    return verdict(problems, detail);
+  },
+};
+
 const uiWinUnc: IsolatedCase = {
   id: 'ui.win-unc',
   realDialog: false,
@@ -307,4 +394,7 @@ export const UI_CASES: readonly IsolatedCase[] = [
   uiActivationHeldRetry,
   uiActivationUnresolved,
   uiWinUnc,
+  // M3 T4 B3a-1：R20 送达门的 Open 部分（Save / Save As 部分在 B3a-2 另立用例）。
+  uiOpenActivationLostLedger,
+  uiOpenRejectGate,
 ];

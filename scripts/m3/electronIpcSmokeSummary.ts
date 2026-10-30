@@ -126,6 +126,9 @@ export const SMOKE_CASES: readonly CaseSpec[] = [
   matrix('open.activation-lost-reject-lost'),
   matrix('save-as.dialog-returns-after-reload'),
   matrix('save.late-release-after-reset'),
+  // M3 T4 B3a-1：R20 送达门的 Open 部分（生产 renderer，reject 应答 swallow / hold）；Save / Save As 部分属 B3a-2。
+  isolated('ui.open-activation-lost-ledger', ALL_PASS),
+  isolated('ui.open-reject-gate', ALL_PASS),
 ];
 
 export const RESULT_PREFIX = 'MUSE_IPC_SMOKE_RESULT ';

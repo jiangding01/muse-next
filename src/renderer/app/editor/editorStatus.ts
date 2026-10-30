@@ -42,6 +42,8 @@ export function editorStatusLabels(view: EditorStatusView): string[] {
 const NOTICE_TEXT: Readonly<Record<EditorNoticeKind, string>> = {
   'open-refused-dirty': '当前文档有未保存的修改；本阶段尚不能保存。撤销到未修改状态后才能打开其它文件。',
   'open-refused-composing': '请先完成或取消正在进行的输入，再打开文件。',
+  'open-refused-busy': '正在进行另一项文件操作，请稍后再试。',
+  'open-refused-reject-pending': '上一次文件切换的状态尚未与主进程确认，请稍后重试。',
   'open-candidate-dropped-dirty': '打开期间当前文档出现了修改，已放弃本次打开；当前文档未改变。',
   'open-commit-refused-dirty': '打开时检测到未保存的修改，没有替换当前文档；原文件授权未确认，重新打开文件即可恢复。',
   'command-ignored-composing': '正在输入，撤销 / 重做暂不可用。',

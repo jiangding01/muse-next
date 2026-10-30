@@ -5,7 +5,7 @@
  * - `invoke-open` → `openDocument()`（**不设超时**，用户可以长时间停留在原生对话框中）；
  * - `invoke-activate` → `activateDocument(ticket)`，每次尝试单独计时；应答、invoke 抛错与超时都按「事务号 + 尝试号」回送，
  *   由状态机判断是否仍然有效（迟到的应答不会覆盖后续事务，重叠的未 settle 尝试不会重复提交）；
- * - `send-reject` → `rejectDocument(ticket)`，尽力发送：不等待、不依赖其应答（不视为 main 已清理）；
+ * - `send-reject` → 经 R20 账本发出（M3 T4 B3a-1）：事务本身不等待、不依赖其应答；之后的文件操作开始前先重发并等待；
  * - `commit` → `commitSession(session, 'trusted')`；`downgrade-trust` → 降级授权状态。
  *
  * - 阶段性数据安全（M3 T3a，用户裁决 Q3 / S5，T3 Preflight r3 §8）：入口处文档 dirty 或输入法正在组字时拒绝 Open（不发起
@@ -19,7 +19,7 @@
  *   提交分两步：`commit` 写入 store 失败且 store 仍是旧会话 → `commit-failed`（reject 已激活候选并降级）；写入已生效之后的
  *   异常（订阅者、`afterCommit` 的解析调度通知）只报告，不撤回新会话的能力。
  * 控制器是模块级对象，不在任何 React 组件生命周期里：组件卸载 / 重挂载不会中断或重复事务；组件只调用 `open()`。
- * renderer 中只有本模块调用 `window.museDesktop`（架构守卫钉住）。
+ * - 准入（M3 T4 B3a-1）：经 `openEntry` 同步取共享租约、过送达门与最终核对才开始；租约持有到终态全部效果执行完再 CAS 释放。
  */
 
 import type { MuseDesktopApi } from '../../../shared/ipc';
@@ -34,6 +34,11 @@ import type { OpenGate } from './editorController';
 import type { EditorNotice } from './editorTransitions';
 import { activating, ACTIVATION_TIMEOUT_MS, initialOpenFlow, stepOpenFlow } from './openTransaction';
 import { museParseController } from './parseController';
+import { admissionNotice, museOpenAdmission } from './openEntry';
+import type { OpenAdmission, OpenAdmissionRefusal } from './openEntry';
+import type { FileIntentLease } from '../fileIntentGate';
+import { createBridgeRejectLedger, museRejectLedger } from '../save/rejectLedger';
+import type { RejectLedger } from '../save/rejectLedger';
 import type { CapabilityTrust, OpenFlowEffect, OpenFlowEvent, OpenFlowState } from './openTransaction';
 
 export interface OpenControllerDeps {
@@ -53,6 +58,10 @@ export interface OpenControllerDeps {
   readonly editor?: OpenEditorGate;
   /** 控制器自身异常的报告；缺省为产品的编辑器错误报告。 */
   readonly report?: (error: unknown, context: string) => void;
+  /** 未确认 reject 账本（R20）；缺省为经 `bridge` 发送、不计超时的私有账本（既有协议测试）。 */
+  readonly ledger?: Pick<RejectLedger, 'send'>;
+  /** 共享准入（租约 + 送达门）；缺省为不经准入（既有协议测试）。 */
+  readonly admission?: OpenAdmission;
 }
 
 /** Open 控制器读取 / 通知编辑器的窄接口。 */
@@ -118,6 +127,8 @@ export function createOpenController(deps: OpenControllerDeps): OpenController {
   };
   // 按文档号判断：写入之后订阅者即使换了会话对象（同一文档的新快照），也仍算已提交（独立审查 L3）。
   const committed = deps.committed ?? ((session: DocumentSession) => useMuseAppStore.getState().session.documentId === session.documentId);
+  const ledger = deps.ledger ?? createBridgeRejectLedger(deps.bridge);
+  let lease: FileIntentLease | null = null; // 经准入开始的事务期间持有的租约
 
   function dispatch(event: OpenFlowEvent): void {
     const step = stepOpenFlow(state, event);
@@ -129,14 +140,33 @@ export function createOpenController(deps: OpenControllerDeps): OpenController {
     } finally {
       // 终态的全部效果（含 commit）执行完之后才清除；效果抛错也不会让标志停在 true（r3a 审查 L-2）。
       // 视图同样在 finally 中发布：终态效果抛错时 controller-failed 不再改变状态，视图不能停在旧阶段（r3a 复核 H-1）。
-      if (state.phase === 'idle') editor.setReplacementPending(false);
+      if (state.phase === 'idle') {
+        try {
+          editor.setReplacementPending(false);
+        } finally {
+          // 终态的全部效果执行完之后才释放准入租约（CAS）；清理替换标志抛错也不能泄漏模块级租约。
+          if (lease !== null) deps.admission?.release(lease);
+          lease = null;
+        }
+      }
       if (changedView) deps.publish({ phase: state.phase, notice: state.notice });
     }
   }
 
-  /** 回调的统一异常边界：报告后按事务阶段 fail closed；收束本身再抛错只报告（此时事务已终结）。 */
+  /** 开始事务；`granted` 为准入租约（经准入时）。同步入口同样 fail closed（独立审查 L1）。 */
+  function start(granted: FileIntentLease | null): void {
+    if (granted !== null) lease = granted;
+    try {
+      dispatch({ type: 'open-requested' });
+    } catch (error) {
+      failClosed(state.txn, null, error);
+    }
+  }
+
+  /** 回调的统一异常边界（先复核准入租约与文档号，勘误 §1.3）：异常报告后按阶段 fail closed；收束再抛错只报告。 */
   function guard(txn: number, task: () => void, ticket: DocumentActivationTicket | null = null): void {
     try {
+      if (lease !== null && deps.admission?.holds(lease) === false) throw new Error('file intent lease lost');
       task();
     } catch (error) {
       failClosed(txn, ticket, error);
@@ -231,7 +261,7 @@ export function createOpenController(deps: OpenControllerDeps): OpenController {
         return;
       }
       case 'send-reject':
-        invoke(() => deps.bridge().rejectDocument(effect.ticket)).catch(() => undefined);
+        ledger.send(effect.ticket);
         return;
       case 'commit':
         commitCandidate(effect.session, effect.ticket);
@@ -253,13 +283,14 @@ export function createOpenController(deps: OpenControllerDeps): OpenController {
           editor.notify({ kind: gate.dirty ? 'open-refused-dirty' : 'open-refused-composing' });
           return;
         }
+        if (deps.admission !== undefined) {
+          const allowed = (again: OpenGate): boolean => state.phase === 'idle' && lease === null && !again.dirty && !again.composing;
+          const refuse = (reason: OpenAdmissionRefusal): void => editor.notify({ kind: admissionNotice(reason, editor.gate()) });
+          deps.admission.admit({ begin: start, refuse, stillAllowed: () => allowed(editor.gate()) });
+          return;
+        }
       }
-      // 同步入口同样 fail closed：置位替换标志等抛错不能让 requesting 事务挂起（独立审查 L1）。
-      try {
-        dispatch({ type: 'open-requested' });
-      } catch (error) {
-        failClosed(state.txn, null, error);
-      }
+      start(null);
     },
     dismissNotice: () => dispatch({ type: 'notice-dismissed' }),
     state: () => state,
@@ -303,6 +334,8 @@ export const museOpenController: OpenController = createOpenController({
   downgradeTrust: downgradeCapabilityTrust,
   publish: publishOpenView,
   report: reportEditorError,
+  ledger: museRejectLedger,
+  admission: museOpenAdmission,
   editor: {
     gate: () => museEditorController.openGate(),
     beforeCommit: () => {

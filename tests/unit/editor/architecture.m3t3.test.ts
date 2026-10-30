@@ -92,6 +92,11 @@ const EXPECTED_WRITES: Record<string, string[]> = {
   publishEditorView: ['editor'],
   downgradeCapabilityTrust: ['capabilityTrust'],
   publishOpenView: ['open'],
+  // M3 T4 B3a-1（H-4）：文件操作检查点写入只换会话（begin 另结束历史合并组；Save As 成功与失败收尾另写授权）。
+  beginFileOperation: ['history', 'session'],
+  settleSave: ['session'],
+  settleSaveAs: ['capabilityTrust', 'session'],
+  finishFileOperation: ['capabilityTrust', 'session'],
 };
 
 describe('M3 T3a 架构守卫 —— store 写入字段精确集合', () => {
