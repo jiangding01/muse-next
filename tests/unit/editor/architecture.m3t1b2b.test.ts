@@ -112,6 +112,9 @@ describe('M3 T1b-2b-1 架构守卫 —— smoke 复用生产实现', () => {
         'casesEnvironment.ts',
         'casesIsolated.ts',
         'casesNavigation.ts',
+        // M3 T4 B2（G-6）：保存与保存故障注入用例（只追加）。
+        'casesSave.ts',
+        'casesSaveFaults.ts',
         'casesSecurity.ts',
         'casesSender.ts',
         'casesUi.ts',

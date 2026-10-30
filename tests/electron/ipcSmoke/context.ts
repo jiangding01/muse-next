@@ -17,7 +17,7 @@ import type { MenuCommandMessage } from '../../../src/shared/menuContracts';
 import { coordinatorInvariantViolations } from '../../../src/main/open/coordinatorInvariants';
 import type { OwnerMeta } from '../../../src/main/open/openCoordinator';
 import type { WindowSecurityBlock } from '../../../src/main/security/windowSecurity';
-import type { GatedFileSystem, ManualScheduler, ScriptedChooser, TestClock, TokenFaults } from './harness';
+import type { GatedFileSystem, GatedWriteFileSystem, ManualScheduler, ScriptedChooser, TestClock, TokenFaults } from './harness';
 import type { ActivationFaults } from './ipcFaults';
 import type { WindowFactory } from './windows';
 
@@ -71,7 +71,11 @@ export const STAFF_NOTE_COUNT = 14;
 export interface SmokeContext {
   readonly openIpc: OpenIpcHandle<BrowserWindow>;
   readonly chooser: ScriptedChooser<BrowserWindow>;
+  /** M3 T4 B2：保存对话框的受控选择器（与 Open 的选择器分开排队）。 */
+  readonly saveChooser: ScriptedChooser<BrowserWindow>;
   readonly fs: GatedFileSystem;
+  /** M3 T4 B2：包裹生产 Node 写实现的可挂起写 port。 */
+  readonly writeGate: GatedWriteFileSystem;
   readonly clock: TestClock;
   readonly scheduler: ManualScheduler;
   readonly tokenFaults: TokenFaults;
@@ -227,6 +231,8 @@ export function residueProblems(ctx: SmokeContext): string[] {
   if (state.owners.size !== 0) problems.push(`residue: ${String(state.owners.size)} owners left`);
   if (ctx.openIpc.pendingNativeDialogs() !== 0) problems.push(`residue: ${String(ctx.openIpc.pendingNativeDialogs())} unsettled choosers`);
   if (ctx.chooser.remaining() !== 0) problems.push(`residue: ${String(ctx.chooser.remaining())} unused chooser steps`);
+  if (ctx.saveChooser.remaining() !== 0) problems.push(`residue: ${String(ctx.saveChooser.remaining())} unused save chooser steps`);
+  if (ctx.writeGate.hasPendingGate()) problems.push('residue: write gate left');
   if (ctx.fs.hasPendingGate()) problems.push('residue: read gate or injected fs fault left');
   if (ctx.tokenFaults.pending() !== 0) problems.push('residue: injected token fault left');
   return problems;

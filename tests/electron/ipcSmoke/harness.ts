@@ -15,6 +15,7 @@
 import { performance } from 'node:perf_hooks';
 
 import type { FileStat, ReadOnlyFileHandle, ReadOnlyFileSystem } from '../../../src/main/document/fileSystemPort';
+import type { WriteFileSystem } from '../../../src/main/document/writeFileSystemPort';
 
 export interface Deferred<T> {
   readonly promise: Promise<T>;
@@ -262,6 +263,69 @@ export function createTokenFaults(): TokenFaults {
     pending: () => queue.length,
     clear: () => {
       queue.length = 0;
+    },
+  };
+}
+
+/** M3 T4 B2：可在异步步骤前挂起的写 port（包裹生产 Node 写实现）。同步提交临界区（C2）不能也不应被挂起。 */
+export type GatedWriteMethod = 'openExclusive' | 'syncDirectory';
+
+export interface WriteGate {
+  readonly reached: Promise<void>;
+  release(): void;
+}
+
+export interface GatedWriteFileSystem {
+  readonly fs: WriteFileSystem;
+  /** 下一次调用该方法时停在调用之前，直到 `release`。`openExclusive` 在提交点之前，`syncDirectory` 在提交点之后。 */
+  holdNext(method: GatedWriteMethod): WriteGate;
+  /** 是否还有未触发或未放行的闸门（用例收尾的残留检查）。 */
+  hasPendingGate(): boolean;
+  reset(): void;
+}
+
+export function createGatedWriteFileSystem(base: WriteFileSystem): GatedWriteFileSystem {
+  const pending = new Map<GatedWriteMethod, { reached: () => void; wait: Promise<void>; release: () => void; gate: WriteGate }[]>();
+  const open = new Set<WriteGate>();
+  const pass = async (method: GatedWriteMethod): Promise<void> => {
+    const queue = pending.get(method) ?? [];
+    const next = queue.shift();
+    if (next === undefined) return;
+    next.reached();
+    await next.wait;
+  };
+  return {
+    fs: {
+      ...base,
+      openExclusive: async (path, mode) => {
+        await pass('openExclusive');
+        return base.openExclusive(path, mode);
+      },
+      syncDirectory: async (path) => {
+        await pass('syncDirectory');
+        return base.syncDirectory(path);
+      },
+    },
+    holdNext(method) {
+      let reached: () => void = () => undefined;
+      let releaseWait: () => void = () => undefined;
+      const reachedPromise = new Promise<void>((resolve) => (reached = resolve));
+      const wait = new Promise<void>((resolve) => (releaseWait = resolve));
+      const gate: WriteGate = {
+        reached: reachedPromise,
+        release: () => {
+          open.delete(gate);
+          releaseWait();
+        },
+      };
+      open.add(gate);
+      pending.set(method, [...(pending.get(method) ?? []), { reached, wait, release: gate.release, gate }]);
+      return gate;
+    },
+    hasPendingGate: () => open.size > 0,
+    reset() {
+      for (const gate of [...open]) gate.release();
+      pending.clear();
     },
   };
 }

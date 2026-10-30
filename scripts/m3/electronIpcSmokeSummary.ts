@@ -108,6 +108,24 @@ export const SMOKE_CASES: readonly CaseSpec[] = [
   isolated('ui.edit-path-ime', ALL_PASS),
   isolated('ui.edit-path-guard', ALL_PASS),
   isolated('ui.edit-gate-platform', ALL_PASS),
+  // M3 T4 B2：保存（W-DISK 用例本体：Windows / Linux 在 B5 三平台 CI 中必须 pass，是 T4 Seal 的阻塞条件，不得列为可跳过）。
+  matrix('save.basic'),
+  matrix('save-as.absent-link'),
+  matrix('save-as.existing'),
+  matrix('save-as.link-eexist'),
+  matrix('save-as.dangling-symlink', { darwin: 'pass', linux: 'pass' }),
+  matrix('save-as.anchor-forged-document-id'),
+  matrix('save-as.anchor-changed-after-grant'),
+  matrix('save-target.one-shot'),
+  matrix('save.cross-window-token'),
+  matrix('save.reset-before-commit'),
+  matrix('save.committed-unconfirmed'),
+  matrix('save-as.activation-lost-reject-delivered'),
+  matrix('save-as.activation-lost-reject-lost'),
+  matrix('save-as.demo-stale-anchor'),
+  matrix('open.activation-lost-reject-lost'),
+  matrix('save-as.dialog-returns-after-reload'),
+  matrix('save.late-release-after-reset'),
 ];
 
 export const RESULT_PREFIX = 'MUSE_IPC_SMOKE_RESULT ';

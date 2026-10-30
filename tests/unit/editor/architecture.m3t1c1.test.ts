@@ -233,8 +233,27 @@ describe('M3 T1c-1 架构守卫 —— 判定不放宽', () => {
       'ui.edit-path-ime',
       'ui.edit-path-guard',
       'ui.edit-gate-platform',
+      // M3 T4 B2（G-8）：保存（W-DISK 用例本体）与故障注入；只追加，期望一律 PASS（悬空符号链接只在 POSIX）。
+      'save.basic',
+      'save-as.absent-link',
+      'save-as.existing',
+      'save-as.link-eexist',
+      'save-as.dangling-symlink',
+      'save-as.anchor-forged-document-id',
+      'save-as.anchor-changed-after-grant',
+      'save-target.one-shot',
+      'save.cross-window-token',
+      'save.reset-before-commit',
+      'save.committed-unconfirmed',
+      'save-as.activation-lost-reject-delivered',
+      'save-as.activation-lost-reject-lost',
+      'save-as.demo-stale-anchor',
+      'open.activation-lost-reject-lost',
+      'save-as.dialog-returns-after-reload',
+      'save.late-release-after-reset',
     ]);
-    for (const id of added) expect(SMOKE_CASES.find((spec) => spec.id === id)?.expect).toEqual(id === 'ui.win-unc' ? { win32: 'pass-or-unverified' } : PASS);
+    const special: Readonly<Record<string, unknown>> = { 'ui.win-unc': { win32: 'pass-or-unverified' }, 'save-as.dangling-symlink': { darwin: 'pass', linux: 'pass' } };
+    for (const id of added) expect(SMOKE_CASES.find((spec) => spec.id === id)?.expect, id).toEqual(special[id] ?? PASS);
   });
 
   it('反例：判定器哈希对规则改动敏感', () => {
