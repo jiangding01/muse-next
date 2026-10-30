@@ -92,11 +92,11 @@ describe('editorNoticeText —— 文案', () => {
     'source-readonly-platform',
   ];
 
-  it('每种提示都有非空且互不相同的文案；T3 文案不写「先保存」', () => {
+  it('每种提示都有非空且互不相同的文案；可以提示保存，但不承诺「已保存」（M3 T4 B3a-2 H-8）', () => {
     const texts = KINDS.map((kind) => editorNoticeText(kind));
     for (const text of texts) {
       expect(text.length).toBeGreaterThan(0);
-      expect(text).not.toContain('先保存');
+      expect(text).not.toContain('已保存');
     }
     expect(new Set(texts).size).toBe(KINDS.length);
   });

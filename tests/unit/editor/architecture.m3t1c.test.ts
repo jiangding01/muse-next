@@ -134,10 +134,12 @@ describe('M3 T1c-2 架构守卫 —— 跨进程事务只在 openController', ()
     const users = rendererFiles.filter((file) => /museDesktop/.test(stripComments(read(file)))).map(posixPath);
     // M3 T3b（G2）：menuBridge 只订阅菜单命令，不调用 Open 三方法（architecture.m3t3 钉住）。
     // M3 T4 B3a-1（H-1，按阶段）：未确认 reject 账本是 renderer 中唯一调用 rejectDocument 的模块（architecture.m3t4b3 钉住）。
+    // M3 T4 B3a-2（H-1，按阶段）：保存控制器是唯一调用 requestSaveTarget / saveDocument 的模块（architecture.m3t4b3 钉住）。
     expect(users.sort()).toEqual([
       'src/renderer/app/editor/menuBridge.ts',
       'src/renderer/app/editor/openController.ts',
       'src/renderer/app/save/rejectLedger.ts',
+      'src/renderer/app/save/saveController.ts',
       'src/renderer/global.d.ts',
     ]);
     expect(stripComments(read(join(RENDERER, 'global.d.ts')))).toContain('museDesktop: MuseDesktopApi;');
@@ -175,6 +177,8 @@ describe('M3 T1c-2 架构守卫 —— 会话只由 commitSession 写入', () =>
         'publishEditorView',
         'downgradeCapabilityTrust',
         'publishOpenView',
+        // M3 T4 B3a-2（H-3）：保存诊断视图。
+        'publishSaveView',
         '<module>',
       ].sort(),
     );

@@ -6,7 +6,8 @@
  * （`HistoryDispatchSource`），它们从不经过 IPC。本模块不含任何平台依赖，main / preload / renderer 共用。
  */
 
-export const MENU_COMMANDS = ['undo', 'redo', 'reparse', 'open'] as const;
+// M3 T4 B3a-2：Save / Save As（菜单加速键 CmdOrCtrl+S / Shift+CmdOrCtrl+S，只经菜单派发一次）。
+export const MENU_COMMANDS = ['undo', 'redo', 'reparse', 'open', 'save', 'saveAs'] as const;
 export type MenuCommand = (typeof MENU_COMMANDS)[number];
 
 /** `key-intercept`：main `before-input-event` 拦截；`menu-click`：显式点击菜单项；`menu-accelerator`：菜单加速键兜底。 */

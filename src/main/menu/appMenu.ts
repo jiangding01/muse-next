@@ -5,7 +5,9 @@
  * - Undo / Redo / Reparse / Open 没有 `role`，点击只转交 `onCommand`（派发规则在 `wireEditorWindow.ts` 的命令路由中）；
  *   非 macOS 的 Undo / Redo 不注册加速键（键盘只走 main `before-input-event`），macOS 没有该选项（兜底见路由）。
  * - Cut / Copy / Paste / Select All 用 role（浏览器原生；macOS 上这些 role 是 Cmd+C/V/X/A 生效的前提）。
- * - 不含 Reload / Force Reload、New / Save 等文档命令；View（Toggle DevTools）只在开发构建出现。
+ * - 不含 Reload / Force Reload、New 等文档命令；View（Toggle DevTools）只在开发构建出现。
+ * - M3 T4 B3a-2：File 菜单有 Save（`CmdOrCtrl+S`）与 Save As…（`Shift+CmdOrCtrl+S`），没有 role，只转交 `onCommand`；
+ *   S 键只经菜单加速键派发（`before-input-event` 不拦截 S，renderer keydown 不处理 S），一次按键只派发一次。
  * - macOS 的 Window 菜单显式列出 Minimize / Zoom / Close / Bring All to Front（`windowMenu` 默认不含 Close，Cmd+W 会丢失）；
  *   Close 关窗受 renderer 同步 beforeunload 约束（T3a，Preflight r3 §7.1 / §8）。
  *
@@ -54,6 +56,8 @@ export const MENU_ITEM_IDS: Readonly<Record<MenuCommand, string>> = {
   undo: 'muse.undo',
   redo: 'muse.redo',
   reparse: 'muse.reparse',
+  save: 'muse.save',
+  saveAs: 'muse.saveAs',
 };
 
 export interface AppMenuOptions {
@@ -77,7 +81,10 @@ export function buildAppMenuTemplate(options: AppMenuOptions): AppMenuItem[] {
   });
   return [
     ...(mac ? [{ role: 'appMenu' as const }] : []),
-    { label: 'File', submenu: [command('open', 'Open…', 'CmdOrCtrl+O')] },
+    {
+      label: 'File',
+      submenu: [command('open', 'Open…', 'CmdOrCtrl+O'), { type: 'separator' }, command('save', 'Save', 'CmdOrCtrl+S'), command('saveAs', 'Save As…', 'Shift+CmdOrCtrl+S')],
+    },
     {
       label: 'Edit',
       submenu: [

@@ -254,6 +254,12 @@ describe('M3 T1c-1 架构守卫 —— 判定不放宽', () => {
       // M3 T4 B3a-1（H-13）：R20 送达门的 Open 部分；只追加，期望一律 PASS。
       'ui.open-activation-lost-ledger',
       'ui.open-reject-gate',
+      // M3 T4 B3a-2（H-13）：保存流程与 R20 送达门的保存部分；只追加，期望一律 PASS。
+      'ui.save-menu-once',
+      'ui.save-while-typing',
+      'ui.save-as-commit',
+      'ui.save-as-activation-lost',
+      'ui.save-reject-gate',
     ]);
     const special: Readonly<Record<string, unknown>> = { 'ui.win-unc': { win32: 'pass-or-unverified' }, 'save-as.dangling-symlink': { darwin: 'pass', linux: 'pass' } };
     for (const id of added) expect(SMOKE_CASES.find((spec) => spec.id === id)?.expect, id).toEqual(special[id] ?? PASS);

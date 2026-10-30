@@ -129,6 +129,12 @@ export const SMOKE_CASES: readonly CaseSpec[] = [
   // M3 T4 B3a-1：R20 送达门的 Open 部分（生产 renderer，reject 应答 swallow / hold）；Save / Save As 部分属 B3a-2。
   isolated('ui.open-activation-lost-ledger', ALL_PASS),
   isolated('ui.open-reject-gate', ALL_PASS),
+  // M3 T4 B3a-2：保存流程与 R20 送达门的保存部分（H-7）。
+  isolated('ui.save-menu-once', ALL_PASS),
+  isolated('ui.save-while-typing', ALL_PASS),
+  isolated('ui.save-as-commit', ALL_PASS),
+  isolated('ui.save-as-activation-lost', ALL_PASS),
+  isolated('ui.save-reject-gate', ALL_PASS),
 ];
 
 export const RESULT_PREFIX = 'MUSE_IPC_SMOKE_RESULT ';

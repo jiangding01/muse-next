@@ -97,6 +97,8 @@ const EXPECTED_WRITES: Record<string, string[]> = {
   settleSave: ['session'],
   settleSaveAs: ['capabilityTrust', 'session'],
   finishFileOperation: ['capabilityTrust', 'session'],
+  // M3 T4 B3a-2（H-4）：保存诊断视图只写自己的字段。
+  publishSaveView: ['save'],
 };
 
 describe('M3 T3a 架构守卫 —— store 写入字段精确集合', () => {
@@ -311,7 +313,8 @@ describe('M3 T3b 架构守卫 —— preload 的菜单命令订阅', () => {
     expect(ipc).toContain('onMenuCommand(listener: (message: MenuCommandMessage) => void): () => void;');
     const { MENU_COMMAND_SOURCES, MENU_COMMANDS } = await import('../../../src/shared/menuContracts');
     expect([...MENU_COMMAND_SOURCES]).toEqual(['key-intercept', 'menu-click', 'menu-accelerator']);
-    expect([...MENU_COMMANDS]).toEqual(['undo', 'redo', 'reparse', 'open']);
+    // M3 T4 B3a-2（H-5）：Save / Save As。
+    expect([...MENU_COMMANDS]).toEqual(['undo', 'redo', 'reparse', 'open', 'save', 'saveAs']);
   });
 });
 

@@ -87,7 +87,8 @@ describe('electronIpcSmokeSummary —— 清单', () => {
     // M3 T3c：新增 4 个 ui.edit-* 用例（三平台 pass；文件清单 Q-C3 / Q-C4 授权）。
     // M3 T4 B2（G-9）：新增 17 个保存用例（save-as.dangling-symlink 不在 Windows），macOS 实跑定稿，Win / Linux 在 B5 CI 定稿。
     // M3 T4 B3a-1（H-13）：新增 2 个 ui.open-* 用例（三平台 pass），macOS 实跑定稿，Win / Linux 在 B5 CI 定稿。
-    expect([count('darwin'), count('win32'), count('linux')]).toEqual([86, 88, 87]);
+    // M3 T4 B3a-2（H-13）：新增 5 个 ui.save-* 用例（三平台 pass），macOS 实跑定稿，Win / Linux 在 B5 CI 定稿。
+    expect([count('darwin'), count('win32'), count('linux')]).toEqual([91, 93, 92]);
   });
 
   it('M3 T1c-1 安全用例：子 frame 风险已是 pass 硬门；对照在 matrix；prod.* 各占独立子进程且三平台 pass；全清单只剩已裁决的 observe', () => {
@@ -128,6 +129,12 @@ describe('electronIpcSmokeSummary —— 清单', () => {
       // M3 T4 B3a-1（H-13）：R20 送达门的 Open 部分；只追加，期望一律 PASS。
       'ui.open-activation-lost-ledger',
       'ui.open-reject-gate',
+      // M3 T4 B3a-2（H-13）：保存流程与 R20 送达门的保存部分；只追加，期望一律 PASS。
+      'ui.save-menu-once',
+      'ui.save-while-typing',
+      'ui.save-as-commit',
+      'ui.save-as-activation-lost',
+      'ui.save-reject-gate',
     ]);
     for (const spec of ui) {
       expect(spec.mode).toBe('isolated');

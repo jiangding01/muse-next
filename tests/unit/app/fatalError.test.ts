@@ -44,11 +44,11 @@ describe('fatalError —— 编辑器错误报告', () => {
 });
 
 describe('fatalError —— 致命提示', () => {
-  it('文案随 dirty 变化，且不建议「先保存」（T3 没有 Save）', () => {
+  it('文案随 dirty 变化；可以提示保存，但不承诺「已保存」（M3 T4 B3a-2 H-8）', () => {
     expect(fatalNoticeText(true)).toContain('未保存的修改');
     expect(fatalNoticeText(false)).toContain('可以关闭窗口');
-    expect(fatalNoticeText(true)).not.toContain('先保存');
-    expect(fatalNoticeText(false)).not.toContain('先保存');
+    expect(fatalNoticeText(true)).not.toContain('已保存');
+    expect(fatalNoticeText(false)).not.toContain('已保存');
   });
 
   it('只显示一次；dirty 变化时实时更新文案；重复调用返回同一取消订阅函数', () => {

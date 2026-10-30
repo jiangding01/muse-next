@@ -12,6 +12,7 @@
  * - 文件操作检查点（M3 T4 B3a-1，B1 `fileOps.ts`）：`beginFileOperation` / `settleSave` / `settleSaveAs` / `finishFileOperation`
  *   都以 store **当前**会话为底，按 documentId 与 op 对象引用做 CAS；只写 `session`（begin 另结束历史合并组，Save As 成功另写授权，
  *   失败收尾可降级授权），不碰 source / version / parsed / history 内容 / selection。
+ * - 保存诊断视图（M3 T4 B3a-2，r0 §3.8）：`save` 字段只由 `publishSaveView` 写入，不触碰会话。
  * - 格式层只经 renderer-safe parse façade（`src/formats/jcxParse.ts`）。
  */
 
@@ -30,6 +31,7 @@ import {
   finishFileOperation as finishOperation,
 } from '../../editor/session/fileOps';
 import type { FileOpRejection, SavedAsFacts } from '../../editor/session/fileOps';
+import type { SaveMessage } from './save/saveMessages';
 import { SCORE_VIEW_METRICS } from '../../notation/layout/metrics';
 import { initialEditorCore } from './editor/editorTransitions';
 import type { EditorCore, EditorNotice } from './editor/editorTransitions';
@@ -42,6 +44,11 @@ export interface OpenView {
 }
 
 /** 编辑器的展示视图（T3a 中尚无界面呈现，状态栏在 T3b）。 */
+/** 保存诊断视图（M3 T4 B3a-2，r0 §3.8）：独立于编辑器轻提示的单槽位；只由保存控制器与诊断区的「知道了」写入。 */
+export interface SaveView {
+  readonly message: SaveMessage | null;
+}
+
 export interface EditorView {
   readonly composing: boolean;
   readonly notice: EditorNotice | null;
@@ -61,6 +68,7 @@ interface MuseAppState extends DerivedDocument {
   readonly capabilityTrust: CapabilityTrust;
   readonly open: OpenView;
   readonly editor: EditorView;
+  readonly save: SaveView;
   /** 谱面缩放比例（T6.4，D6：只影响 renderer 层像素换算，不改任何 layout 数值）。 */
   readonly zoom: number;
   /** 设置缩放比例，clamp 到 `SCORE_VIEW_METRICS.zoomMin/zoomMax`。 */
@@ -86,6 +94,7 @@ function clampZoom(zoom: number): number {
 
 const IDLE_VIEW: OpenView = { phase: 'idle', notice: null };
 const IDLE_EDITOR: EditorView = { composing: false, notice: null };
+const IDLE_SAVE: SaveView = { message: null };
 
 export const useMuseAppStore = create<MuseAppState>((set) => {
   const core = initialEditorCore(createDemoSession());
@@ -95,6 +104,7 @@ export const useMuseAppStore = create<MuseAppState>((set) => {
     ...derive(core.session),
     open: IDLE_VIEW,
     editor: IDLE_EDITOR,
+    save: IDLE_SAVE,
     zoom: 1,
     setZoom(zoom) {
       set({ zoom: clampZoom(zoom) });
@@ -215,6 +225,11 @@ export function downgradeCapabilityTrust(): void {
 
 export function publishOpenView(view: OpenView): void {
   useMuseAppStore.setState({ open: view });
+}
+
+/** 保存诊断视图；不触碰会话。 */
+export function publishSaveView(view: SaveView): void {
+  useMuseAppStore.setState({ save: view });
 }
 
 export type BeginFileOperationResult =

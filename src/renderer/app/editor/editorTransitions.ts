@@ -42,6 +42,8 @@ export type EditorNoticeKind =
   | 'editor-error'
   | 'unload-blocked-dirty'
   | 'unload-blocked-composing'
+  // M3 T4 B3a-2：保存进行中（含准入期）阻止卸载。
+  | 'unload-blocked-saving'
   // M3 T3c：源码编辑。
   | 'input-unsupported'
   | 'input-rejected'
