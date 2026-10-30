@@ -24,7 +24,7 @@ import { deferred, delay, waitFor } from './harness';
 import { isRecord } from './replies';
 import type { RejectFault } from './ipcFaults';
 import { diskFacts, saveDir, scoreFile } from './casesSave';
-import { editorWindow, focusSource, pressKey, readEditor, waitEditor } from './casesEditingInput';
+import { editorWindow, focusSource, pressKey, readEditor, waitEditor, waitPage } from './casesEditingInput';
 import type { SmokeWindow } from './windows';
 
 interface UiDoc {
@@ -650,6 +650,89 @@ const uiSaveRejectGate: IsolatedCase = {
   },
 };
 
+// ———— M3 T4 B3b：替换守卫（dirty 的 Open 询问保存 / 不保存 / 取消；三分支各一个独立子进程）。
+
+const guardPhase = (phase: 'asking' | 'saving'): string => `document.querySelector('.replacement-guard')?.getAttribute('data-guard-phase') === '${phase}'`;
+
+async function chooseGuard(window: SmokeWindow, choice: 'save' | 'discard' | 'cancel'): Promise<boolean> {
+  const result = await window.call(`(() => { const b = document.querySelector('[data-guard-choice="${choice}"]'); if (b === null || b.disabled) return false; b.click(); return true; })()`);
+  return result.ok && result.value === true;
+}
+
+/** 已打开 X、输入使其 dirty，经菜单 Open 弹出守卫询问（不调用选择器）。 */
+async function dirtyOpenAsks(ctx: SmokeContext, problems: string[]) {
+  const x = await editableFile(ctx);
+  expectTrue(problems, 'X opened in an editable window', x.ready);
+  expectTrue(problems, 'typed', await typeAtEnd(x.window, 'g'));
+  const typed = (await readEditor(x.window))?.value ?? '';
+  const xFacts = await diskFacts(x.path);
+  const chooserCalls = ctx.chooser.calls.length;
+  expectTrue(problems, 'open clicked', clickMenu('open', x.window.win));
+  expectTrue(problems, 'guard asks', await waitPage(x.window, guardPhase('asking'), 5_000));
+  expectEqual(problems, 'no chooser while asking', ctx.chooser.calls.length, chooserCalls);
+  return { ...x, typed, xFacts, chooserCalls };
+}
+
+const uiGuardOpenSave: IsolatedCase = {
+  id: 'ui.guard-open-save',
+  realDialog: false,
+  timeoutMs: 40_000,
+  run: async (ctx) => {
+    const problems: string[] = [];
+    const x = await dirtyOpenAsks(ctx, problems);
+    ctx.chooser.enqueue({ kind: 'path', path: ctx.fixtures.second });
+    expectTrue(problems, 'save chosen', await chooseGuard(x.window, 'save'));
+    // 先保存（复用 Open 的租约），保存成功且 clean 之后才进入 Open 的对话框并替换。
+    const replaced = await waitUi(x.window, (doc) => doc.phase === 'idle' && doc.documentId !== x.opened?.documentId && doc.trust === 'trusted', 15_000);
+    expectTrue(problems, 'replaced by the chosen file after saving', replaced !== null && replaced.documentId !== x.opened?.documentId);
+    expectEqual(problems, 'X on disk holds the typed source', await readFile(x.path, 'utf8'), x.typed);
+    expectEqual(problems, 'chooser called once (after the save)', ctx.chooser.calls.length, x.chooserCalls + 1);
+    expectTrue(problems, 'guard closed', await waitPage(x.window, `document.querySelector('.replacement-guard') === null`, 3_000));
+    problems.push(...sameDocumentProblems(ctx, x.window, replaced, 'after guard save'));
+    return verdict(problems);
+  },
+};
+
+const uiGuardOpenDiscard: IsolatedCase = {
+  id: 'ui.guard-open-discard',
+  realDialog: false,
+  timeoutMs: 40_000,
+  run: async (ctx) => {
+    const problems: string[] = [];
+    const x = await dirtyOpenAsks(ctx, problems);
+    ctx.chooser.enqueue({ kind: 'path', path: ctx.fixtures.second });
+    expectTrue(problems, 'discard chosen', await chooseGuard(x.window, 'discard'));
+    const replaced = await waitUi(x.window, (doc) => doc.phase === 'idle' && doc.documentId !== x.opened?.documentId && doc.trust === 'trusted', 15_000);
+    expectTrue(problems, 'replaced without saving', replaced !== null && replaced.documentId !== x.opened?.documentId);
+    expectEqual(problems, 'X untouched on disk', await diskFacts(x.path), x.xFacts);
+    expectEqual(problems, 'no save dialog', ctx.saveChooser.calls.length, 0);
+    problems.push(...sameDocumentProblems(ctx, x.window, replaced, 'after guard discard'));
+    return verdict(problems);
+  },
+};
+
+const uiGuardOpenCancel: IsolatedCase = {
+  id: 'ui.guard-open-cancel',
+  realDialog: false,
+  timeoutMs: 30_000,
+  run: async (ctx) => {
+    const problems: string[] = [];
+    const x = await dirtyOpenAsks(ctx, problems);
+    expectTrue(problems, 'cancel chosen', await chooseGuard(x.window, 'cancel'));
+    expectTrue(problems, 'guard closed', await waitPage(x.window, `document.querySelector('.replacement-guard') === null`, 3_000));
+    const kept = await readUi(x.window);
+    expectEqual(problems, 'document kept', kept === null ? null : [kept.documentId, kept.phase], [x.opened?.documentId, 'idle']);
+    expectEqual(problems, 'still dirty', (await readEditor(x.window))?.dirty, true);
+    expectEqual(problems, 'chooser not called', ctx.chooser.calls.length, x.chooserCalls);
+    expectEqual(problems, 'X untouched on disk', await diskFacts(x.path), x.xFacts);
+    // 取消后租约已释放：再次 Open 仍会询问。
+    expectTrue(problems, 'open clicked again', clickMenu('open', x.window.win));
+    expectTrue(problems, 'guard asks again', await waitPage(x.window, guardPhase('asking'), 5_000));
+    expectTrue(problems, 'cancel again', await chooseGuard(x.window, 'cancel'));
+    return verdict(problems);
+  },
+};
+
 const uiWinUnc: IsolatedCase = {
   id: 'ui.win-unc',
   realDialog: false,
@@ -687,4 +770,8 @@ export const UI_CASES: readonly IsolatedCase[] = [
   uiSaveAsCommit,
   uiSaveAsActivationLost,
   uiSaveRejectGate,
+  // M3 T4 B3b：替换守卫三分支。
+  uiGuardOpenSave,
+  uiGuardOpenDiscard,
+  uiGuardOpenCancel,
 ];

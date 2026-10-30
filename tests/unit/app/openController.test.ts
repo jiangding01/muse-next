@@ -15,6 +15,11 @@ import type { OpenGate } from '../../../src/renderer/app/editor/editorController
 import { createDemoSession } from '../../../src/renderer/app/editor/sessionFactory';
 import { commitSession, downgradeCapabilityTrust, publishOpenView, storeConsistencyProblems, useMuseAppStore } from '../../../src/renderer/app/store';
 import type { OpenView } from '../../../src/renderer/app/store';
+import { createFileIntentGate } from '../../../src/renderer/app/fileIntentGate';
+import type { FileIntentLease } from '../../../src/renderer/app/fileIntentGate';
+import { createOpenAdmission } from '../../../src/renderer/app/editor/openEntry';
+import type { GuardOutcome } from '../../../src/renderer/app/guard/guardController';
+import type { ReplacementApproval } from '../../../src/renderer/app/guard/replacementGuard';
 import type { DocumentActivationTicket } from '../../../src/shared/activationContracts';
 
 interface Pending {
@@ -540,5 +545,223 @@ describe('openController —— 异常边界补漏（r3a 复核 H-1；独立审�
     await flush();
     expect(f.controller.state()).toMatchObject({ phase: 'idle', notice: null });
     expect(f.downgrades()).toBe(0);
+  });
+});
+
+describe('openController —— 替换守卫与批准判据（M3 T4 B3b；r0.1 勘误 §4，H-12 §3 N-2…N-6）', () => {
+  /** 注入守卫与真实准入（租约）；当前文档号 5、版本 10。守卫的每次询问由用例决定结果。 */
+  function guardRig(
+    dirty: boolean,
+    ledgerState: { pending: number; flush: 'delivered' | 'undelivered'; hold?: Promise<'delivered' | 'undelivered'> } = { pending: 0, flush: 'delivered' },
+  ) {
+    const e = editorGate({ dirty });
+    const gate = createFileIntentGate();
+    const version = { documentId: 5, sourceVersion: 10 };
+    const asks: { readonly intentId: number; readonly lease: FileIntentLease; readonly resolve: (outcome: GuardOutcome) => void }[] = [];
+    let host = true;
+    let next = 0;
+    const admission = createOpenAdmission({
+      gate,
+      ledger: { flush: () => ledgerState.hold ?? Promise.resolve(ledgerState.flush), pending: () => ledgerState.pending },
+      document: () => ({ documentId: version.documentId, fileBusy: false }),
+    });
+    const f = fixture({
+      editor: e.gate,
+      admission,
+      version: () => ({ ...version }),
+      guard: {
+        hasHost: () => host,
+        ask: (lease) => {
+          next += 1;
+          const intentId = next;
+          let resolve: (outcome: GuardOutcome) => void = () => undefined;
+          const outcome = new Promise<GuardOutcome>((r) => {
+            resolve = r;
+          });
+          asks.push({ intentId, lease, resolve });
+          return { intentId, outcome };
+        },
+      },
+    });
+    const approve = (decision: 'proceed' | 'discard', overrides: Partial<ReplacementApproval> = {}): void => {
+      const ask = asks.at(-1);
+      if (ask === undefined) throw new Error('no ask');
+      ask.resolve({ approval: { decision, intentId: ask.intentId, documentId: 5, sourceVersion: decision === 'discard' ? version.sourceVersion : null, ...overrides } });
+    };
+    return { e, gate, version, asks, f, approve, setHost: (value: boolean) => (host = value) };
+  }
+
+  it('dirty 的 Open：持有 open 租约后询问守卫（不弹对话框）；取消 → 释放租约，不进入事务', async () => {
+    const g = guardRig(true);
+    g.f.controller.open();
+    expect(g.asks).toHaveLength(1);
+    expect(g.gate.current()).toMatchObject({ kind: 'open', documentId: 5 });
+    expect(g.asks[0]?.lease).toBe(g.gate.current());
+    expect(g.f.opens).toHaveLength(0);
+    // 询问期间：另一次 Open 被准入拒绝（租约仍由本次持有）。
+    g.f.controller.open();
+    expect(g.e.notices).toEqual(['open-refused-busy']);
+    g.asks[0]?.resolve({ aborted: 'canceled' });
+    await flush();
+    expect(g.gate.current()).toBeNull();
+    expect(g.f.opens).toHaveLength(0);
+    expect(g.f.controller.state().phase).toBe('idle');
+  });
+
+  it('N-3：discard 批准、documentId 与 sourceVersion 未变 → 即使 dirty 也提交', async () => {
+    const g = guardRig(true);
+    g.f.controller.open();
+    g.approve('discard');
+    await flush();
+    g.f.open(0).resolve({ kind: 'opened', document: DOCUMENT });
+    await flush();
+    g.f.activation(0).resolve({ ok: true });
+    await flush();
+    expect(g.f.commits).toHaveLength(1);
+    expect(g.gate.current()).toBeNull();
+  });
+
+  it('N-4：discard 批准后又编辑（版本 +1，含 undo / redo）→ 不替换，回到 idle 后重新询问', async () => {
+    const g = guardRig(true);
+    g.f.controller.open();
+    g.approve('discard');
+    await flush();
+    g.version.sourceVersion += 1;
+    g.f.open(0).resolve({ kind: 'opened', document: DOCUMENT });
+    await flush();
+    expect(g.f.commits).toHaveLength(0);
+    expect(g.e.notices).toContain('open-candidate-dropped-dirty');
+    expect(g.asks).toHaveLength(2);
+    expect(g.gate.current()).toMatchObject({ kind: 'open' });
+  });
+
+  it('N-2：proceed 批准后在 Open 期间又变 dirty → opened 与提交两处都被拒（与现状相同）', async () => {
+    for (const at of ['opened', 'commit'] as const) {
+      const g = guardRig(false);
+      g.e.status.dirty = true;
+      g.f.controller.open();
+      g.e.status.dirty = false; // 守卫中保存成功：clean
+      g.approve('proceed');
+      await flush();
+      if (at === 'opened') g.e.status.dirty = true;
+      g.f.open(0).resolve({ kind: 'opened', document: DOCUMENT });
+      await flush();
+      if (at === 'commit') {
+        g.e.status.dirty = true;
+        g.f.activation(0).resolve({ ok: true });
+        await flush();
+      }
+      expect(g.f.commits, at).toHaveLength(0);
+      expect(g.e.notices, at).toContain(at === 'opened' ? 'open-candidate-dropped-dirty' : 'open-commit-refused-dirty');
+    }
+  });
+
+  it('N-5 / N-6：批准的 intentId 不是本次 Open（迟到的旧批准）、或 documentId 不是当前会话 → 视为未批准（dirty 即被拒）', async () => {
+    for (const overrides of [{ intentId: 99 }, { documentId: 6 }]) {
+      const g = guardRig(true);
+      g.f.controller.open();
+      g.approve('discard', overrides);
+      await flush();
+      g.f.open(0).resolve({ kind: 'opened', document: DOCUMENT });
+      await flush();
+      expect(g.f.commits, JSON.stringify(overrides)).toHaveLength(0);
+      expect(g.f.rejects, JSON.stringify(overrides)).toHaveLength(1);
+    }
+  });
+
+  it('clean 的 Open 不经守卫（等同 proceed，仍要求 clean）；根卸载后（守卫没有宿主）Open 一律拒绝、不取租约', async () => {
+    const g = guardRig(false);
+    g.f.controller.open();
+    expect(g.asks).toHaveLength(0);
+    expect(g.f.opens).toHaveLength(1);
+    g.f.open(0).resolve({ kind: 'canceled' });
+    await flush();
+    g.setHost(false);
+    g.f.controller.open();
+    g.e.status.dirty = true;
+    g.f.controller.open();
+    expect(g.f.opens).toHaveLength(1);
+    expect(g.asks).toHaveLength(0);
+    expect(g.gate.current()).toBeNull();
+  });
+
+  it('询问期间的 idle 派发（关闭提示、旧事务迟到的激活应答）不释放 Open 的租约；之后不保存仍正常打开（审查 H-1）', async () => {
+    const g = guardRig(false);
+    // 先让一次 Open 停在激活中：之后它的激活应答迟到。
+    g.f.controller.open();
+    g.f.open(0).resolve({ kind: 'opened', document: DOCUMENT });
+    await flush();
+    for (let i = 0; i < 3; i += 1) {
+      g.f.fire(i);
+      await flush();
+    }
+    expect(g.f.controller.state().phase).toBe('idle');
+    g.e.status.dirty = true;
+    g.f.controller.open();
+    const held = g.gate.current();
+    expect(held).toMatchObject({ kind: 'open' });
+    g.f.controller.dismissNotice();
+    g.f.activation(0).resolve({ ok: true });
+    await flush();
+    expect(g.gate.current()).toBe(held);
+    expect(g.gate.tryAcquire('save', 5)).toBeNull();
+    g.approve('discard');
+    await flush();
+    expect(g.f.opens).toHaveLength(2);
+    expect(g.gate.current()).toMatchObject({ kind: 'open' });
+  });
+
+  it('批准之后重新经准入（审查 M-1）：期间入账未送达的 reject → reject-pending；开始组字 → 拒绝；都不弹对话框并释放租约', async () => {
+    const ledger = { pending: 0, flush: 'undelivered' as 'delivered' | 'undelivered' };
+    const g = guardRig(true, ledger);
+    g.f.controller.open();
+    ledger.pending = 1;
+    g.approve('discard');
+    await flush();
+    expect(g.e.notices).toEqual(['open-refused-reject-pending']);
+    expect(g.f.opens).toHaveLength(0);
+    expect(g.gate.current()).toBeNull();
+
+    const c = guardRig(true);
+    c.f.controller.open();
+    c.e.status.composing = true;
+    c.approve('discard');
+    await flush();
+    expect(c.e.notices).toEqual(['open-refused-composing']);
+    expect(c.f.opens).toHaveLength(0);
+    expect(c.gate.current()).toBeNull();
+  });
+
+  it('重新准入需要 flush 时，等待期间的 idle 派发（关闭提示）不清掉批准：送达后照常开始并按批准提交（复核 LOW）', async () => {
+    let release: (outcome: 'delivered' | 'undelivered') => void = () => undefined;
+    const ledger: { pending: number; flush: 'delivered' | 'undelivered'; hold?: Promise<'delivered' | 'undelivered'> } = { pending: 0, flush: 'delivered' };
+    const g = guardRig(true, ledger);
+    g.f.controller.open();
+    ledger.pending = 1;
+    ledger.hold = new Promise((resolve) => {
+      release = resolve;
+    });
+    g.approve('discard');
+    await flush();
+    expect(g.f.opens).toHaveLength(0);
+    g.f.controller.dismissNotice();
+    ledger.pending = 0;
+    release('delivered');
+    await flush();
+    expect(g.f.opens).toHaveLength(1);
+    g.f.open(0).resolve({ kind: 'opened', document: DOCUMENT });
+    await flush();
+    g.f.activation(0).resolve({ ok: true });
+    await flush();
+    expect(g.f.commits).toHaveLength(1);
+  });
+
+  it('组字中仍拒绝（T3c 已封板），不询问守卫', () => {
+    const g = guardRig(true);
+    g.e.status.composing = true;
+    g.f.controller.open();
+    expect(g.e.notices).toEqual(['open-refused-composing']);
+    expect(g.asks).toHaveLength(0);
+    expect(g.gate.current()).toBeNull();
   });
 });

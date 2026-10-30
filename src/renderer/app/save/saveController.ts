@@ -29,6 +29,7 @@ import { sourceEditingEnabled } from '../editor/sourceEditorBinding';
 import { reportEditorError } from '../fatalError';
 import { museFileIntentGate } from '../fileIntentGate';
 import type { FileIntentGate, FileIntentLease } from '../fileIntentGate';
+import type { SaveResult } from '../guard/replacementGuard';
 import { beginFileOperation, downgradeCapabilityTrust, finishFileOperation, publishSaveView, settleSave, settleSaveAs, useMuseAppStore } from '../store';
 import { museRejectLedger } from './rejectLedger';
 import type { FlushOutcome, RejectLedger } from './rejectLedger';
@@ -66,7 +67,14 @@ export interface SaveControllerDeps {
 
 export interface SaveController {
   save(): void;
-  saveAs(): void;
+  /** `utf8`：Q-B3-9 的「另存为 UTF-8」入口（SaveEntry）；缺省保持会话编码（unsafe 文档仍自动改为 UTF-8）。 */
+  saveAs(options?: { readonly utf8?: boolean }): void;
+  /**
+   * M3 T4 B3b：替换守卫的「保存」分支。复用 Open 已持有的共享租约（要求 `holds(lease) && lease.kind === 'open'`），
+   * 不另取租约、结束时不释放它；R5、R20、CAS 与 main R19 照旧。`SaveResult` 只在保存事务的全部终态效果（含结束
+   * fileOp）执行完之后给出：`ok` 只认确定的成功，未确认 / 结果未知 / 失败都不是 ok。
+   */
+  saveWithin(lease: FileIntentLease): Promise<SaveResult>;
   state(): SaveFlowState;
 }
 
@@ -79,6 +87,15 @@ interface Entry {
   readonly toUtf8: boolean;
 }
 
+/** 借用 Open 租约的这一次保存（守卫）：结果的接收者与发起时的文档号。 */
+interface Borrowed {
+  readonly documentId: number;
+  readonly resolve: (result: SaveResult) => void;
+}
+
+/** 视为「保存成功」的提示：已保存、已另存为、没有需要保存的修改。 */
+const OK_MESSAGES: ReadonlySet<SaveMessage['kind']> = new Set(['saved', 'saved-as', 'saved-as-utf8', 'nothing-to-save']);
+
 interface Captured {
   readonly documentId: number;
   readonly op: FileOperation;
@@ -90,6 +107,8 @@ export function createSaveController(deps: SaveControllerDeps): SaveController {
   let lease: FileIntentLease | null = null;
   let entry: Entry | null = null;
   let captured: Captured | null = null;
+  let borrowed: Borrowed | null = null;
+  let last: SaveMessage | null = null;
   let depth = 0;
 
   const report = (error: unknown, context: string): void => {
@@ -120,12 +139,24 @@ export function createSaveController(deps: SaveControllerDeps): SaveController {
       depth -= 1;
       // 终态的全部效果执行完之后才释放（只在最外层派发；嵌套派发如 settle-failed 不提前释放）。
       if (depth === 0 && state.phase === 'idle') {
-        if (lease !== null) deps.gate.release(lease);
+        // 借用的 Open 租约不释放（属于 Open）；结果在全部终态效果之后给出（M25）。
+        if (lease !== null && borrowed === null) deps.gate.release(lease);
+        const sink = borrowed;
+        const outcome = last;
         lease = null;
         entry = null;
         captured = null;
+        borrowed = null;
+        last = null;
+        if (sink !== null) sink.resolve(saveResultOf(sink.documentId, outcome));
       }
     }
+  }
+
+  function saveResultOf(documentId: number, outcome: SaveMessage | null): SaveResult {
+    const { session } = useMuseAppStore.getState();
+    const ok = outcome !== null && OK_MESSAGES.has(outcome.kind);
+    return { ok, clean: ok && session.documentId === documentId && session.fileOp === null && !isSourceDirty(session) };
   }
 
   function fail(txn: number, error: unknown): void {
@@ -312,7 +343,8 @@ export function createSaveController(deps: SaveControllerDeps): SaveController {
         const settled = settleSave(captured.documentId, captured.op, captured.source);
         if (!settled.ok) {
           finishFileOperation(captured.documentId, captured.op, false);
-          deps.publish({ kind: 'result-not-applied' });
+          last = { kind: 'result-not-applied' };
+          deps.publish(last);
           return;
         }
         if (effect.downgrade) downgradeCapabilityTrust();
@@ -353,30 +385,42 @@ export function createSaveController(deps: SaveControllerDeps): SaveController {
       case 'flush-ledger':
         void flushLedger();
         return;
-      case 'report':
-        deps.publish(effect.message.kind === 'saved-as' && entry?.toUtf8 === true ? { kind: 'saved-as-utf8', displayName: effect.message.displayName } : effect.message);
+      case 'report': {
+        const message: SaveMessage =
+          effect.message.kind === 'saved-as' && entry?.toUtf8 === true ? { kind: 'saved-as-utf8', displayName: effect.message.displayName } : effect.message;
+        last = message;
+        deps.publish(message);
         return;
+      }
     }
   }
 
-  function start(kind: SaveKind): void {
+  function start(kind: SaveKind, utf8 = false, within: { readonly lease: FileIntentLease; readonly resolve: (result: SaveResult) => void } | null = null): void {
     try {
       const { session } = useMuseAppStore.getState();
       // 首个 await 之前同步获取共享租约：Open / 另一次保存进行中（含尚未建立 fileOp 的准入期）都拿不到。
-      const granted = state.phase === 'idle' && session.fileOp === null ? deps.gate.tryAcquire(kind, session.documentId) : null;
+      // 守卫的保存（within）不另取租约，而是复用 Open 已持有的那一张（必须仍由它持有、属于 Open、文档号一致）。
+      const usable =
+        within !== null && deps.gate.holds(within.lease) && within.lease.kind === 'open' && within.lease.documentId === session.documentId ? within.lease : null;
+      const granted = state.phase === 'idle' && session.fileOp === null ? (within === null ? deps.gate.tryAcquire(kind, session.documentId) : usable) : null;
       if (granted === null) {
+        // 先交付守卫的结果：提示抛错也不能让守卫停在「保存中」、永久占住 Open 的租约。
+        within?.resolve({ ok: false, clean: false });
         deps.publish({ kind: 'busy' });
         return;
       }
       lease = granted;
-      const toUtf8 = session.encodingRoundTrip === 'unsafe' && session.writeEncoding !== 'utf-8';
+      borrowed = within === null ? null : { documentId: session.documentId, resolve: within.resolve };
+      const toUtf8 = (session.encodingRoundTrip === 'unsafe' || utf8) && session.writeEncoding !== 'utf-8';
       entry = { sourceCapabilityId: session.file?.capability.id ?? null, encoding: toUtf8 ? 'utf-8' : session.writeEncoding, toUtf8 };
       dispatch({ type: 'save-requested', kind, saveEnabled: deps.saveEnabled() });
     } catch (error) {
       report(error, 'save');
       if (state.phase === 'idle' && lease !== null) {
-        deps.gate.release(lease);
+        if (borrowed === null) deps.gate.release(lease);
+        else borrowed.resolve({ ok: false, clean: false });
         lease = null;
+        borrowed = null;
       }
     }
   }
@@ -385,9 +429,13 @@ export function createSaveController(deps: SaveControllerDeps): SaveController {
     save: () => {
       start('save');
     },
-    saveAs: () => {
-      start('saveAs');
+    saveAs: (options) => {
+      start('saveAs', options?.utf8 === true);
     },
+    saveWithin: (granted) =>
+      new Promise<SaveResult>((resolve) => {
+        start('save', false, { lease: granted, resolve });
+      }),
     state: () => state,
   };
 }

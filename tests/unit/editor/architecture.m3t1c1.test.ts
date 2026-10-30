@@ -260,6 +260,10 @@ describe('M3 T1c-1 架构守卫 —— 判定不放宽', () => {
       'ui.save-as-commit',
       'ui.save-as-activation-lost',
       'ui.save-reject-gate',
+      // M3 T4 B3b（H-13）：替换守卫三分支；只追加，期望一律 PASS。
+      'ui.guard-open-save',
+      'ui.guard-open-discard',
+      'ui.guard-open-cancel',
     ]);
     const special: Readonly<Record<string, unknown>> = { 'ui.win-unc': { win32: 'pass-or-unverified' }, 'save-as.dangling-symlink': { darwin: 'pass', linux: 'pass' } };
     for (const id of added) expect(SMOKE_CASES.find((spec) => spec.id === id)?.expect, id).toEqual(special[id] ?? PASS);

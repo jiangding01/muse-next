@@ -50,6 +50,17 @@ const READ_EDITOR = `(() => {
   };
 })()`;
 
+/** 轮询页面表达式直到为 true；超时返回 false。 */
+export async function waitPage(window: SmokeWindow, expression: string, timeoutMs: number): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const result = await window.call(`(() => ${expression})()`, 2_000);
+    if (result.ok && result.value === true) return true;
+    await delay(50);
+  }
+  return false;
+}
+
 export async function readEditor(window: SmokeWindow): Promise<EditorDoc | null> {
   const result = await window.call(READ_EDITOR, 2_000);
   if (!result.ok || !isRecord(result.value)) return null;
@@ -306,13 +317,18 @@ const uiEditPathGuard: IsolatedCase = {
     await window.win.webContents.insertText('d');
     expectTrue(problems, 'dirty after typing', (await waitEditor(window, (doc) => doc.dirty && doc.sourceVersion === v0 + 1)) !== null);
 
-    // dirty 时 Open 被拒：不弹对话框、不调用选择器。
+    // M3 T4 B3b（H-10）：dirty 时 Open 改为询问替换守卫（保存 / 不保存 / 取消；三分支各见 ui.guard-open-*）：
+    // 询问期间不弹原生对话框、不调用选择器；取消之后文档不变、仍 dirty。
     const chooserCalls = ctx.chooser.calls.length;
     expectTrue(problems, 'open menu item invoked', invokeMenu('open', window.win));
-    const refused = await waitEditor(window, (doc) => doc.notice === 'open-refused-dirty');
-    expectTrue(problems, 'dirty Open refused with notice', refused !== null);
+    const asking = await waitPage(window, `document.querySelector('.replacement-guard')?.getAttribute('data-guard-phase') === 'asking'`, 3_000);
+    expectTrue(problems, 'dirty Open asks the replacement guard', asking);
     expectEqual(problems, 'no native dialog', ctx.openIpc.pendingNativeDialogs(), 0);
     expectEqual(problems, 'chooser not called', ctx.chooser.calls.length, chooserCalls);
+    await window.call(`(() => { document.querySelector('[data-guard-choice="cancel"]')?.click(); return true; })()`);
+    expectTrue(problems, 'guard closed after cancel', await waitPage(window, `document.querySelector('.replacement-guard') === null`, 3_000));
+    expectTrue(problems, 'still dirty after cancel', (await waitEditor(window, (doc) => doc.dirty && doc.sourceVersion === v0 + 1)) !== null);
+    expectEqual(problems, 'chooser still not called', ctx.chooser.calls.length, chooserCalls);
 
     // dirty 时关窗被阻止；撤销回 clean 后可以关闭。
     window.win.close();

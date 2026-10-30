@@ -20,6 +20,9 @@
  *   异常（订阅者、`afterCommit` 的解析调度通知）只报告，不撤回新会话的能力。
  * 控制器是模块级对象，不在任何 React 组件生命周期里：组件卸载 / 重挂载不会中断或重复事务；组件只调用 `open()`。
  * - 准入（M3 T4 B3a-1）：经 `openEntry` 同步取共享租约、过送达门与最终核对才开始；租约持有到终态全部效果执行完再 CAS 释放。
+ * - 替换守卫（M3 T4 B3b，r0 §4、r0.1 勘误 §4）：注入守卫时，dirty 的 Open 不再拒绝，而是在持有租约后询问（保存 / 不保存 /
+ *   取消）；批准后才开始事务，中止则释放租约。两处检查以批准判据 `replacementBlocked` 代替 dirty；批准在事务中途失效
+ *   （例如 discard 之后又编辑）被拒时，回到 idle 后重新询问。根卸载后（守卫没有宿主）Open 一律拒绝。组字中仍拒绝。
  */
 
 import type { MuseDesktopApi } from '../../../shared/ipc';
@@ -37,6 +40,10 @@ import { museParseController } from './parseController';
 import { admissionNotice, museOpenAdmission } from './openEntry';
 import type { OpenAdmission, OpenAdmissionRefusal } from './openEntry';
 import type { FileIntentLease } from '../fileIntentGate';
+import { museGuardController } from '../guard/guardController';
+import type { GuardController } from '../guard/guardController';
+import { replacementBlocked } from '../guard/replacementGuard';
+import type { ReplacementApproval } from '../guard/replacementGuard';
 import { createBridgeRejectLedger, museRejectLedger } from '../save/rejectLedger';
 import type { RejectLedger } from '../save/rejectLedger';
 import type { CapabilityTrust, OpenFlowEffect, OpenFlowEvent, OpenFlowState } from './openTransaction';
@@ -62,6 +69,10 @@ export interface OpenControllerDeps {
   readonly ledger?: Pick<RejectLedger, 'send'>;
   /** 共享准入（租约 + 送达门）；缺省为不经准入（既有协议测试）。 */
   readonly admission?: OpenAdmission;
+  /** M3 T4 B3b：替换守卫；缺省时 dirty 即拒绝（既有协议测试）。 */
+  readonly guard?: Pick<GuardController, 'ask' | 'hasHost'>;
+  /** 当前文档号与源码版本（批准判据）；缺省时两处检查只看 dirty。 */
+  readonly version?: () => { readonly documentId: number; readonly sourceVersion: number };
 }
 
 /** Open 控制器读取 / 通知编辑器的窄接口。 */
@@ -129,6 +140,17 @@ export function createOpenController(deps: OpenControllerDeps): OpenController {
   const committed = deps.committed ?? ((session: DocumentSession) => useMuseAppStore.getState().session.documentId === session.documentId);
   const ledger = deps.ledger ?? createBridgeRejectLedger(deps.bridge);
   let lease: FileIntentLease | null = null; // 经准入开始的事务期间持有的租约
+  let intent: number | null = null; // 本次 Open 的替换意图（守卫询问时取得）
+  let approval: ReplacementApproval | null = null;
+  let reask = false;
+  let asking = false; // 守卫询问期间：事务处于 idle 但租约仍由本次 Open 持有，idle 派发不得释放
+
+  /** 两处检查的批准判据（r0.1 勘误 §4）：未经守卫或批准不属于本次 Open / 当前文档时等同 proceed（dirty 即 blocked）。 */
+  const blocked = (): boolean => {
+    const { dirty } = editor.gate();
+    const current = deps.version?.();
+    return current === undefined ? dirty : replacementBlocked(approval, { intentId: intent, ...current, dirty });
+  };
 
   function dispatch(event: OpenFlowEvent): void {
     const step = stepOpenFlow(state, event);
@@ -145,12 +167,76 @@ export function createOpenController(deps: OpenControllerDeps): OpenController {
           editor.setReplacementPending(false);
         } finally {
           // 终态的全部效果执行完之后才释放准入租约（CAS）；清理替换标志抛错也不能泄漏模块级租约。
-          if (lease !== null) deps.admission?.release(lease);
-          lease = null;
+          // 守卫询问期间（关闭提示、旧事务的迟到回调等 idle 派发）不释放：租约属于正在询问的这次 Open。
+          if (!asking) {
+            if (lease !== null) deps.admission?.release(lease);
+            lease = null;
+            intent = null;
+            approval = null;
+          }
         }
       }
       if (changedView) deps.publish({ phase: state.phase, notice: state.notice });
     }
+    // 批准失效而被拒：回到 idle、租约释放之后重新询问（N-4）。
+    if (reask && state.phase === 'idle' && lease === null) {
+      reask = false;
+      open();
+    }
+  }
+
+  /**
+   * 询问守卫期间持有租约（Open / Save 都被拒，idle 派发不释放）；中止则释放。批准是一次 await（用户选择与可能的保存）：
+   * 恢复后在同一同步段内释放并立即重新经准入（租约、R20 送达门与最终核对、文档号、fileOp、组字）才开始事务。
+   */
+  function askGuard(granted: FileIntentLease, guard: Pick<GuardController, 'ask'>, admission: OpenAdmission): void {
+    lease = granted;
+    asking = true;
+    const abandon = (): void => {
+      if (lease === null || lease !== granted || state.phase !== 'idle') return;
+      asking = false;
+      deps.admission?.release(lease);
+      lease = null;
+      intent = null;
+      approval = null;
+    };
+    let asked: ReturnType<GuardController['ask']>;
+    try {
+      asked = guard.ask(granted);
+    } catch (error) {
+      report(error, 'open-guard');
+      abandon();
+      return;
+    }
+    intent = asked.intentId;
+    asked.outcome.then(
+      (outcome) => {
+        if (lease !== granted || state.phase !== 'idle') return;
+        if (!('approval' in outcome)) {
+          abandon();
+          return;
+        }
+        const approved = outcome.approval;
+        const current = intent;
+        abandon();
+        // 批准留在闭包中，重新准入真正开始事务时才写回：flush 等待期间的 idle 派发不会把它清掉。
+        admission.admit({
+          begin: (regranted) => {
+            approval = approved;
+            intent = current;
+            start(regranted);
+          },
+          refuse: (reason) => {
+            editor.notify({ kind: admissionNotice(reason, { ...editor.gate(), dirty: false }) });
+          },
+          stillAllowed: () => state.phase === 'idle' && lease === null && !editor.gate().composing,
+        });
+      },
+      (error: unknown) => {
+        report(error, 'open-guard');
+        abandon();
+      },
+    );
   }
 
   /** 开始事务；`granted` 为准入租约（经准入时）。同步入口同样 fail closed（独立审查 L1）。 */
@@ -211,7 +297,7 @@ export function createOpenController(deps: OpenControllerDeps): OpenController {
               () => {
                 // 只有 opened 需要 dirty：其余应答不读取门控（独立审查 L4）。
                 if (!isOpenReply(reply)) dispatch({ type: 'open-threw', txn });
-                else dispatch({ type: 'open-replied', txn, reply, dirty: reply.kind === 'opened' && editor.gate().dirty });
+                else dispatch({ type: 'open-replied', txn, reply, replacementBlocked: reply.kind === 'opened' && blocked() });
               },
               openedTicket(reply),
             );
@@ -246,7 +332,7 @@ export function createOpenController(deps: OpenControllerDeps): OpenController {
               }
               // 即将提交：先结束组字（discard → blur），再读 dirty（r3 §8 提交前顺序）。
               if (reply.ok && activating(state, txn)) editor.beforeCommit();
-              dispatch({ type: 'activate-replied', txn, attempt, reply, dirty: editor.gate().dirty });
+              dispatch({ type: 'activate-replied', txn, attempt, reply, replacementBlocked: blocked() });
             });
           },
           () => {
@@ -271,27 +357,39 @@ export function createOpenController(deps: OpenControllerDeps): OpenController {
         return;
       case 'replacement-refused':
         editor.notify({ kind: effect.stage === 'before-activation' ? 'open-candidate-dropped-dirty' : 'open-commit-refused-dirty' });
+        if (approval !== null) reask = true;
         return;
     }
   }
 
-  return {
-    open: () => {
-      if (state.phase === 'idle') {
-        const gate = editor.gate();
-        if (gate.dirty || gate.composing) {
-          editor.notify({ kind: gate.dirty ? 'open-refused-dirty' : 'open-refused-composing' });
-          return;
-        }
-        if (deps.admission !== undefined) {
-          const allowed = (again: OpenGate): boolean => state.phase === 'idle' && lease === null && !again.dirty && !again.composing;
-          const refuse = (reason: OpenAdmissionRefusal): void => editor.notify({ kind: admissionNotice(reason, editor.gate()) });
-          deps.admission.admit({ begin: start, refuse, stillAllowed: () => allowed(editor.gate()) });
-          return;
-        }
+  function open(): void {
+    const { guard } = deps;
+    if (state.phase === 'idle') {
+      const gate = editor.gate();
+      if (gate.composing || (gate.dirty && guard === undefined)) {
+        editor.notify({ kind: gate.dirty && guard === undefined ? 'open-refused-dirty' : 'open-refused-composing' });
+        return;
       }
-      start(null);
-    },
+      // 根卸载后守卫没有宿主：没有界面可以询问或呈现结果，Open 一律拒绝。
+      if (guard !== undefined && !guard.hasHost()) return;
+      if (deps.admission !== undefined) {
+        const allowed = (again: OpenGate): boolean => state.phase === 'idle' && lease === null && !again.composing && (guard !== undefined || !again.dirty);
+        // 有守卫时 dirty 不是拒绝理由（改为询问）：提示只按组字 / 另一项文件操作 / 未送达给出。
+        const refuse = (reason: OpenAdmissionRefusal): void =>
+          editor.notify({ kind: admissionNotice(reason, guard === undefined ? editor.gate() : { ...editor.gate(), dirty: false }) });
+        const begin = (granted: FileIntentLease): void => {
+          if (guard !== undefined && editor.gate().dirty && deps.admission !== undefined) askGuard(granted, guard, deps.admission);
+          else start(granted);
+        };
+        deps.admission.admit({ begin, refuse, stillAllowed: () => allowed(editor.gate()) });
+        return;
+      }
+    }
+    start(null);
+  }
+
+  return {
+    open,
     dismissNotice: () => dispatch({ type: 'notice-dismissed' }),
     state: () => state,
   };
@@ -336,6 +434,11 @@ export const museOpenController: OpenController = createOpenController({
   report: reportEditorError,
   ledger: museRejectLedger,
   admission: museOpenAdmission,
+  guard: museGuardController,
+  version: () => {
+    const { documentId, sourceVersion } = useMuseAppStore.getState().session;
+    return { documentId, sourceVersion };
+  },
   editor: {
     gate: () => museEditorController.openGate(),
     beforeCommit: () => {

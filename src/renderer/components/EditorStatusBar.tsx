@@ -7,15 +7,18 @@
  * 都是产品状态本身，没有派发来源或计数之类的测试钩子。组件不注册 effect，不读写会话以外的状态。
  */
 
-import { editorNoticeText, editorStatusLabels, editorStatusView } from '../app/editor/editorStatus';
+import { editorNoticeText, editorStatusLabels, editorStatusView, fileHints, fileHintText } from '../app/editor/editorStatus';
 import { museEditorController } from '../app/editor/editorController';
 import { publishEditorView, useMuseAppStore } from '../app/store';
 
 export function EditorStatusBar() {
   const session = useMuseAppStore((state) => state.session);
   const notice = useMuseAppStore((state) => state.editor.notice);
+  const trust = useMuseAppStore((state) => state.capabilityTrust);
   const view = editorStatusView(session);
   const labels = editorStatusLabels(view);
+  // M3 T4 B3b（r0 §2.3 b8）：未命名 / unsafe / 授权未确认的文件状态提示，只读呈现。
+  const hints = fileHints(session, trust);
 
   return (
     <footer
@@ -25,6 +28,7 @@ export function EditorStatusBar() {
       data-source-dirty={view.sourceDirty}
       data-parse-stale={view.parseStale}
       data-editor-notice={notice?.kind ?? ''}
+      data-file-hints={hints.join(' ')}
     >
       <div className="editor-status-states">
         {labels.length === 0 ? (
@@ -36,6 +40,11 @@ export function EditorStatusBar() {
             </span>
           ))
         )}
+        {hints.map((hint) => (
+          <span key={hint} className="editor-status-state editor-status-hint">
+            {fileHintText(hint)}
+          </span>
+        ))}
         <span className="editor-status-version">
           源码 v{view.sourceVersion} · 解析 v{view.parsedVersion ?? '—'}
         </span>

@@ -135,6 +135,10 @@ export const SMOKE_CASES: readonly CaseSpec[] = [
   isolated('ui.save-as-commit', ALL_PASS),
   isolated('ui.save-as-activation-lost', ALL_PASS),
   isolated('ui.save-reject-gate', ALL_PASS),
+  // M3 T4 B3b：替换守卫三分支（dirty 的 Open 询问保存 / 不保存 / 取消）。
+  isolated('ui.guard-open-save', ALL_PASS),
+  isolated('ui.guard-open-discard', ALL_PASS),
+  isolated('ui.guard-open-cancel', ALL_PASS),
 ];
 
 export const RESULT_PREFIX = 'MUSE_IPC_SMOKE_RESULT ';

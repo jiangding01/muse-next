@@ -423,10 +423,10 @@ describe('M3 T3b 架构守卫 —— 状态栏', () => {
     expect(users).toEqual(['src/renderer/app/editor/editorController.ts', 'src/renderer/components/EditorStatusBar.tsx']);
   });
 
-  it('Toolbar：dirty 只用于禁用 Open（读取 Editor Core 的派生函数），不新增其它入口', () => {
+  it('Toolbar：Open 在事务中或文件操作中禁用（M3 T4 B3b H-9：dirty 时可点、改为询问）；读取 Editor Core 的派生函数，不新增其它入口', () => {
     const toolbar = stripComments(read(join(RENDERER, 'components/Toolbar.tsx')));
     expect(toolbar).toContain('const dirty = useMuseAppStore((state) => isSourceDirty(state.session));');
-    expect(toolbar).toContain("disabled={open.phase !== 'idle' || dirty}");
+    expect(toolbar).toContain("disabled={open.phase !== 'idle' || fileBusy}");
     expect(/museEditorController|menuBridge/.test(toolbar)).toBe(false);
   });
 });

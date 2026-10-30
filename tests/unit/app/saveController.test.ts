@@ -763,3 +763,118 @@ describe('saveController —— 终态效果隔离、未知错误码、unsafe �
     expect(useMuseAppStore.getState().session.writeEncoding).toBe('utf-8');
   });
 });
+
+describe('saveController.saveWithin（M3 T4 B3b：守卫的保存分支）', () => {
+  it('复用 Open 已持有的租约（不另取、结束时不释放）；SaveResult 在全部终态效果之后给出（M25：fileOp 已清除才算 clean）', async () => {
+    const w = world();
+    type();
+    const open = w.gate.tryAcquire('open', 5);
+    if (open === null) throw new Error('acquire failed');
+    let result: unknown = null;
+    void w.controller.saveWithin(open).then((r) => (result = r));
+    await settle();
+    expect(w.gate.current()).toBe(open);
+    expect(w.pending('save')).toHaveLength(1);
+    w.pending('save')[0]?.reply.resolve(SAVED);
+    await settle();
+    expect(result).toEqual({ ok: true, clean: true });
+    expect(w.gate.current()).toBe(open);
+    expect(useMuseAppStore.getState().session.fileOp).toBeNull();
+  });
+
+  it('租约不是本次 Open 的（save 租约 / 已不持有 / 文档号不符）→ ok: false，不发 IPC、不动租约', async () => {
+    const w = world();
+    type();
+    const save = w.gate.tryAcquire('save', 5);
+    if (save === null) throw new Error('acquire failed');
+    expect(await w.controller.saveWithin(save)).toEqual({ ok: false, clean: false });
+    w.gate.release(save);
+    const open = w.gate.tryAcquire('open', 5);
+    if (open === null) throw new Error('acquire failed');
+    w.gate.release(open);
+    expect(await w.controller.saveWithin(open)).toEqual({ ok: false, clean: false });
+    const other = w.gate.tryAcquire('open', 99);
+    if (other === null) throw new Error('acquire failed');
+    expect(await w.controller.saveWithin(other)).toEqual({ ok: false, clean: false });
+    expect(w.calls).toEqual([]);
+    expect(w.gate.current()).toBe(other);
+  });
+
+  it('失败 / 未确认 → ok: false；保存期间继续输入 → ok: true、clean: false；clean 文档 → nothing-to-save 也是 ok 且 clean', async () => {
+    const outcomes: unknown[] = [];
+    for (const reply of [
+      { outcome: 'not-committed', error: { code: 'write-failed', message: 'x' } },
+      { ...SAVED, outcome: 'committed-unconfirmed' },
+      SAVED,
+    ] as const) {
+      commitSession(fileSession(), 'trusted');
+      type();
+      const w = world();
+      const open = w.gate.tryAcquire('open', 5);
+      if (open === null) throw new Error('acquire failed');
+      const pendingResult = w.controller.saveWithin(open);
+      await settle();
+      if (reply === SAVED) type('more');
+      w.pending('save')[0]?.reply.resolve(reply);
+      outcomes.push(await pendingResult);
+      expect(w.gate.current()).toBe(open);
+    }
+    expect(outcomes).toEqual([
+      { ok: false, clean: false },
+      { ok: false, clean: false },
+      { ok: true, clean: false },
+    ]);
+    commitSession(fileSession(), 'trusted');
+    const w = world();
+    const open = w.gate.tryAcquire('open', 5);
+    if (open === null) throw new Error('acquire failed');
+    expect(await w.controller.saveWithin(open)).toEqual({ ok: true, clean: true });
+    expect(w.calls).toEqual([]);
+  });
+
+  it('未命名文档：保存转为 Save As（对话框），切换成功后 clean；结果同样只在激活与会话切换之后给出', async () => {
+    commitSession(createDemoSession(), 'none');
+    type();
+    const w = world();
+    const open = w.gate.tryAcquire('open', 0);
+    if (open === null) throw new Error('acquire failed');
+    let result: unknown = null;
+    void w.controller.saveWithin(open).then((r) => (result = r));
+    await settle();
+    w.pending('target')[0]?.reply.resolve({ kind: 'granted', capabilityId: 'G', displayName: 'n.jcx', displayPath: '/n.jcx', sameAsCurrent: false });
+    await settle();
+    w.pending('save')[0]?.reply.resolve({ ...SAVED, displayName: 'n.jcx', displayPath: '/n.jcx', ticket: { capabilityId: 'cap-n', documentId: 0 } });
+    await settle();
+    expect(result).toBeNull();
+    w.pending('activate')[0]?.reply.resolve({ ok: true });
+    await settle();
+    expect(result).toEqual({ ok: true, clean: true });
+    expect(w.gate.current()).toBe(open);
+  });
+});
+
+describe('saveController.saveWithin —— 拒绝时先交付结果（复核 LOW-2，变异 B3b-S6）', () => {
+  it('busy 提示抛错也不会让守卫的结果悬而不决', async () => {
+    type();
+    const gate = createFileIntentGate();
+    const controller = createSaveController({
+      gate,
+      ledger: { send: () => undefined, flush: () => Promise.resolve('delivered'), pending: () => 0 },
+      bridge: () => ({ requestSaveTarget: () => new Promise(() => undefined), saveDocument: () => new Promise(() => undefined), activateDocument: () => new Promise(() => undefined) }),
+      ime: { view: () => 'idle', subscribe: () => () => undefined },
+      blur: () => undefined,
+      flushParse: () => undefined,
+      refreshParse: () => undefined,
+      saveEnabled: () => true,
+      schedule: () => () => undefined,
+      report: () => undefined,
+      publish: () => {
+        throw new Error('notice failed');
+      },
+    });
+    const save = gate.tryAcquire('save', 5);
+    if (save === null) throw new Error('acquire failed');
+    const outcome = await Promise.race([controller.saveWithin(save), new Promise((resolve) => setTimeout(() => resolve('pending'), 50))]);
+    expect(outcome).toEqual({ ok: false, clean: false });
+  });
+});

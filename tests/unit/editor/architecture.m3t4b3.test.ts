@@ -110,7 +110,7 @@ function gateReleaseSites(file: string, source: string, receiver: RegExp = /gate
   const sites: string[] = [];
   walk(parse(file, source), (node) => {
     if (isCallExpression(node) && isPropertyAccessExpression(node.expression) && node.expression.name.text === 'release' && receiver.test(node.expression.expression.getText())) {
-      sites.push(`${posixPath(file)}:${node.arguments.map((arg) => arg.getText()).join(',')}`);
+      sites.push(`${posixPath(file)}#${enclosingName(node)}:${node.arguments.map((arg) => arg.getText()).join(',')}`);
     }
   });
   return sites;
@@ -162,9 +162,19 @@ describe('M3 T4 B3a-1 守卫 —— 准入租约（L1 / L2，按阶段）', () =
 
   it('L2：租约释放只经 openEntry（gate.release）；museFileIntentGate / museRejectLedger 的使用者精确', () => {
     const gateReleases = files.flatMap((file) => gateReleaseSites(file, read(file)));
-    expect([...new Set(gateReleases)].sort()).toEqual(['src/renderer/app/editor/openEntry.ts:lease', 'src/renderer/app/save/saveController.ts:lease']);
+    expect([...new Set(gateReleases)].sort()).toEqual([
+      'src/renderer/app/editor/openEntry.ts#release:lease',
+      'src/renderer/app/editor/openEntry.ts#settle:lease',
+      'src/renderer/app/save/saveController.ts#dispatch:lease',
+      'src/renderer/app/save/saveController.ts#start:lease',
+    ]);
     // 经准入层的释放（勘误 §5.4）：只在 Open 控制器、只以本事务持有的租约变量为实参；准入实例只由控制器使用。
-    expect(files.flatMap((file) => gateReleaseSites(file, read(file), /admission$/i))).toEqual(['src/renderer/app/editor/openController.ts:lease']);
+    // B3b（按阶段）：守卫中止（取消 / 保存失败 / 宿主卸载）时释放 Open 持有的租约——第二个释放点，实参同样是 lease。
+    // 释放点带所在函数名（审查 M-2）：事务终态（dispatch）与守卫中止（abandon）各一处，可区分。
+    expect(files.flatMap((file) => gateReleaseSites(file, read(file), /admission$/i)).sort()).toEqual([
+      'src/renderer/app/editor/openController.ts#abandon:lease',
+      'src/renderer/app/editor/openController.ts#dispatch:lease',
+    ]);
     expect(users(files, /\bmuseOpenAdmission\b/)).toEqual(['src/renderer/app/editor/openController.ts', 'src/renderer/app/editor/openEntry.ts']);
     expect(users(files, /\bmuseFileIntentGate\b/)).toEqual([
       'src/renderer/app/editor/openEntry.ts',
@@ -189,8 +199,8 @@ describe('M3 T4 B3a-1 守卫 —— 准入租约（L1 / L2，按阶段）', () =
       if (isAwaitExpression(node) && enclosingName(node) === 'admit') awaits += 1;
     });
     expect(awaits).toBe(1);
-    expect(gateReleaseSites(fake, source)).toEqual(['src/renderer/__fake__.ts:other']);
-    expect(gateReleaseSites(fake, 'deps.admission?.release(stale); museOpenAdmission.release(x);', /admission$/i)).toEqual(['src/renderer/__fake__.ts:stale', 'src/renderer/__fake__.ts:x']);
+    expect(gateReleaseSites(fake, source)).toEqual(['src/renderer/__fake__.ts#admit:other']);
+    expect(gateReleaseSites(fake, 'deps.admission?.release(stale); museOpenAdmission.release(x);', /admission$/i)).toEqual(['src/renderer/__fake__.ts#<module>:stale', 'src/renderer/__fake__.ts#<module>:x']);
     const deferred = 'const x = { admit(h) { ledger.flush().then(() => { const lease = deps.gate.tryAcquire("open", 1); }); } };';
     expect(sourceCallSites(fake, deferred, 'tryAcquire')).toEqual(['src/renderer/__fake__.ts#<callback>']);
     const direct = 'const x = { admit(h) { const lease = deps.gate.tryAcquire("open", 1); } };';
@@ -256,10 +266,13 @@ describe('M3 T4 B3a-2 守卫 —— 保存协议的使用范围（S1–S5）', (
     expect(/\.discard\(/.test('museImeSession.discard(\'x\')')).toBe(true);
   });
 
-  it('S3：组件不使用 museDesktop、stepSaveFlow、requestSaveTarget、saveDocument、rejectDocument 与保存控制器', () => {
-    const forbidden = /\b(museDesktop|stepSaveFlow|requestSaveTarget|saveDocument|rejectDocument|museSaveController|createSaveController)\b/;
+  it('S3：组件不使用 museDesktop、stepSaveFlow、requestSaveTarget、saveDocument、rejectDocument；保存控制器只由 SaveEntry 使用（B3b，按阶段）且只调用 save / saveAs', () => {
+    const forbidden = /\b(museDesktop|stepSaveFlow|requestSaveTarget|saveDocument|rejectDocument|createSaveController|saveWithin)\b/;
     expect(components.length).toBeGreaterThan(0);
     expect(components.filter((file) => forbidden.test(stripComments(read(file)))).map(posixPath)).toEqual([]);
+    expect(components.filter((file) => /\bmuseSaveController\b/.test(stripComments(read(file)))).map(posixPath)).toEqual(['src/renderer/components/SaveEntry.tsx']);
+    const entry = stripComments(read(join(RENDERER, 'components/SaveEntry.tsx')));
+    expect([...new Set([...entry.matchAll(/museSaveController\.(\w+)\(/g)].map((m) => m[1]))].sort()).toEqual(['save', 'saveAs']);
   });
 
   it('S4：S 键只经菜单加速键派发——main before-input-event 与 renderer 键盘处理都不匹配 S', () => {
@@ -277,5 +290,39 @@ describe('M3 T4 B3a-2 守卫 —— 保存协议的使用范围（S1–S5）', (
     const bridge = stripComments(read(join(RENDERER, 'app/editor/menuBridge.ts')));
     expect(bridge).toContain('museSaveController.save();');
     expect(bridge).toContain('museSaveController.saveAs();');
+  });
+});
+
+describe('M3 T4 B3b 守卫 —— 替换守卫（勘误 §5.4、r0 §7）', () => {
+  const files = collectTsFiles(RENDERER);
+
+  it('G1：replacementGuard.ts 是纯模块（没有任何 import，不用平台全局与 store）', () => {
+    const file = join(RENDERER, 'app/guard/replacementGuard.ts');
+    expect(parseImports(file, read(file))).toEqual([]);
+    expect(/\b(window|document|globalThis|navigator|useMuseAppStore|setTimeout)\b/.test(stripComments(read(file)))).toBe(false);
+  });
+
+  it('G2：saveWithin( 只由 guardController.ts 调用（产品实例的保存分支）', () => {
+    const sites = callSites(files, 'saveWithin').map((site) => site.split('#')[0]);
+    expect([...new Set(sites)]).toEqual(['src/renderer/app/guard/guardController.ts']);
+    expect(sourceCallSites(join(RENDERER, '__fake__.ts'), 'museSaveController.saveWithin(lease);', 'saveWithin')).toHaveLength(1);
+  });
+
+  it('G3：守卫宿主登记（attachHost）与选择（choose）只在 ReplacementGuardDialog；museGuardController 的使用者精确', () => {
+    expect([...new Set(callSites(files, 'attachHost').map((site) => site.split('#')[0]))]).toEqual(['src/renderer/components/ReplacementGuardDialog.tsx']);
+    expect([...new Set(callSites(files, 'choose').map((site) => site.split('#')[0]))]).toEqual(['src/renderer/components/ReplacementGuardDialog.tsx']);
+    expect(users(files, /\bmuseGuardController\b/).filter((file) => file !== 'src/renderer/app/guard/guardController.ts')).toEqual([
+      'src/renderer/app/editor/openController.ts',
+      'src/renderer/components/ReplacementGuardDialog.tsx',
+    ]);
+  });
+
+  it('G4：产品 Open 控制器注入守卫与文档版本；守卫控制器不接触桥（不实现 T5 的 main intent）', () => {
+    const controller = stripComments(read(join(RENDERER, 'app/editor/openController.ts')));
+    const wiring = controller.slice(controller.indexOf('export const museOpenController'));
+    expect(wiring).toContain('  guard: museGuardController,');
+    expect(wiring).toContain('  version: () => {');
+    const guard = stripComments(read(join(RENDERER, 'app/guard/guardController.ts')));
+    expect(/museDesktop|ipcRenderer|will-prevent-unload|beforeunload/.test(guard)).toBe(false);
   });
 });

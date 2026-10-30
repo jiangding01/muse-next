@@ -41,6 +41,30 @@ export function editorStatusLabels(view: EditorStatusView): string[] {
   return labels;
 }
 
+/**
+ * 文件状态提示（M3 T4 B3b，r0 §2.3 b8）：未命名（保存时需要另存为）、原编码无法无损写回（unsafe，请另存为 UTF-8）、
+ * 文件授权未确认（unverified，请另存为）。只读派生，不改变任何状态。
+ */
+export type FileHint = 'unnamed' | 'unsafe' | 'unverified';
+
+export function fileHints(session: DocumentSession, trust: 'none' | 'trusted' | 'unverified'): FileHint[] {
+  const hints: FileHint[] = [];
+  if (session.file === null) hints.push('unnamed');
+  if (session.encodingRoundTrip === 'unsafe') hints.push('unsafe');
+  if (trust === 'unverified') hints.push('unverified');
+  return hints;
+}
+
+const FILE_HINT_TEXT: Readonly<Record<FileHint, string>> = {
+  unnamed: '未命名：保存时需要选择位置',
+  unsafe: '原编码无法无损写回：请另存为 UTF-8',
+  unverified: '文件授权未确认：请使用另存为',
+};
+
+export function fileHintText(hint: FileHint): string {
+  return FILE_HINT_TEXT[hint];
+}
+
 const NOTICE_TEXT: Readonly<Record<EditorNoticeKind, string>> = {
   'open-refused-dirty': '当前文档有未保存的修改。请先保存，或撤销到未修改状态，再打开其它文件。',
   'open-refused-composing': '请先完成或取消正在进行的输入，再打开文件。',
