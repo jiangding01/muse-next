@@ -1,7 +1,7 @@
 /**
  * M3 T1c-2：smoke 激活应答扣留（`tests/electron/ipcSmoke/ipcFaults.ts`）的透明性。
  *
- * - 非 activate 通道原样交给内部 registrar（同一个函数对象）。
+ * - 非 activate / reject 通道原样交给内部 registrar（同一个函数对象）。
  * - activate：未布置扣留时，生产 handler 以相同参数执行、结果原样返回；布置扣留时 handler 照常执行（main 状态真实改变），
  *   应答换成永不 settle 的 Promise；抛错原样传播且不消耗扣留。
  * - 交给生产 `registerOpenIpc`：open / 保存通道未被包装；activate 与 reject 被包装（M3 T4 B3a-1 STOP 裁决方案 A）。

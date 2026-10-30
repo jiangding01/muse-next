@@ -853,6 +853,25 @@ describe('saveController.saveWithin（M3 T4 B3b：守卫的保存分支）', () 
   });
 });
 
+describe('saveController.saveWithin —— Save As 取消（P0 §10.3 第 214 行，G3）', () => {
+  it('未命名文档的守卫保存转为 Save As、用户取消保存对话框 → SaveResult 不 ok；不发 saveDocument；租约仍由 Open 持有；fileOp 未建立、仍 dirty', async () => {
+    commitSession(createDemoSession(), 'none');
+    type();
+    const w = world();
+    const open = w.gate.tryAcquire('open', 0);
+    if (open === null) throw new Error('acquire failed');
+    const result = w.controller.saveWithin(open);
+    await settle();
+    w.pending('target')[0]?.reply.resolve({ kind: 'canceled' });
+    expect(await result).toEqual({ ok: false, clean: false });
+    expect(w.pending('save')).toEqual([]);
+    expect(w.gate.current()).toBe(open);
+    const { session } = useMuseAppStore.getState();
+    expect(session.fileOp).toBeNull();
+    expect(isSourceDirty(session)).toBe(true);
+  });
+});
+
 describe('saveController.saveWithin —— 拒绝时先交付结果（复核 LOW-2，变异 B3b-S6）', () => {
   it('busy 提示抛错也不会让守卫的结果悬而不决', async () => {
     type();

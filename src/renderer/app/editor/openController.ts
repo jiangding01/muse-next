@@ -189,7 +189,7 @@ export function createOpenController(deps: OpenControllerDeps): OpenController {
    * 询问守卫期间持有租约（Open / Save 都被拒，idle 派发不释放）；中止则释放。批准是一次 await（用户选择与可能的保存）：
    * 恢复后在同一同步段内释放并立即重新经准入（租约、R20 送达门与最终核对、文档号、fileOp、组字）才开始事务。
    */
-  function askGuard(granted: FileIntentLease, guard: Pick<GuardController, 'ask'>, admission: OpenAdmission): void {
+  function askGuard(granted: FileIntentLease, guard: Pick<GuardController, 'ask' | 'hasHost'>, admission: OpenAdmission): void {
     lease = granted;
     asking = true;
     const abandon = (): void => {
@@ -211,7 +211,12 @@ export function createOpenController(deps: OpenControllerDeps): OpenController {
     intent = asked.intentId;
     asked.outcome.then(
       (outcome) => {
-        if (lease !== granted || state.phase !== 'idle') return;
+        if (lease !== granted || state.phase !== 'idle') {
+          // 防御（分析不可达：询问期间租约不会被释放、事务不会开始）。fail closed：不开始 Open；本次租约已不在任何人
+          // 手里时结束询问标志，避免之后 idle 派发永远不释放后续租约。
+          if (lease === null) asking = false;
+          return;
+        }
         if (!('approval' in outcome)) {
           abandon();
           return;
@@ -229,7 +234,8 @@ export function createOpenController(deps: OpenControllerDeps): OpenController {
           refuse: (reason) => {
             editor.notify({ kind: admissionNotice(reason, { ...editor.gate(), dirty: false }) });
           },
-          stillAllowed: () => state.phase === 'idle' && lease === null && !editor.gate().composing,
+          // 重新检查守卫宿主（收口 L1）：批准之后、R20 flush 期间根卸载 → 不开始 Open（准入拒绝并释放重新取得的租约）。
+          stillAllowed: () => state.phase === 'idle' && lease === null && !editor.gate().composing && guard.hasHost(),
         });
       },
       (error: unknown) => {
