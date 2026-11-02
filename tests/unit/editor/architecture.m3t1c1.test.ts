@@ -266,6 +266,8 @@ describe('M3 T1c-1 架构守卫 —— 判定不放宽', () => {
       'ui.guard-open-save',
       'ui.guard-open-discard',
       'ui.guard-open-cancel',
+      // M3 T4 B4 UI 定点修复：保存入口与保存提示的布局；只追加，期望 PASS。
+      'ui.save-layout',
     ]);
     const special: Readonly<Record<string, unknown>> = {
       'ui.win-unc': { win32: 'pass-or-unverified' },

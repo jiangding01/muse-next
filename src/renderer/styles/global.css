@@ -15,7 +15,7 @@ html, body, #root { width: 100%; height: 100%; margin: 0; }
 button, textarea { font: inherit; }
 button { cursor: pointer; }
 
-.app-shell { height: 100%; display: grid; grid-template-rows: 64px minmax(0, 1fr) auto; overflow: hidden; }
+.app-shell { height: 100%; display: grid; grid-template-rows: 64px auto auto minmax(0, 1fr) auto auto; overflow: hidden; }
 .toolbar { display: grid; grid-template-columns: 270px 1fr 260px; align-items: center; padding: 0 18px; border-bottom: 1px solid var(--line); background: rgba(248,245,238,.96); -webkit-app-region: drag; }
 .brand { display: flex; align-items: center; gap: 11px; }
 .brand-mark { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 9px; background: #242923; color: white; font-family: Georgia, serif; font-size: 22px; }
@@ -217,7 +217,7 @@ button { cursor: pointer; }
 .open-notice { position: fixed; top: 72px; left: 50%; transform: translateX(-50%); z-index: 20; max-width: min(720px, calc(100vw - 48px)); display: flex; align-items: center; gap: 12px; padding: 9px 12px 9px 14px; border: 1px solid #d8c9a6; border-radius: 9px; background: #fbf4e2; color: #4a3d22; font-size: 12px; box-shadow: 0 6px 18px rgba(40, 34, 20, .12); -webkit-app-region: no-drag; }
 .open-notice button.secondary { flex: none; padding: 5px 10px; font-size: 12px; }
 
-/* M3 T3b：编辑器状态栏（app-shell 第三行，始终可见；主工作区由 minmax(0, 1fr) 收缩）。dirty 时 Open 按钮不是「进行中」。 */
+/* M3 T3b：编辑器状态栏（app-shell 最后一行，始终可见；主工作区由 minmax(0, 1fr) 收缩）。dirty 时 Open 按钮不是「进行中」。 */
 .toolbar button[data-open-phase="idle"]:disabled { cursor: not-allowed; }
 .editor-status { min-width: 0; min-height: 30px; display: flex; align-items: center; gap: 14px; padding: 4px 14px; border-top: 1px solid var(--line); background: #f1ede4; color: var(--ink-muted); font-size: 11px; overflow: hidden; }
 .editor-status-states { flex: none; display: flex; align-items: center; gap: 8px; white-space: nowrap; }
@@ -227,3 +227,34 @@ button { cursor: pointer; }
 .editor-status-notice { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 10px; color: #4a3d22; }
 .editor-status-notice span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .editor-status-notice button.secondary, .editor-status-reparse { flex: none; padding: 3px 9px; font-size: 11px; }
+
+/*
+ * M3 T4 B4 UI 定点修复（B4 方案 r0.2 §2）：app-shell 显式六行——工具栏 / 保存入口 / 替换守卫 / 主工作区 / 保存提示 / 状态栏。
+ * 每个子元素固定 grid-row：守卫与保存提示条件渲染时空行高度为 0，后续元素不会错位进 1fr 行或互相重叠。
+ * 守卫是非模态确认面板（询问期间允许继续编辑，P0 §10 G6）：独立一行、不遮挡主工作区，没有全屏遮罩。
+ */
+.app-shell > .toolbar { grid-row: 1; }
+.app-shell > .save-entry { grid-row: 2; }
+.app-shell > .replacement-guard { grid-row: 3; }
+.app-shell > .app-grid { grid-row: 4; }
+.app-shell > .save-diagnostics { grid-row: 5; }
+.app-shell > .editor-status { grid-row: 6; }
+
+.save-entry { display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding: 6px 18px; border-bottom: 1px solid var(--line); background: var(--panel); }
+.save-entry button { border: 1px solid #21493e; border-radius: 7px; padding: 4px 12px; background: var(--accent); color: white; font-size: 12px; }
+.save-entry button.secondary { background: transparent; color: #2f463f; border-color: #b9b1a4; }
+.save-entry button:disabled { opacity: .55; cursor: not-allowed; }
+
+.replacement-guard { position: relative; z-index: 10; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; padding: 10px 18px; border-top: 1px solid #d8b56a; border-bottom: 1px solid #d8b56a; background: #fbefd2; color: #3e3018; box-shadow: 0 2px 6px rgba(60, 45, 20, .12); }
+.replacement-guard p { flex: 1 1 320px; min-width: 0; margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.replacement-guard strong { flex: none; color: #5a3e0c; }
+.replacement-guard-actions { flex: none; display: flex; gap: 8px; }
+.replacement-guard-actions button { border: 1px solid #21493e; border-radius: 7px; padding: 5px 14px; background: var(--accent); color: white; }
+.replacement-guard-actions button.secondary { background: #fffdf7; color: #2f463f; border-color: #b9a77f; }
+.replacement-guard-actions button:disabled { opacity: .55; cursor: progress; }
+.replacement-guard-actions button:focus-visible { outline: 2px solid #1f6f5c; outline-offset: 2px; }
+
+.save-diagnostics { display: flex; align-items: center; gap: 12px; padding: 7px 18px; border-top: 1px solid #b9cdbd; background: #eef4ee; color: #23402f; font-size: 13px; }
+.save-diagnostics[data-save-failure="true"] { border-top-color: #e2b6aa; background: #fbeeea; color: #6a2a1c; }
+.save-diagnostics span { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.save-diagnostics button.secondary { flex: none; padding: 4px 10px; border: 1px solid #b9b1a4; border-radius: 7px; background: #fffdf7; color: inherit; font-size: 12px; }

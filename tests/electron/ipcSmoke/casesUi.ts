@@ -7,7 +7,7 @@
  * M3 T4 B3a-1：reject 应答故障（`hold` 执行但扣留应答 / `swallow` 不执行）同样只经 `ipcFaults`，只在本文件布置。
  */
 
-import { readFile, stat } from 'node:fs/promises';
+import { readFile, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { Menu } from 'electron';
@@ -671,6 +671,53 @@ const uiSaveRejectGate: IsolatedCase = {
 // ———— M3 T4 B3b：替换守卫（dirty 的 Open 询问保存 / 不保存 / 取消；三分支各一个独立子进程）。
 
 const guardPhase = (phase: 'asking' | 'saving'): string => `document.querySelector('.replacement-guard')?.getAttribute('data-guard-phase') === '${phase}'`;
+/**
+ * B4 UI 定点修复：面板**新出现**（idle → asking）后，等到初始焦点落在「取消」。聚焦与 Esc 监听都在 passive effect 中执行，
+ * 晚于 DOM 提交；只等 `data-guard-phase` 会与它们竞争（对照复跑中出现过：测试先把焦点放进编辑区，随后被初始聚焦移走）。
+ */
+const guardAskingFocused = `${guardPhase('asking')} && document.activeElement?.getAttribute('data-guard-choice') === 'cancel'`;
+
+/**
+ * M3 T4 B4 UI 定点修复（B4 方案 r0.2 §2）：真实 Chromium DOM 的可见性读数。`hits` = 元素有面积、中心在视口内且
+ * `elementFromPoint` 命中自身（没有被其它元素遮挡）；`overlaps` = 两个元素的矩形相交。
+ */
+const DOM_HELPERS = `const hits = (el) => { if (!el) return false; const r = el.getBoundingClientRect(); if (r.width <= 0 || r.height <= 0) return false;
+  const x = r.left + r.width / 2; const y = r.top + r.height / 2; if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) return false;
+  const at = document.elementFromPoint(x, y); return at !== null && (at === el || el.contains(at)); };
+  const overlaps = (a, b) => { if (!a || !b) return null; const r = a.getBoundingClientRect(); const s = b.getBoundingClientRect();
+  return r.left < s.right && s.left < r.right && r.top < s.bottom && s.top < r.bottom; };`;
+
+/** 守卫面板：语义、问句与三个按钮是否可见且未被遮挡、是否与保存入口 / 主工作区重叠、当前焦点（数据属性或类名）。 */
+const READ_GUARD_DOM = `(() => { ${DOM_HELPERS}
+  const panel = document.querySelector('.replacement-guard'); if (panel === null) return null;
+  const active = document.activeElement;
+  return {
+    ariaModal: panel.getAttribute('aria-modal'),
+    messageVisible: hits(panel.querySelector('#replacement-guard-message')),
+    buttonsVisible: [...panel.querySelectorAll('[data-guard-choice]')].map((b) => [b.getAttribute('data-guard-choice'), hits(b)]),
+    overlapsEntry: overlaps(panel, document.querySelector('.save-entry')),
+    overlapsGrid: overlaps(panel, document.querySelector('.app-grid')),
+    focus: active?.getAttribute('data-guard-choice') ?? (active === document.body ? 'body' : active?.className ?? null),
+  };
+})()`;
+
+/** 当前焦点：守卫按钮给出选择，源码面板给出 source-editor，其余给出类名（body 为 body）。 */
+const READ_FOCUS = `(() => { const a = document.activeElement; if (a === null || a === document.body) return 'body';
+  if (a.classList.contains('source-editor')) return 'source-editor'; return a.getAttribute('data-guard-choice') ?? a.className; })()`;
+
+async function readDom(window: SmokeWindow, expression: string): Promise<unknown> {
+  const result = await window.call(expression);
+  return result.ok ? result.value : `error: ${String(result.error)}`;
+}
+
+const GUARD_VISIBLE = {
+  ariaModal: null,
+  messageVisible: true,
+  buttonsVisible: [['save', true], ['discard', true], ['cancel', true]],
+  overlapsEntry: false,
+  overlapsGrid: false,
+  focus: 'cancel',
+};
 
 async function chooseGuard(window: SmokeWindow, choice: 'save' | 'discard' | 'cancel'): Promise<boolean> {
   const result = await window.call(`(() => { const b = document.querySelector('[data-guard-choice="${choice}"]'); if (b === null || b.disabled) return false; b.click(); return true; })()`);
@@ -686,8 +733,10 @@ async function dirtyOpenAsks(ctx: SmokeContext, problems: string[]) {
   const xFacts = await diskFacts(x.path);
   const chooserCalls = ctx.chooser.calls.length;
   expectTrue(problems, 'open clicked', clickMenu('open', x.window.win));
-  expectTrue(problems, 'guard asks', await waitPage(x.window, guardPhase('asking'), 5_000));
+  expectTrue(problems, 'guard asks (focus on cancel)', await waitPage(x.window, guardAskingFocused, 5_000));
   expectEqual(problems, 'no chooser while asking', ctx.chooser.calls.length, chooserCalls);
+  // B4 UI 定点修复（r0.2 §2 G-M1 / G-M2 / G-M4）：非模态、清晰可见、不与保存入口 / 主工作区重叠，焦点在安全默认的「取消」。
+  expectEqual(problems, 'guard panel visible, unobstructed, focus on cancel', await readDom(x.window, READ_GUARD_DOM), GUARD_VISIBLE);
   return { ...x, typed, xFacts, chooserCalls };
 }
 
@@ -698,12 +747,33 @@ const uiGuardOpenSave: IsolatedCase = {
   run: async (ctx) => {
     const problems: string[] = [];
     const x = await dirtyOpenAsks(ctx, problems);
+    // G6 / G-M7：询问期间回到编辑区继续输入（焦点离开面板），守卫仍在询问；保存的应是最新源码（版本重新校验）。
+    expectTrue(problems, 'typed while asking', await typeAtEnd(x.window, 'h'));
+    expectTrue(problems, 'still asking after typing', await waitPage(x.window, guardPhase('asking'), 1_000));
+    const latest = (await readEditor(x.window))?.value ?? '';
     ctx.chooser.enqueue({ kind: 'path', path: ctx.fixtures.second });
+    const gate = ctx.writeGate.holdNext('openExclusive');
     expectTrue(problems, 'save chosen', await chooseGuard(x.window, 'save'));
+    await gate.reached;
+    expectTrue(problems, 'guard saving', await waitPage(x.window, guardPhase('saving'), 3_000));
+    // G-M5 (b)：saving 阶段的 Esc 不取消进行中的保存。
+    pressKey(x.window, 'Escape');
+    await delay(300);
+    expectTrue(problems, 'Esc ignored while saving', await waitPage(x.window, guardPhase('saving'), 1_000));
+    // G6 + G-M4：保存进行中继续输入 → 保存的是捕获值，结束后仍未 clean → 守卫重新询问；焦点留在编辑区，不被抢回「取消」。
+    expectTrue(problems, 'typed while saving', await typeAtEnd(x.window, 'm'));
+    gate.release();
+    expectTrue(problems, 'asks again after an unclean save', await waitPage(x.window, guardPhase('asking'), 8_000));
+    // keep 分支不移动焦点，无法等待它生效；给 passive effect 留出稳定期，再确认焦点没被抢走。
+    await delay(300);
+    expectEqual(problems, 'focus stays in the editor when asked again', await readDom(x.window, READ_FOCUS), 'source-editor');
+    const latestAfterResave = (await readEditor(x.window))?.value ?? '';
+    expectTrue(problems, 'save chosen again', await chooseGuard(x.window, 'save'));
     // 先保存（复用 Open 的租约），保存成功且 clean 之后才进入 Open 的对话框并替换。
     const replaced = await waitUi(x.window, (doc) => doc.phase === 'idle' && doc.documentId !== x.opened?.documentId && doc.trust === 'trusted', 15_000);
     expectTrue(problems, 'replaced by the chosen file after saving', replaced !== null && replaced.documentId !== x.opened?.documentId);
-    expectEqual(problems, 'X on disk holds the typed source', await readFile(x.path, 'utf8'), x.typed);
+    expectEqual(problems, 'X on disk holds the latest source (typed while asking and while saving)', await readFile(x.path, 'utf8'), latestAfterResave);
+    expectEqual(problems, 'typing while asking and while saving both kept', [latest === `${x.typed}h`, latestAfterResave === `${x.typed}hm`], [true, true]);
     expectEqual(problems, 'chooser called once (after the save)', ctx.chooser.calls.length, x.chooserCalls + 1);
     expectTrue(problems, 'guard closed', await waitPage(x.window, `document.querySelector('.replacement-guard') === null`, 3_000));
     problems.push(...sameDocumentProblems(ctx, x.window, replaced, 'after guard save'));
@@ -720,6 +790,9 @@ const uiGuardOpenDiscard: IsolatedCase = {
     const x = await dirtyOpenAsks(ctx, problems);
     ctx.chooser.enqueue({ kind: 'path', path: ctx.fixtures.second });
     expectTrue(problems, 'discard chosen', await chooseGuard(x.window, 'discard'));
+    // G-M8 (d)：选「不保存」后 Open 事务继续，焦点不归还编辑区（由 Open 的对话框接管）。
+    expectTrue(problems, 'guard closed after discard', await waitPage(x.window, `document.querySelector('.replacement-guard') === null`, 3_000));
+    expectTrue(problems, 'focus not restored to the editor after discard', (await readDom(x.window, READ_FOCUS)) !== 'source-editor');
     const replaced = await waitUi(x.window, (doc) => doc.phase === 'idle' && doc.documentId !== x.opened?.documentId && doc.trust === 'trusted', 15_000);
     expectTrue(problems, 'replaced without saving', replaced !== null && replaced.documentId !== x.opened?.documentId);
     expectEqual(problems, 'X untouched on disk', await diskFacts(x.path), x.xFacts);
@@ -738,6 +811,8 @@ const uiGuardOpenCancel: IsolatedCase = {
     const x = await dirtyOpenAsks(ctx, problems);
     expectTrue(problems, 'cancel chosen', await chooseGuard(x.window, 'cancel'));
     expectTrue(problems, 'guard closed', await waitPage(x.window, `document.querySelector('.replacement-guard') === null`, 3_000));
+    // G-M8 (a)：以取消结束、焦点仍在面板内 → 归还打开面板前的焦点（源码面板）。
+    expectEqual(problems, 'focus restored to the source editor', await readDom(x.window, READ_FOCUS), 'source-editor');
     const kept = await readUi(x.window);
     expectEqual(problems, 'document kept', kept === null ? null : [kept.documentId, kept.phase], [x.opened?.documentId, 'idle']);
     expectEqual(problems, 'still dirty', (await readEditor(x.window))?.dirty, true);
@@ -745,8 +820,90 @@ const uiGuardOpenCancel: IsolatedCase = {
     expectEqual(problems, 'X untouched on disk', await diskFacts(x.path), x.xFacts);
     // 取消后租约已释放：再次 Open 仍会询问。
     expectTrue(problems, 'open clicked again', clickMenu('open', x.window.win));
-    expectTrue(problems, 'guard asks again', await waitPage(x.window, guardPhase('asking'), 5_000));
-    expectTrue(problems, 'cancel again', await chooseGuard(x.window, 'cancel'));
+    expectTrue(problems, 'guard asks again (focus on cancel)', await waitPage(x.window, guardAskingFocused, 5_000));
+    // G-M5 (a)：询问阶段的 Esc 等同取消，修改不丢失，焦点归还源码面板。
+    expectEqual(problems, 'focus on cancel when asked again', await readDom(x.window, READ_FOCUS), 'cancel');
+    pressKey(x.window, 'Escape');
+    expectTrue(problems, 'Esc cancels', await waitPage(x.window, `document.querySelector('.replacement-guard') === null`, 3_000));
+    expectEqual(problems, 'still dirty after Esc', (await readEditor(x.window))?.dirty, true);
+    expectEqual(problems, 'focus restored after Esc', await readDom(x.window, READ_FOCUS), 'source-editor');
+    // G-M8 (b)：用户把焦点移到面板之外（这里是「重新解析」按钮）后再 Esc：取消，但不覆盖用户的焦点。
+    expectTrue(problems, 'open clicked a third time', clickMenu('open', x.window.win));
+    expectTrue(problems, 'guard asks a third time (focus on cancel)', await waitPage(x.window, guardAskingFocused, 5_000));
+    await x.window.call(`(document.querySelector('.editor-status-reparse')?.focus(), true)`);
+    expectEqual(problems, 'focus moved out of the panel', await readDom(x.window, READ_FOCUS), 'secondary editor-status-reparse');
+    pressKey(x.window, 'Escape');
+    expectTrue(problems, 'Esc cancels from outside the panel', await waitPage(x.window, `document.querySelector('.replacement-guard') === null`, 3_000));
+    expectEqual(problems, 'user focus not overwritten', await readDom(x.window, READ_FOCUS), 'secondary editor-status-reparse');
+    // G6 + G-M4：询问期间回到编辑区继续输入，Esc 仍取消；输入保留，焦点留在编辑区。
+    expectTrue(problems, 'open clicked a fourth time', clickMenu('open', x.window.win));
+    expectTrue(problems, 'guard asks a fourth time (focus on cancel)', await waitPage(x.window, guardAskingFocused, 5_000));
+    expectTrue(problems, 'typed while asking', await typeAtEnd(x.window, 'k'));
+    expectTrue(problems, 'still asking after typing', await waitPage(x.window, guardPhase('asking'), 1_000));
+    pressKey(x.window, 'Escape');
+    expectTrue(problems, 'Esc cancels while editing', await waitPage(x.window, `document.querySelector('.replacement-guard') === null`, 3_000));
+    const edited = await readEditor(x.window);
+    expectEqual(problems, 'typing while asking kept', [edited?.dirty, edited?.value.endsWith('k')], [true, true]);
+    expectEqual(problems, 'focus stays in the editor', await readDom(x.window, READ_FOCUS), 'source-editor');
+    // G-M8 (a) 的鼠标路径：点击 Open 时焦点先落到 body。原焦点退回最近一次聚焦的元素（源码面板），Esc 后归还给它。
+    await x.window.call(`((document.activeElement instanceof HTMLElement) && document.activeElement.blur(), true)`);
+    expectEqual(problems, 'editor blurred before Open', await readDom(x.window, READ_FOCUS), 'body');
+    expectTrue(problems, 'open clicked a fifth time', clickMenu('open', x.window.win));
+    expectTrue(problems, 'guard asks a fifth time (focus on cancel)', await waitPage(x.window, guardAskingFocused, 5_000));
+    pressKey(x.window, 'Escape');
+    expectTrue(problems, 'Esc cancels (opener was body)', await waitPage(x.window, `document.querySelector('.replacement-guard') === null`, 3_000));
+    expectEqual(problems, 'focus falls back to the last focused editor', await readDom(x.window, READ_FOCUS), 'source-editor');
+    expectEqual(problems, 'X still untouched on disk', await diskFacts(x.path), x.xFacts);
+    expectEqual(problems, 'chooser never called', ctx.chooser.calls.length, x.chooserCalls);
+    return verdict(problems);
+  },
+};
+
+/** 保存入口与保存提示的布局（真实 DOM）：入口按钮可见且未被遮挡、提示可读、二者不与主工作区重叠。 */
+const READ_SAVE_LAYOUT = `(() => { ${DOM_HELPERS}
+  const grid = document.querySelector('.app-grid'); const entry = document.querySelector('.save-entry'); const diag = document.querySelector('.save-diagnostics');
+  return {
+    entries: [...document.querySelectorAll('[data-save-entry]')].map((b) => [b.getAttribute('data-save-entry'), hits(b)]),
+    entryOverlapsGrid: overlaps(entry, grid),
+    diagnosticsVisible: diag === null ? null : hits(diag.querySelector('span')),
+    diagnosticsText: diag?.querySelector('span')?.textContent ?? null,
+    diagnosticsOverlapsGrid: overlaps(diag, grid),
+  };
+})()`;
+
+interface SaveLayout {
+  readonly entries: readonly (readonly [string, boolean])[];
+  readonly entryOverlapsGrid: boolean | null;
+  readonly diagnosticsVisible: boolean | null;
+  readonly diagnosticsText: string | null;
+  readonly diagnosticsOverlapsGrid: boolean | null;
+}
+
+/** M3 T4 B4 UI 定点修复（r0.2 §2、§3 T3）：SaveEntry 在正常状态可见（GB18030 文档另有「另存为 UTF-8…」），保存提示可读、不遮挡主工作区。 */
+const uiSaveLayout: IsolatedCase = {
+  id: 'ui.save-layout',
+  realDialog: false,
+  timeoutMs: 40_000,
+  run: async (ctx) => {
+    const problems: string[] = [];
+    const x = await editableFile(ctx);
+    expectTrue(problems, 'X opened in an editable window', x.ready);
+    const initial = (await readDom(x.window, READ_SAVE_LAYOUT)) as SaveLayout | null;
+    expectEqual(problems, 'save entry visible (utf-8: no UTF-8 entry)', initial?.entries, [['save', true], ['save-as', true]]);
+    expectEqual(problems, 'save entry does not overlap the workspace', initial?.entryOverlapsGrid, false);
+    expectTrue(problems, 'typed', await typeAtEnd(x.window, 'q'));
+    expectTrue(problems, 'save menu clicked', clickMenu('save', x.window.win));
+    expectEqual(problems, 'saved', (await waitSave(x.window, 'saved', 8_000))?.message, 'saved');
+    const saved = (await readDom(x.window, READ_SAVE_LAYOUT)) as SaveLayout | null;
+    expectEqual(problems, 'save diagnostics readable', [saved?.diagnosticsVisible, saved?.diagnosticsText?.startsWith('已保存') === true], [true, true]);
+    expectEqual(problems, 'save diagnostics does not overlap the workspace', saved?.diagnosticsOverlapsGrid, false);
+    // GB18030（D6 D0 = 「中」，不是合法 UTF-8）→ 写回编码为 gb18030，出现「另存为 UTF-8…」入口。
+    const gbPath = join(x.dir, 'gb.jcx');
+    await writeFile(gbPath, Buffer.concat([Buffer.from('X:1\nT:', 'latin1'), Buffer.from([0xd6, 0xd0]), Buffer.from('\nK:C\nCDEF|\n', 'latin1')]));
+    const gb = await openViaMenu(ctx, x.window, gbPath);
+    expectEqual(problems, 'gb18030 document opened', gb?.trust, 'trusted');
+    const gbLayout = (await readDom(x.window, READ_SAVE_LAYOUT)) as SaveLayout | null;
+    expectEqual(problems, 'UTF-8 save as entry visible', gbLayout?.entries, [['save', true], ['save-as', true], ['save-as-utf8', true]]);
     return verdict(problems);
   },
 };
@@ -792,4 +949,6 @@ export const UI_CASES: readonly IsolatedCase[] = [
   uiGuardOpenSave,
   uiGuardOpenDiscard,
   uiGuardOpenCancel,
+  // M3 T4 B4 UI 定点修复：保存入口与保存提示的布局。
+  uiSaveLayout,
 ];
