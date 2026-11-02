@@ -468,7 +468,17 @@ export async function editableFile(ctx: SmokeContext, name = 'x.jcx') {
 
 const PRIMARY: 'meta' | 'control' = process.platform === 'darwin' ? 'meta' : 'control';
 
-/** M27：一次 Cmd/Ctrl+S 只派发一次、只写一次。S 键不经 before-input-event 派发；加速键兜底只派发一次。 */
+/**
+ * 合成的 Cmd/Ctrl+S（`sendInputEvent`）是否到达原生菜单加速键，按平台钉死而不在运行时观察：Linux 到达（PR #5 CI 实测，派发一次
+ * `save:menu-accelerator`）；macOS 不到达（T3 SP-KEY-P），Windows 不到达（PR #5 CI 实测）。
+ */
+const SYNTHETIC_KEY_REACHES_NATIVE_ACCELERATOR = process.platform === 'linux';
+
+/**
+ * M27：一次 Cmd/Ctrl+S 只派发一次、只写一次。S 键不经 before-input-event 派发（任何平台都没有 key-intercept）。
+ * Linux：合成按键经原生菜单加速键派发一次，不再兜底（`native-accelerator`）；macOS / Windows：合成按键零派发，再由测试显式调用
+ * 生产加速键路由兜底一次（`test-fallback`，不是原生菜单交互）。
+ */
 const uiSaveMenuOnce: IsolatedCase = {
   id: 'ui.save-menu-once',
   realDialog: false,
@@ -479,12 +489,19 @@ const uiSaveMenuOnce: IsolatedCase = {
     expectTrue(problems, 'editable window with X opened', x.ready);
     expectTrue(problems, 'typed', await typeAtEnd(x.window, 'a'));
     const before = ctx.menuCommands.all().length;
-    // 合成的 Cmd/Ctrl+S 经过 before-input-event：不得被拦截派发（S 只走菜单加速键）。
+    const writesBefore = ctx.writeGate.calls('openExclusive');
     pressKey(x.window, 'S', [PRIMARY]);
     await delay(400);
-    expectEqual(problems, 'S keyDown is not intercepted', ctx.menuCommands.all().slice(before).map((r) => r.message.command), []);
-    // 菜单加速键兜底（生产路由）：一次。
-    expectEqual(problems, 'accelerator routed', ctx.editorCommands.handleMenuCommand('save', x.window.win, { triggeredByAccelerator: true }), 'dispatched');
+    const keySends = ctx.menuCommands.all().slice(before).map((r) => `${r.message.command}:${r.message.source}`);
+    expectEqual(problems, 'S keyDown is not intercepted', keySends.filter((send) => send.endsWith(':key-intercept')), []);
+    const route = SYNTHETIC_KEY_REACHES_NATIVE_ACCELERATOR ? 'native-accelerator' : 'test-fallback';
+    if (SYNTHETIC_KEY_REACHES_NATIVE_ACCELERATOR) {
+      expectEqual(problems, 'native accelerator dispatched once', keySends, ['save:menu-accelerator']);
+    } else {
+      expectEqual(problems, 'synthetic key reaches no native accelerator', keySends, []);
+      // 测试兜底：显式调用生产加速键路由（不是原生菜单交互），一次。
+      expectEqual(problems, 'test fallback accelerator routed', ctx.editorCommands.handleMenuCommand('save', x.window.win, { triggeredByAccelerator: true }), 'dispatched');
+    }
     const saved = await waitSave(x.window, 'saved', 8_000);
     expectEqual(problems, 'saved', saved?.message, 'saved');
     await delay(500);
@@ -494,7 +511,8 @@ const uiSaveMenuOnce: IsolatedCase = {
     expectEqual(problems, 'clean after save', doc?.dirty, false);
     expectEqual(problems, 'disk equals the saved source', await readFile(x.path, 'utf8'), doc?.value);
     expectEqual(problems, 'still saved (no second save / busy)', (await readSave(x.window))?.message, 'saved');
-    return verdict(problems);
+    expectEqual(problems, 'exactly one disk write (openExclusive)', ctx.writeGate.calls('openExclusive') - writesBefore, 1);
+    return verdict(problems, { route });
   },
 };
 

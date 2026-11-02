@@ -2,7 +2,8 @@
  * M3 T4 B2：保存的故障注入 smoke（matrix；GATE-PLAN-r1 §2.5、GA12 §1、Gate B2 F1 / T-OP-1）。
  *
  * - 提交前 / 提交后的页面代次变化（A4）：写 port 闸门把管线挂在提交点之前（`openExclusive`）或之后（`syncDirectory`），
- *   期间页面发起一次被安全策略拦截的导航——生产接线收到 `did-start-navigation` 执行 A4，页面仍存活，应答仍能送达。
+ *   期间页面发起一次被安全策略拦截的导航——生产接线收到 `did-start-navigation` 执行 A4，页面仍存活，应答仍能送达。win32 跳过目录
+ *   fsync，提交后闸门不可用：另有三平台的同步注入用例（`afterNextRename` 后同步调用 A4 入口，PR #5 CI 修复）。
  * - H-7：页面发出激活但不处理应答（main 照常执行，renderer 不切换）；reject「丢失」即不发送。每例断言 X 的 SHA-256、
  *   dev / ino、mtimeNs 不变。
  * - F1：Save As 原生对话框挂起期间 reload，新页面的保存 / Open 都 busy；旧对话框返回后不登记、不释放新锁。
@@ -10,6 +11,7 @@
  */
 
 import { join } from 'node:path';
+import { readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 
 import { bridge, codeOf, diskFacts, grantedId, requestRefused, requestTarget, saveAsTo, saveDir, SAVED_SOURCE, saveTo, scoreFile, temps } from './casesSave';
@@ -88,6 +90,49 @@ const committedUnconfirmed: SmokeCase = {
     const record = ctx.openIpc.currentState().table.get(ticket.capabilityId);
     expectEqual(problems, 'tombstone refreshed', record?.purpose === 'tombstone' ? record.lastKnownDiskFingerprint : null, (await diskFacts(file)).sha256);
     return verdict(problems);
+  },
+};
+
+/**
+ * PR #5 CI 修复：提交后授权丢失的**同步故障注入**（三平台；不是真实导航竞态的复现）。Windows 跳过目录 fsync，提交到复核之间没有
+ * await，上面基于 `syncDirectory` 闸门的用例在 win32 不可执行。这里在底层 `renameSync` 成功返回后、同一同步调用栈内，经生产 handle
+ * 的 A4 入口（与 `wireOpenIpcWindow` 转发 `did-start-navigation` 相同）作废页面代次；产品写入管线没有任何改动或新增的异步窗口。
+ */
+const committedUnconfirmedSyncReset: SmokeCase = {
+  id: 'save.committed-unconfirmed-sync-reset',
+  run: async (ctx) => {
+    const dir = await saveDir(ctx);
+    const file = await scoreFile(dir, 'sync-reset.jcx');
+    const window = await ctx.windows.create();
+    const ticket = await openActive(ctx, window, file);
+    const problems: string[] = [];
+    const generationOf = (): number => ownerMeta(ctx, window.ownerId)?.generation ?? -1;
+    const initialGeneration = generationOf();
+    const syncsBefore = ctx.writeGate.calls('syncDirectory');
+    const atHook: { readonly bytes: string; readonly generationBefore: number; readonly generationAfter: number }[] = [];
+    const hook = ctx.writeGate.afterNextRename(() => {
+      const bytes = readFileSync(file, 'utf8');
+      const generationBefore = generationOf();
+      ctx.openIpc.handleNavigation(window.ownerId, { isMainFrame: true, isSameDocument: false });
+      atHook.push({ bytes, generationBefore, generationAfter: generationOf() });
+    });
+    const reply = await saveTo(window, ticket, SAVED_SOURCE);
+    expectEqual(problems, 'hook fired once without error', { fired: hook.fired(), error: hook.error() }, { fired: 1, error: null });
+    expectEqual(problems, 'new bytes already on disk when the hook ran (after the commit point)', atHook.map((seen) => seen.bytes), [SAVED_SOURCE]);
+    expectEqual(problems, 'A4 bumped the generation once inside the hook', atHook.map((seen) => seen.generationAfter - seen.generationBefore), [1]);
+    expectEqual(problems, 'generation bumped once overall', generationOf() - initialGeneration, 1);
+    expectEqual(problems, 'committed but unconfirmed', { outcome: reply.outcome, ticket: reply.ticket }, { outcome: 'committed-unconfirmed', ticket: null });
+    expectEqual(problems, 'bytes written', await readFile(file, 'utf8'), SAVED_SOURCE);
+    expectEqual(problems, 'temp files', await temps(dir), []);
+    expectEqual(problems, 'directory sync: skipped on win32, once elsewhere', ctx.writeGate.calls('syncDirectory') - syncsBefore, process.platform === 'win32' ? 0 : 1);
+    // M53：墓碑的指纹随磁盘真相刷新。
+    const record = ctx.openIpc.currentState().table.get(ticket.capabilityId);
+    expectEqual(problems, 'tombstone refreshed', record?.purpose === 'tombstone' ? record.lastKnownDiskFingerprint : null, (await diskFacts(file)).sha256);
+    // 授权已丢失：旧能力不能再次保存，磁盘保持本次写入的内容。
+    const again = await saveTo(window, ticket, SECOND_SOURCE);
+    expectEqual(problems, 'old capability refused', { outcome: again.outcome, code: codeOf(again) }, { outcome: 'not-committed', code: 'capability-invalid' });
+    expectEqual(problems, 'bytes kept', await readFile(file, 'utf8'), SAVED_SOURCE);
+    return verdict(problems, { platform: process.platform, injection: 'synchronous A4 after renameSync' });
   },
 };
 
@@ -242,7 +287,9 @@ const lateReleaseAfterReset: SmokeCase = {
 
 export const SAVE_FAULT_CASES: readonly SmokeCase[] = [
   resetBeforeCommit,
-  committedUnconfirmed,
+  // win32 跳过目录 fsync（`syncDirectory` 闸门不会触发）：真实导航落在提交后 await 窗口的用例只在 POSIX；同步注入的等价用例三平台运行。
+  ...(process.platform === 'win32' ? [] : [committedUnconfirmed]),
+  committedUnconfirmedSyncReset,
   activationLostRejectDelivered,
   activationLostRejectLost,
   demoStaleAnchor,

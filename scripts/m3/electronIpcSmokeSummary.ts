@@ -119,7 +119,9 @@ export const SMOKE_CASES: readonly CaseSpec[] = [
   matrix('save-target.one-shot'),
   matrix('save.cross-window-token'),
   matrix('save.reset-before-commit'),
-  matrix('save.committed-unconfirmed'),
+  // PR #5 CI 修复：win32 跳过目录 fsync，提交后 await 窗口的真实导航用例只在 POSIX；同步注入的等价用例三平台。
+  matrix('save.committed-unconfirmed', { darwin: 'pass', linux: 'pass' }),
+  matrix('save.committed-unconfirmed-sync-reset'),
   matrix('save-as.activation-lost-reject-delivered'),
   matrix('save-as.activation-lost-reject-lost'),
   matrix('save-as.demo-stale-anchor'),

@@ -10,7 +10,7 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
@@ -48,6 +48,42 @@ const CRASH_DIAGNOSTIC_LISTENERS = [
   "contents.off('render-process-gone', onContentsGone)",
   "app.off('render-process-gone', onAppGone)",
 ];
+
+/**
+ * PR #5 CI 修复（GPT 裁决方案 A）：smoke 中唯一获准的 handle 生命周期直调——`save.committed-unconfirmed-sync-reset` 在底层
+ * `renameSync` 成功返回后同步注入 A4。只在 `casesSaveFaults.ts`、只一次、只在该用例内；不是「smoke 可以调用 handleNavigation」。
+ */
+const SYNC_RESET_A4 = 'ctx.openIpc.handleNavigation(window.ownerId, { isMainFrame: true, isSameDocument: false })';
+const SYNC_RESET_FILE = 'casesSaveFaults.ts';
+const SYNC_RESET_CASE = "id: 'save.committed-unconfirmed-sync-reset',";
+
+/** smoke 源码（键为相对 smoke 目录的文件名，已去注释）。 */
+const smokeMap = (): Map<string, string> => new Map(smokeFiles.map((file) => [posixPath(relative(SMOKE_DIR, file)), stripComments(read(file))]));
+
+/**
+ * Open 生命周期的三类禁令（事件名、handle 生命周期方法、IPC 注册）；返回违反项。先断言 sync-reset 例外恰在指定文件的指定用例中
+ * 出现一次，再只从该文件精确剔除这一处，其余禁令对剩余全部 smoke 源码照常生效。
+ */
+function lifecycleProblems(files: ReadonlyMap<string, string>): string[] {
+  const problems: string[] = [];
+  const occurrences = (text: string): number => text.split(SYNC_RESET_A4).length - 1;
+  for (const [name, text] of files) {
+    const found = occurrences(text);
+    if (found !== (name === SYNC_RESET_FILE ? 1 : 0)) problems.push(`sync-reset exception: ${name} has ${String(found)}`);
+  }
+  const faults = files.get(SYNC_RESET_FILE) ?? '';
+  const start = faults.indexOf(SYNC_RESET_CASE);
+  const caseBody = start < 0 ? '' : faults.slice(start, faults.indexOf('\n};', start));
+  if (occurrences(caseBody) !== 1) problems.push('sync-reset exception: not inside save.committed-unconfirmed-sync-reset');
+  const scanned = [...files].map(([name, text]) => (name === SYNC_RESET_FILE ? text.replace(SYNC_RESET_A4, '') : text)).join('\n');
+  const withoutDiagnostics = CRASH_DIAGNOSTIC_LISTENERS.reduce((text, diagnostic) => text.replace(diagnostic, ''), scanned);
+  // 退出观测与 Linux 信号实验（含唯一的 SIGKILL 发送点）的约束见 architecture.m3t1b2b.exit.test.ts。
+  if (/['"`](did-start-navigation|did-navigate|render-process-gone|destroyed)['"`]/.test(withoutDiagnostics)) problems.push('lifecycle event name');
+  if (/\.(attachWindow|handleNavigation|handleNavigationCommitted|handleRendererGone|disposeWindow)\s*\(/.test(scanned)) problems.push('lifecycle method call');
+  if (/\[\s*['"`](attachWindow|handleNavigation|handleNavigationCommitted|handleRendererGone|disposeWindow)['"`]\s*\]/.test(scanned)) problems.push('lifecycle method computed access');
+  if (/ipcMain\s*(\.|\[)|\.ipc\.(handle|on|once|handleOnce)\b|\.emit\(\s*['"`]muse:/.test(scanned.replace('ipc: faults.registrar(ipcMain),', ''))) problems.push('ipc registration');
+  return problems;
+}
 
 const SELF_CHECK_PREFIX = 'SELF_CHECK="$(ELECTRON_RUN_AS_NODE=1 "${ELECTRON}" -e \'';
 
@@ -173,12 +209,34 @@ describe('M3 T1b-2b-1 架构守卫 —— smoke 复用生产实现', () => {
       expect(count(source, new RegExp(diagnostic.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'))).toBe(1);
       expect(isolated).toContain(diagnostic);
     }
-    const withoutDiagnostics = CRASH_DIAGNOSTIC_LISTENERS.reduce((text, diagnostic) => text.replace(diagnostic, ''), source);
-    // 退出观测与 Linux 信号实验（含唯一的 SIGKILL 发送点）的约束见 architecture.m3t1b2b.exit.test.ts。
-    expect(/['"`](did-start-navigation|did-navigate|render-process-gone|destroyed)['"`]/.test(withoutDiagnostics)).toBe(false);
-    expect(/\.(attachWindow|handleNavigation|handleNavigationCommitted|handleRendererGone|disposeWindow)\s*\(/.test(source)).toBe(false);
-    expect(/\[\s*['"`](attachWindow|handleNavigation|handleNavigationCommitted|handleRendererGone|disposeWindow)['"`]\s*\]/.test(source)).toBe(false);
-    expect(/ipcMain\s*(\.|\[)|\.ipc\.(handle|on|once|handleOnce)\b|\.emit\(\s*['"`]muse:/.test(source.replace('ipc: faults.registrar(ipcMain),', ''))).toBe(false);
+    // 事件名、生命周期方法、IPC 注册三类禁令（含 PR #5 sync-reset 的唯一例外）见 lifecycleProblems。
+    expect(lifecycleProblems(smokeMap())).toEqual([]);
+  });
+
+  it('PR #5 sync-reset 例外的反例：其它文件、第二次、用例之外、其它生命周期方法、计算属性与伪造事件都被识别', () => {
+    const real = smokeMap();
+    const faults = real.get(SYNC_RESET_FILE) ?? '';
+    expect(faults).toContain(SYNC_RESET_A4);
+    const withFile = (name: string, text: string): Map<string, string> => new Map([...real, [name, text]]);
+    const call = `${SYNC_RESET_A4};`;
+    expect(lifecycleProblems(withFile('casesSave.ts', `${real.get('casesSave.ts') ?? ''}\n${call}`))).toEqual(['sync-reset exception: casesSave.ts has 1', 'lifecycle method call']);
+    expect(lifecycleProblems(withFile(SYNC_RESET_FILE, `${faults}\n${call}`))).toEqual(['sync-reset exception: casesSaveFaults.ts has 2', 'lifecycle method call']);
+    expect(lifecycleProblems(withFile(SYNC_RESET_FILE, `${faults.replace(SYNC_RESET_A4, 'void 0')}\n${call}`))).toEqual(['sync-reset exception: not inside save.committed-unconfirmed-sync-reset']);
+    for (const other of ['handleNavigationCommitted', 'handleRendererGone', 'disposeWindow', 'attachWindow']) {
+      const replaced = faults.replace(SYNC_RESET_A4, SYNC_RESET_A4.replace('handleNavigation(', `${other}(`));
+      expect(lifecycleProblems(withFile(SYNC_RESET_FILE, replaced)), other).toEqual([
+        'sync-reset exception: casesSaveFaults.ts has 0',
+        'sync-reset exception: not inside save.committed-unconfirmed-sync-reset',
+        'lifecycle method call',
+      ]);
+    }
+    // 参数不同（例如子 frame）就不是获准的那一处。
+    expect(lifecycleProblems(withFile(SYNC_RESET_FILE, faults.replace(SYNC_RESET_A4, SYNC_RESET_A4.replace('isMainFrame: true', 'isMainFrame: false'))))).toContain('lifecycle method call');
+    const computed = faults.replace(SYNC_RESET_A4, "ctx.openIpc['handleNavigation'](window.ownerId, { isMainFrame: true, isSameDocument: false })");
+    expect(lifecycleProblems(withFile(SYNC_RESET_FILE, computed))).toContain('lifecycle method computed access');
+    const forged = faults.replace(SYNC_RESET_A4, "window.win.webContents.emit('did-start-navigation', { isMainFrame: true, isSameDocument: false })");
+    expect(lifecycleProblems(withFile(SYNC_RESET_FILE, forged))).toContain('lifecycle event name');
+    expect(lifecycleProblems(withFile('windows.ts', `${real.get('windows.ts') ?? ''}\nipcMain.handle('x', () => 1);`))).toContain('ipc registration');
   });
 
   it('smoke 不自动确认：activate 只由页面经 window.museDesktop.activateDocument 发起', () => {

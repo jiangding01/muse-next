@@ -89,7 +89,8 @@ describe('electronIpcSmokeSummary —— 清单', () => {
     // M3 T4 B3a-1（H-13）：新增 2 个 ui.open-* 用例（三平台 pass），macOS 实跑定稿，Win / Linux 在 B5 CI 定稿。
     // M3 T4 B3a-2（H-13）：新增 5 个 ui.save-* 用例（三平台 pass），macOS 实跑定稿，Win / Linux 在 B5 CI 定稿。
     // M3 T4 B3b（H-13）：新增 3 个 ui.guard-open-* 用例（三平台 pass），macOS 实跑定稿，Win / Linux 在 B5 CI 定稿。
-    expect([count('darwin'), count('win32'), count('linux')]).toEqual([94, 96, 95]);
+    // PR #5 CI 修复：save.committed-unconfirmed 改为只在 POSIX，新增三平台 save.committed-unconfirmed-sync-reset（计数以实跑确认）。
+    expect([count('darwin'), count('win32'), count('linux')]).toEqual([95, 96, 96]);
   });
 
   it('M3 T1c-1 安全用例：子 frame 风险已是 pass 硬门；对照在 matrix；prod.* 各占独立子进程且三平台 pass；全清单只剩已裁决的 observe', () => {

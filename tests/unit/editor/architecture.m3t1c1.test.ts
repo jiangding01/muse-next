@@ -245,6 +245,8 @@ describe('M3 T1c-1 架构守卫 —— 判定不放宽', () => {
       'save.cross-window-token',
       'save.reset-before-commit',
       'save.committed-unconfirmed',
+      // PR #5 CI 修复：提交后授权丢失的同步注入（三平台；原 save.committed-unconfirmed 改为只在 POSIX，见下方 special）。
+      'save.committed-unconfirmed-sync-reset',
       'save-as.activation-lost-reject-delivered',
       'save-as.activation-lost-reject-lost',
       'save-as.demo-stale-anchor',
@@ -265,7 +267,11 @@ describe('M3 T1c-1 架构守卫 —— 判定不放宽', () => {
       'ui.guard-open-discard',
       'ui.guard-open-cancel',
     ]);
-    const special: Readonly<Record<string, unknown>> = { 'ui.win-unc': { win32: 'pass-or-unverified' }, 'save-as.dangling-symlink': { darwin: 'pass', linux: 'pass' } };
+    const special: Readonly<Record<string, unknown>> = {
+      'ui.win-unc': { win32: 'pass-or-unverified' },
+      'save-as.dangling-symlink': { darwin: 'pass', linux: 'pass' },
+      'save.committed-unconfirmed': { darwin: 'pass', linux: 'pass' },
+    };
     for (const id of added) expect(SMOKE_CASES.find((spec) => spec.id === id)?.expect, id).toEqual(special[id] ?? PASS);
   });
 
