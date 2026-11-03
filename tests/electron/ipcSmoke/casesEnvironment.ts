@@ -35,7 +35,8 @@ const envSandbox: SmokeCase = {
 const tail = (url: string): string => url.split('/').slice(-2).join('/');
 
 /** M3 T1c-2 起 M3 前的过渡 Open 通道已删除，桥只剩三条新通道；M3 T3b 增加菜单命令订阅 `onMenuCommand`（用户授权的最小修改）。 */
-const API_METHODS = ['activateDocument', 'onMenuCommand', 'openDocument', 'rejectDocument'];
+// M3 T4 B2（G-14）：另加保存的两个方法。
+const API_METHODS = ['activateDocument', 'onMenuCommand', 'openDocument', 'rejectDocument', 'requestSaveTarget', 'saveDocument'];
 
 const bridgeSurface: SmokeCase = {
   id: 'bridge.surface',
@@ -48,7 +49,7 @@ const bridgeSurface: SmokeCase = {
     if (!result.ok || !isRecord(result.value)) return verdict([`page call failed: ${result.ok ? 'malformed' : result.error}`]);
     const value = result.value;
     expectEqual(problems, 'museDesktop keys', value.keys, API_METHODS);
-    expectEqual(problems, 'method types', value.types, ['function', 'function', 'function', 'function']);
+    expectEqual(problems, 'method types', value.types, API_METHODS.map(() => 'function'));
     expectEqual(problems, 'typeof require', value.require, 'undefined');
     expectEqual(problems, 'typeof process', value.process, 'undefined');
     expectEqual(problems, 'typeof ipcRenderer', value.ipc, 'undefined');
@@ -68,7 +69,7 @@ const bridgeNoAutoActivate: SmokeCase = {
     if (reply.kind !== 'opened') return verdict([`expected opened, got ${describeOpen(reply)}`]);
     await delay(300);
     expectEqual(problems, 'capabilities after open', capabilitiesOf(ctx, window.ownerId), [
-      { token: reply.ticket.capabilityId, state: 'pending', documentId: reply.ticket.documentId },
+      { token: reply.ticket.capabilityId, purpose: 'open', state: 'pending', documentId: reply.ticket.documentId },
     ]);
     expectEqual(problems, 'authorize(pending)', ctx.openIpc.authorize(window.ownerId, reply.ticket.capabilityId), null);
     return verdict(problems);

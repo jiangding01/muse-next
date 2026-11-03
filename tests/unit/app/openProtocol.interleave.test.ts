@@ -143,7 +143,7 @@ describe('Open 交错 —— 导航开始（页面代次重置）', () => {
     expect(r.renderer()).toMatchObject({ capability: a, trust: 'trusted' });
     const b = await commitDocument(r, '/docs/b.jcx');
     expect(r.authorized(b)).toBe(true);
-    expect([...r.h.handle.currentState().table.values()].filter((record) => record.state === 'active').map((record) => record.token)).toEqual([b]);
+    expect([...r.h.handle.currentState().table.values()].filter((record) => record.purpose === 'open' && record.state === 'active').map((record) => record.token)).toEqual([b]);
     r.h.expectConsistent();
   });
 

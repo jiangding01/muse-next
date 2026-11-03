@@ -4,9 +4,17 @@
  * 每个用例都从产品 UI 入口出发：点击 Toolbar 的 Open 按钮 → 生产 preload → main 的新 IPC → renderer 准备候选 → 激活 → commitSession
  * → UI。页面状态只从 DOM 读取（文件状态区的 `data-document-id` / `data-capability-trust`、Open 按钮的 `data-open-phase`、提示条、
  * 只读源码面板），main 状态只从生产 handle 的诊断出口读取。激活应答扣留只经 smoke 的 `ipcFaults`（产品没有测试通道）。
+ * M3 T4 B3a-1：reject 应答故障（`hold` 执行但扣留应答 / `swallow` 不执行）同样只经 `ipcFaults`，只在本文件布置。
  */
 
-import { stat } from 'node:fs/promises';
+import { readFile, stat, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+
+import { Menu } from 'electron';
+import type { BrowserWindow } from 'electron';
+
+import { MENU_ITEM_IDS } from '../../../src/main/menu/appMenu';
+import type { MenuCommand } from '../../../src/shared/menuContracts';
 
 import { capabilitiesOf, classifyConsole, expectEqual, expectTrue, STAFF_NOTE_COUNT, UTF8_SOURCE, verdict } from './context';
 import type { CapabilityView, SmokeContext } from './context';
@@ -14,6 +22,9 @@ import type { IsolatedCase } from './casesIsolated';
 import { pageCondition, productionWindow } from './casesSecurity';
 import { deferred, delay, waitFor } from './harness';
 import { isRecord } from './replies';
+import type { RejectFault } from './ipcFaults';
+import { diskFacts, saveDir, scoreFile } from './casesSave';
+import { editorWindow, focusSource, pressKey, readEditor, waitEditor, waitPage } from './casesEditingInput';
 import type { SmokeWindow } from './windows';
 
 interface UiDoc {
@@ -114,7 +125,7 @@ const uiOpenCommit: IsolatedCase = {
     problems.push(...sameDocumentProblems(ctx, window, second, 'second open'));
     expectTrue(problems, 'previous capability still authorized after the replacement', !authorized(ctx, window, firstToken));
     const surface = await window.call(`({ bridge: Object.keys(window.museDesktop).sort(), require: typeof window.require, process: typeof window.process })`);
-    expectEqual(problems, 'bridge surface', surface.ok ? surface.value : surface.error, { bridge: ['activateDocument', 'onMenuCommand', 'openDocument', 'rejectDocument'], require: 'undefined', process: 'undefined' }); // M3 T3b：onMenuCommand（用户授权）
+    expectEqual(problems, 'bridge surface', surface.ok ? surface.value : surface.error, { bridge: ['activateDocument', 'onMenuCommand', 'openDocument', 'rejectDocument', 'requestSaveTarget', 'saveDocument'], require: 'undefined', process: 'undefined' }); // M3 T3b：onMenuCommand（用户授权）
     expectEqual(problems, 'no window-security blocks during normal use', ctx.security.events(window.ownerId), []);
     expectEqual(problems, 'unexpected console errors', classifyConsole(consoleEntries, []).unexpected, []);
     return verdict(problems, { first: first?.documentId, second: second?.documentId });
@@ -279,6 +290,666 @@ const uiActivationUnresolved: IsolatedCase = {
   },
 };
 
+/** 编辑器状态栏上的提示（产品数据属性 `data-editor-notice`）。 */
+async function editorNotice(window: SmokeWindow): Promise<string | null> {
+  const result = await window.call(`(() => document.querySelector('.editor-status')?.getAttribute('data-editor-notice') ?? null)()`, 2_000);
+  return result.ok && typeof result.value === 'string' && result.value !== '' ? result.value : null;
+}
+
+async function waitNotice(window: SmokeWindow, kind: string, timeoutMs: number): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if ((await editorNotice(window)) === kind) return true;
+    await delay(100);
+  }
+  return false;
+}
+
+/**
+ * M3 T4 B3a-1（只覆盖 **Open 部分**；Save / Save As 部分属 B3a-2，不在此验收）：激活应答三次全部丢失 → 事务不确定，
+ * renderer 经产品账本发 reject，reject 按 `fault` 丢失 → 下一次 Open 被送达门拒绝（不弹对话框、不调用选择器）→ 故障解除后
+ * 送达门重发 reject、送达，Open 进入对话框并正常提交。
+ * - `swallow`：main 未处理 reject，候选 Y 仍是 active（T-H7-7 Open 部分）。
+ * - `hold`：main 已处理 reject（候选已吊销），但 renderer 收不到确认，仍必须拒绝（T-H7-8 Open 部分，M65）。
+ */
+async function openWithLostReject(ctx: SmokeContext, fault: Exclude<RejectFault, 'none'>): Promise<{ problems: string[]; detail: Record<string, unknown> }> {
+  const { window } = await productionWindow(ctx);
+  const problems: string[] = [];
+  const opened = await openViaUi(ctx, window, ctx.fixtures.utf8);
+  expectTrue(problems, 'X opened', opened !== null);
+  ctx.faults.reset();
+  ctx.faults.holdNextActivations(3);
+  ctx.faults.setRejectFault(fault);
+  ctx.chooser.enqueue({ kind: 'path', path: ctx.fixtures.second });
+  await clickOpen(window);
+  const unresolved = await waitUi(window, (doc) => doc.phase === 'idle' && doc.notice === 'activation-unresolved', 22_000);
+  expectEqual(problems, 'unresolved: old session kept', unresolved === null ? null : [unresolved.documentId, unresolved.trust], [opened?.documentId, 'unverified']);
+  const lost = [...ctx.faults.rejectRecords()];
+  expectTrue(problems, `${fault}: the renderer sent the reject`, lost.length > 0);
+  expectEqual(problems, `${fault}: every reject so far hit the fault`, lost.map((r) => [r.fault, r.executed]), lost.map(() => [fault, fault === 'hold']));
+  // swallow：main 未处理 reject，候选仍 active；hold：main 已处理，候选已吊销（两种模式可区分）。
+  expectEqual(problems, `${fault}: main active capabilities after the lost reject`, active(ctx, window).length, fault === 'swallow' ? 1 : 0);
+
+  // 等首次 reject 尝试超时（产品账本单次 5 s）：之后的送达门必须在故障下重发，而不是复用进行中的尝试（R-3）。
+  await delay(6_000);
+  // 送达门：下一次 Open 不进入对话框（不调用选择器、无原生对话框），给出未送达提示，会话不变。
+  const chooserCalls = ctx.chooser.calls.length;
+  expectEqual(problems, 'refused Open: click', await clickOpen(window), 'clicked');
+  expectTrue(problems, 'refused Open: reject-pending notice', await waitNotice(window, 'open-refused-reject-pending', 15_000));
+  expectEqual(problems, 'refused Open: chooser not called', ctx.chooser.calls.length, chooserCalls);
+  expectEqual(problems, 'refused Open: no native dialog', ctx.openIpc.pendingNativeDialogs(), 0);
+  const refused = await readUi(window);
+  expectEqual(problems, 'refused Open: session unchanged', refused === null ? null : [refused.documentId, refused.phase], [opened?.documentId, 'idle']);
+  const resent = ctx.faults.rejectRecords().length;
+  const gateResent = ctx.faults.rejectRecords().slice(lost.length);
+  expectTrue(problems, 'refused Open: the gate re-sent the reject under the fault', gateResent.length > 0 && gateResent.every((r) => r.fault === fault && r.executed === (fault === 'hold')));
+  expectEqual(problems, `${fault}: main state unchanged by the refused Open`, active(ctx, window).length, fault === 'swallow' ? 1 : 0);
+
+  // 恢复：故障解除 → 送达门重发并送达（main 的 reject 幂等）→ Open 进入对话框并提交。
+  ctx.faults.setRejectFault('none');
+  const reopened = await openViaUi(ctx, window, ctx.fixtures.utf8);
+  const delivered = ctx.faults.rejectRecords().slice(resent);
+  expectTrue(problems, 'recovery: reject delivered without fault', delivered.length > 0 && delivered.every((r) => r.fault === 'none' && r.executed));
+  expectEqual(problems, 'recovery: chooser called once', ctx.chooser.calls.length, chooserCalls + 1);
+  problems.push(...sameDocumentProblems(ctx, window, reopened, 'recovery'));
+  return { problems, detail: { fault, lostRejects: lost.length, resentRejects: resent - lost.length, deliveredRejects: delivered.length } };
+}
+
+const uiOpenActivationLostLedger: IsolatedCase = {
+  id: 'ui.open-activation-lost-ledger',
+  realDialog: false,
+  timeoutMs: 60_000,
+  run: async (ctx) => {
+    const { problems, detail } = await openWithLostReject(ctx, 'swallow');
+    return verdict(problems, detail);
+  },
+};
+
+const uiOpenRejectGate: IsolatedCase = {
+  id: 'ui.open-reject-gate',
+  realDialog: false,
+  timeoutMs: 60_000,
+  run: async (ctx) => {
+    const { problems, detail } = await openWithLostReject(ctx, 'hold');
+    return verdict(problems, detail);
+  },
+};
+
+
+// ———— M3 T4 B3a-2：生产 renderer 的保存用例（菜单 Save / Save As → 生产 preload → main 两阶段保存 IPC → 激活 → store）。
+// 页面状态只从 DOM 读取（状态栏、文件状态区、保存诊断区的产品数据属性），磁盘事实只在本次运行的隔离目录中读取。
+
+export interface SaveUiDoc {
+  readonly message: string | null;
+  /** 失败提示的错误码（`data-save-code`）。 */
+  readonly code: string | null;
+  readonly documentId: number;
+  readonly trust: string;
+  readonly name: string;
+}
+
+const READ_SAVE = `(() => {
+  const status = document.querySelector('.file-status');
+  if (status === null) return null;
+  const diag = document.querySelector('.save-diagnostics');
+  return {
+    message: diag === null ? null : diag.getAttribute('data-save-message'),
+    code: diag === null ? null : diag.getAttribute('data-save-code'),
+    documentId: Number(status.getAttribute('data-document-id')),
+    trust: status.getAttribute('data-capability-trust'),
+    name: status.querySelector('span')?.textContent ?? '',
+  };
+})()`;
+
+export async function readSave(window: SmokeWindow): Promise<SaveUiDoc | null> {
+  const result = await window.call(READ_SAVE, 2_000);
+  if (!result.ok || !isRecord(result.value)) return null;
+  const v = result.value;
+  return { message: typeof v.message === 'string' ? v.message : null, code: typeof v.code === 'string' ? v.code : null, documentId: Number(v.documentId), trust: String(v.trust), name: String(v.name) };
+}
+
+/** 等保存诊断区出现某种提示；超时返回最后一次读取（调用方断言随之失败）。 */
+export async function waitSave(window: SmokeWindow, kind: string, timeoutMs: number): Promise<SaveUiDoc | null> {
+  const deadline = Date.now() + timeoutMs;
+  let last: SaveUiDoc | null = null;
+  while (Date.now() < deadline) {
+    last = await readSave(window);
+    if (last?.message === kind) return last;
+    await delay(100);
+  }
+  return last;
+}
+
+/** 清空保存诊断区（点击产品的「知道了」）。 */
+export async function dismissSave(window: SmokeWindow): Promise<void> {
+  await window.call(`(() => { document.querySelector('.save-diagnostics button')?.click(); return true; })()`);
+  await delay(100);
+}
+
+/** 点击产品菜单项（菜单点击路径，不是加速键）。 */
+export function clickMenu(command: MenuCommand, win: BrowserWindow): boolean {
+  const item = Menu.getApplicationMenu()?.getMenuItemById(MENU_ITEM_IDS[command]) ?? null;
+  if (item === null) return false;
+  const click = item.click as unknown as (event: unknown, focusedWindow?: BrowserWindow, focusedWebContents?: Electron.WebContents) => void;
+  click({ triggeredByAccelerator: false }, win, win.webContents);
+  return true;
+}
+
+/** 在源码末尾输入文本（产品输入路径：聚焦源码面板后 insertText）。 */
+export async function typeAtEnd(window: SmokeWindow, text: string): Promise<boolean> {
+  const doc = await readEditor(window);
+  if (doc === null || !(await focusSource(window, doc.value.length))) return false;
+  await window.win.webContents.insertText(text);
+  return (await waitEditor(window, (next) => next.sourceVersion > doc.sourceVersion && next.value.endsWith(text))) !== null;
+}
+
+/** 经菜单 Open 打开 path 并等待文档号改变。 */
+export async function openViaMenu(ctx: SmokeContext, window: SmokeWindow, path: string): Promise<SaveUiDoc | null> {
+  const before = await readSave(window);
+  ctx.chooser.enqueue({ kind: 'path', path });
+  if (!clickMenu('open', window.win)) return null;
+  const deadline = Date.now() + 8_000;
+  while (Date.now() < deadline) {
+    const doc = await readSave(window);
+    if (doc !== null && before !== null && doc.documentId !== before.documentId && doc.trust === 'trusted') return doc;
+    await delay(100);
+  }
+  return null;
+}
+
+/** 可编辑的生产窗口 + 打开隔离目录中的一份文件 X。 */
+export async function editableFile(ctx: SmokeContext, name = 'x.jcx') {
+  const { window, ready } = await editorWindow(ctx, true);
+  const dir = await saveDir(ctx);
+  const path = await scoreFile(dir, name);
+  const opened = await openViaMenu(ctx, window, path);
+  return { window, dir, path, ready: ready && opened !== null, opened };
+}
+
+const PRIMARY: 'meta' | 'control' = process.platform === 'darwin' ? 'meta' : 'control';
+
+/**
+ * 合成的 Cmd/Ctrl+S（`sendInputEvent`）是否到达原生菜单加速键，按平台钉死而不在运行时观察：Linux 到达（PR #5 CI 实测，派发一次
+ * `save:menu-accelerator`）；macOS 不到达（T3 SP-KEY-P），Windows 不到达（PR #5 CI 实测）。
+ */
+const SYNTHETIC_KEY_REACHES_NATIVE_ACCELERATOR = process.platform === 'linux';
+
+/**
+ * M27：一次 Cmd/Ctrl+S 只派发一次、只写一次。S 键不经 before-input-event 派发（任何平台都没有 key-intercept）。
+ * Linux：合成按键经原生菜单加速键派发一次，不再兜底（`native-accelerator`）；macOS / Windows：合成按键零派发，再由测试显式调用
+ * 生产加速键路由兜底一次（`test-fallback`，不是原生菜单交互）。
+ */
+const uiSaveMenuOnce: IsolatedCase = {
+  id: 'ui.save-menu-once',
+  realDialog: false,
+  timeoutMs: 30_000,
+  run: async (ctx) => {
+    const problems: string[] = [];
+    const x = await editableFile(ctx);
+    expectTrue(problems, 'editable window with X opened', x.ready);
+    expectTrue(problems, 'typed', await typeAtEnd(x.window, 'a'));
+    const before = ctx.menuCommands.all().length;
+    const writesBefore = ctx.writeGate.calls('openExclusive');
+    pressKey(x.window, 'S', [PRIMARY]);
+    await delay(400);
+    const keySends = ctx.menuCommands.all().slice(before).map((r) => `${r.message.command}:${r.message.source}`);
+    expectEqual(problems, 'S keyDown is not intercepted', keySends.filter((send) => send.endsWith(':key-intercept')), []);
+    const route = SYNTHETIC_KEY_REACHES_NATIVE_ACCELERATOR ? 'native-accelerator' : 'test-fallback';
+    if (SYNTHETIC_KEY_REACHES_NATIVE_ACCELERATOR) {
+      expectEqual(problems, 'native accelerator dispatched once', keySends, ['save:menu-accelerator']);
+    } else {
+      expectEqual(problems, 'synthetic key reaches no native accelerator', keySends, []);
+      // 测试兜底：显式调用生产加速键路由（不是原生菜单交互），一次。
+      expectEqual(problems, 'test fallback accelerator routed', ctx.editorCommands.handleMenuCommand('save', x.window.win, { triggeredByAccelerator: true }), 'dispatched');
+    }
+    const saved = await waitSave(x.window, 'saved', 8_000);
+    expectEqual(problems, 'saved', saved?.message, 'saved');
+    await delay(500);
+    const sends = ctx.menuCommands.all().slice(before).map((r) => `${r.message.command}:${r.message.source}`);
+    expectEqual(problems, 'exactly one save dispatch', sends, ['save:menu-accelerator']);
+    const doc = await readEditor(x.window);
+    expectEqual(problems, 'clean after save', doc?.dirty, false);
+    expectEqual(problems, 'disk equals the saved source', await readFile(x.path, 'utf8'), doc?.value);
+    expectEqual(problems, 'still saved (no second save / busy)', (await readSave(x.window))?.message, 'saved');
+    expectEqual(problems, 'exactly one disk write (openExclusive)', ctx.writeGate.calls('openExclusive') - writesBefore, 1);
+    return verdict(problems, { route });
+  },
+};
+
+/** M18：保存进行中继续输入 → 检查点取捕获值，完成后仍 dirty；磁盘内容是捕获值。 */
+const uiSaveWhileTyping: IsolatedCase = {
+  id: 'ui.save-while-typing',
+  realDialog: false,
+  timeoutMs: 30_000,
+  run: async (ctx) => {
+    const problems: string[] = [];
+    const x = await editableFile(ctx);
+    expectTrue(problems, 'editable window with X opened', x.ready);
+    expectTrue(problems, 'typed a', await typeAtEnd(x.window, 'a'));
+    const captured = (await readEditor(x.window))?.value ?? '';
+    const gate = ctx.writeGate.holdNext('openExclusive');
+    expectTrue(problems, 'save menu clicked', clickMenu('save', x.window.win));
+    await gate.reached;
+    expectTrue(problems, 'typed b while saving', await typeAtEnd(x.window, 'b'));
+    gate.release();
+    const saved = await waitSave(x.window, 'saved', 8_000);
+    expectEqual(problems, 'saved', saved?.message, 'saved');
+    const doc = await readEditor(x.window);
+    expectEqual(problems, 'disk holds the captured source', await readFile(x.path, 'utf8'), captured);
+    expectEqual(problems, 'still dirty after save (M18)', doc?.dirty, true);
+    expectTrue(problems, 'renderer kept the later input', doc?.value.endsWith('ab') === true);
+    return verdict(problems);
+  },
+};
+
+/** demo → Save As → 激活 → 文件状态切换为新文件（trusted）、clean；磁盘内容为 source。 */
+const uiSaveAsCommit: IsolatedCase = {
+  id: 'ui.save-as-commit',
+  realDialog: false,
+  timeoutMs: 30_000,
+  run: async (ctx) => {
+    const problems: string[] = [];
+    const { window, ready } = await editorWindow(ctx, true);
+    expectTrue(problems, 'editable window', ready);
+    const demo = await readSave(window);
+    expectEqual(problems, 'demo session', demo === null ? null : [demo.trust], ['none']);
+    expectTrue(problems, 'typed', await typeAtEnd(window, 'z'));
+    const dir = await saveDir(ctx);
+    const target = join(dir, 'new.jcx');
+    ctx.saveChooser.enqueue({ kind: 'path', path: target });
+    expectTrue(problems, 'save as clicked', clickMenu('saveAs', window.win));
+    const saved = await waitSave(window, 'saved-as', 15_000);
+    expectEqual(problems, 'saved-as', saved?.message, 'saved-as');
+    expectEqual(problems, 'switched to the new file', saved === null ? null : [saved.documentId, saved.trust, saved.name], [demo?.documentId, 'trusted', 'new.jcx']);
+    const doc = await readEditor(window);
+    expectEqual(problems, 'clean after save as', doc?.dirty, false);
+    expectEqual(problems, 'disk equals the source', await readFile(target, 'utf8'), doc?.value);
+    expectEqual(problems, 'save dialog used once', ctx.saveChooser.calls.length, 1);
+    // 再按一次 Save：已有文件 → 普通 Save；clean → 短路（R7），不再弹对话框。
+    expectTrue(problems, 'save clicked', clickMenu('save', window.win));
+    expectEqual(problems, 'R7 after save as', (await waitSave(window, 'nothing-to-save', 5_000))?.message, 'nothing-to-save');
+    expectEqual(problems, 'no second dialog', ctx.saveChooser.calls.length, 1);
+    return verdict(problems, { sha256: (await diskFacts(target)).sha256.slice(0, 12) });
+  },
+};
+
+/**
+ * M3 T4 B3a-2，T-H7-2（端到端，保存部分）：demo Save As 写入 X 后激活应答三次全部丢失，renderer 经账本发 reject 也被吞没
+ * （main 未处理，候选 X 仍 active）→ 下一次 Save As 被送达门拒绝：不弹对话框、X 的字节与身份不变 → 故障解除后送达门重发 reject、
+ * 送达，Save As 选 X 进入对话框并切换（X 已存在，走已存在目标管线）。
+ */
+const uiSaveAsActivationLost: IsolatedCase = {
+  id: 'ui.save-as-activation-lost',
+  realDialog: false,
+  timeoutMs: 75_000,
+  run: async (ctx) => {
+    const problems: string[] = [];
+    const { window, ready } = await editorWindow(ctx, true);
+    expectTrue(problems, 'editable window', ready);
+    expectTrue(problems, 'typed', await typeAtEnd(window, 'z'));
+    const x = `${await saveDir(ctx)}/x.jcx`;
+    ctx.faults.reset();
+    ctx.faults.holdNextActivations(3);
+    ctx.faults.setRejectFault('swallow');
+    ctx.saveChooser.enqueue({ kind: 'path', path: x });
+    expectTrue(problems, 'save as clicked', clickMenu('saveAs', window.win));
+    const lost = await waitSave(window, 'save-as-not-switched', 25_000);
+    expectEqual(problems, 'not switched: demo kept (H-5: trust none)', lost === null ? null : [lost.message, lost.trust], ['save-as-not-switched', 'none']);
+    expectEqual(problems, 'reject swallowed: main kept the candidate active', active(ctx, window).length, 1);
+    const xFacts = await diskFacts(x);
+    await dismissSave(window);
+    await delay(6_000);
+    const dialogs = ctx.saveChooser.calls.length;
+    expectTrue(problems, 'save as clicked again', clickMenu('saveAs', window.win));
+    expectEqual(problems, 'gate refused the second Save As', (await waitSave(window, 'reject-pending', 15_000))?.message, 'reject-pending');
+    expectEqual(problems, 'no save dialog', ctx.saveChooser.calls.length, dialogs);
+    expectEqual(problems, 'X untouched', await diskFacts(x), xFacts);
+    const records = ctx.faults.rejectRecords();
+    expectTrue(problems, 'gate re-sent the reject under the fault', records.length >= 2 && records.every((r) => r.fault === 'swallow' && !r.executed));
+    // 恢复：送达门重发并送达 → Save As 选 X → 切换。
+    ctx.faults.setRejectFault('none');
+    await dismissSave(window);
+    ctx.saveChooser.enqueue({ kind: 'path', path: x });
+    expectTrue(problems, 'save as clicked to recover', clickMenu('saveAs', window.win));
+    const switched = await waitSave(window, 'saved-as', 20_000);
+    expectEqual(problems, 'recovered: switched to X', switched === null ? null : [switched.message, switched.trust, switched.name], ['saved-as', 'trusted', 'x.jcx']);
+    expectTrue(problems, 'reject delivered on recovery', ctx.faults.rejectRecords().some((r) => r.fault === 'none' && r.executed));
+    return verdict(problems, { rejects: ctx.faults.rejectRecords().length });
+  },
+};
+
+/**
+ * M3 T4 B3a-2，T-H7-8（M65）与 T-H7-7（保存部分）：已打开 X，Open Y 的激活应答三次丢失 → reject 已由 main 处理但应答被扣留（hold）。
+ * 之后 Save 与 Save As 都被送达门拒绝：不弹对话框、不写盘。故障解除后：普通 Save 经送达门送达 reject 后由 main 拒绝
+ * （X 的能力已不再授权：capability-invalid），Save As 到新文件成功。
+ */
+const uiSaveRejectGate: IsolatedCase = {
+  id: 'ui.save-reject-gate',
+  realDialog: false,
+  timeoutMs: 75_000,
+  run: async (ctx) => {
+    const problems: string[] = [];
+    const x = await editableFile(ctx);
+    expectTrue(problems, 'X opened in an editable window', x.ready);
+    ctx.faults.reset();
+    ctx.faults.holdNextActivations(3);
+    ctx.faults.setRejectFault('hold');
+    ctx.chooser.enqueue({ kind: 'path', path: ctx.fixtures.second });
+    expectTrue(problems, 'open clicked', clickMenu('open', x.window.win));
+    const unresolved = await waitUi(x.window, (doc) => doc.phase === 'idle' && doc.notice === 'activation-unresolved', 25_000);
+    expectEqual(problems, 'open unresolved: X kept and downgraded', unresolved === null ? null : [unresolved.name, unresolved.trust], [x.opened?.name, 'unverified']);
+    expectTrue(problems, 'typed', await typeAtEnd(x.window, 'q'));
+    const xFacts = await diskFacts(x.path);
+    await delay(6_000);
+    const dialogs = ctx.saveChooser.calls.length;
+    for (const command of ['save', 'saveAs'] as const) {
+      await dismissSave(x.window);
+      expectTrue(problems, `${command} clicked`, clickMenu(command, x.window.win));
+      expectEqual(problems, `${command}: gate refused`, (await waitSave(x.window, 'reject-pending', 15_000))?.message, 'reject-pending');
+    }
+    expectEqual(problems, 'no save dialog', ctx.saveChooser.calls.length, dialogs);
+    expectEqual(problems, 'X untouched', await diskFacts(x.path), xFacts);
+    expectTrue(problems, 'held rejects were executed by main', ctx.faults.rejectRecords().every((r) => r.fault === 'hold' && r.executed));
+    // 恢复：Save → 送达门送达 → main 拒绝（X 的能力已不再授权）；Save As 到新文件成功。
+    ctx.faults.setRejectFault('none');
+    await dismissSave(x.window);
+    expectTrue(problems, 'save clicked to recover', clickMenu('save', x.window.win));
+    const refused = await waitSave(x.window, 'failed', 15_000);
+    expectEqual(problems, 'T-H7-7: plain Save refused by main', refused === null ? null : [refused.message, refused.code], ['failed', 'capability-invalid']);
+    expectEqual(problems, 'X still untouched', await diskFacts(x.path), xFacts);
+    await dismissSave(x.window);
+    const target = `${x.dir}/recovered.jcx`;
+    ctx.saveChooser.enqueue({ kind: 'path', path: target });
+    expectTrue(problems, 'save as clicked to recover', clickMenu('saveAs', x.window.win));
+    const switched = await waitSave(x.window, 'saved-as', 20_000);
+    expectEqual(problems, 'recovered by Save As', switched === null ? null : [switched.message, switched.trust, switched.name], ['saved-as', 'trusted', 'recovered.jcx']);
+    expectEqual(problems, 'final save message readable', (await readSave(x.window))?.message, 'saved-as');
+    return verdict(problems, { rejects: ctx.faults.rejectRecords().length });
+  },
+};
+
+// ———— M3 T4 B3b：替换守卫（dirty 的 Open 询问保存 / 不保存 / 取消；三分支各一个独立子进程）。
+
+const guardPhase = (phase: 'asking' | 'saving'): string => `document.querySelector('.replacement-guard')?.getAttribute('data-guard-phase') === '${phase}'`;
+/**
+ * B4 UI 定点修复：面板**新出现**（idle → asking）后，等到初始焦点落在「取消」。聚焦与 Esc 监听都在 passive effect 中执行，
+ * 晚于 DOM 提交；只等 `data-guard-phase` 会与它们竞争（对照复跑中出现过：测试先把焦点放进编辑区，随后被初始聚焦移走）。
+ */
+const guardAskingFocused = `${guardPhase('asking')} && document.activeElement?.getAttribute('data-guard-choice') === 'cancel'`;
+
+/**
+ * M3 T4 B4 UI 定点修复（B4 方案 r0.2 §2）：真实 Chromium DOM 的可见性读数。`hits` = 元素有面积、中心在视口内且
+ * `elementFromPoint` 命中自身（没有被其它元素遮挡）；`overlaps` = 两个元素的矩形相交。
+ */
+const DOM_HELPERS = `const hits = (el) => { if (!el) return false; const r = el.getBoundingClientRect(); if (r.width <= 0 || r.height <= 0) return false;
+  const x = r.left + r.width / 2; const y = r.top + r.height / 2; if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) return false;
+  const at = document.elementFromPoint(x, y); return at !== null && (at === el || el.contains(at)); };
+  const overlaps = (a, b) => { if (!a || !b) return null; const r = a.getBoundingClientRect(); const s = b.getBoundingClientRect();
+  return r.left < s.right && s.left < r.right && r.top < s.bottom && s.top < r.bottom; };`;
+
+/** 守卫面板：语义、问句与三个按钮是否可见且未被遮挡、是否与保存入口 / 主工作区重叠、当前焦点（数据属性或类名）。 */
+const READ_GUARD_DOM = `(() => { ${DOM_HELPERS}
+  const panel = document.querySelector('.replacement-guard'); if (panel === null) return null;
+  const active = document.activeElement;
+  return {
+    ariaModal: panel.getAttribute('aria-modal'),
+    messageVisible: hits(panel.querySelector('#replacement-guard-message')),
+    buttonsVisible: [...panel.querySelectorAll('[data-guard-choice]')].map((b) => [b.getAttribute('data-guard-choice'), hits(b)]),
+    overlapsEntry: overlaps(panel, document.querySelector('.save-entry')),
+    overlapsGrid: overlaps(panel, document.querySelector('.app-grid')),
+    focus: active?.getAttribute('data-guard-choice') ?? (active === document.body ? 'body' : active?.className ?? null),
+  };
+})()`;
+
+/** 当前焦点：守卫按钮给出选择，源码面板给出 source-editor，其余给出类名（body 为 body）。 */
+const READ_FOCUS = `(() => { const a = document.activeElement; if (a === null || a === document.body) return 'body';
+  if (a.classList.contains('source-editor')) return 'source-editor'; return a.getAttribute('data-guard-choice') ?? a.className; })()`;
+
+async function readDom(window: SmokeWindow, expression: string): Promise<unknown> {
+  const result = await window.call(expression);
+  return result.ok ? result.value : `error: ${String(result.error)}`;
+}
+
+const GUARD_VISIBLE = {
+  ariaModal: null,
+  messageVisible: true,
+  buttonsVisible: [['save', true], ['discard', true], ['cancel', true]],
+  overlapsEntry: false,
+  overlapsGrid: false,
+  focus: 'cancel',
+};
+
+async function chooseGuard(window: SmokeWindow, choice: 'save' | 'discard' | 'cancel'): Promise<boolean> {
+  const result = await window.call(`(() => { const b = document.querySelector('[data-guard-choice="${choice}"]'); if (b === null || b.disabled) return false; b.click(); return true; })()`);
+  return result.ok && result.value === true;
+}
+
+/** 已打开 X、输入使其 dirty，经菜单 Open 弹出守卫询问（不调用选择器）。 */
+async function dirtyOpenAsks(ctx: SmokeContext, problems: string[]) {
+  const x = await editableFile(ctx);
+  expectTrue(problems, 'X opened in an editable window', x.ready);
+  expectTrue(problems, 'typed', await typeAtEnd(x.window, 'g'));
+  const typed = (await readEditor(x.window))?.value ?? '';
+  const xFacts = await diskFacts(x.path);
+  const chooserCalls = ctx.chooser.calls.length;
+  expectTrue(problems, 'open clicked', clickMenu('open', x.window.win));
+  expectTrue(problems, 'guard asks (focus on cancel)', await waitPage(x.window, guardAskingFocused, 5_000));
+  expectEqual(problems, 'no chooser while asking', ctx.chooser.calls.length, chooserCalls);
+  // B4 UI 定点修复（r0.2 §2 G-M1 / G-M2 / G-M4）：非模态、清晰可见、不与保存入口 / 主工作区重叠，焦点在安全默认的「取消」。
+  expectEqual(problems, 'guard panel visible, unobstructed, focus on cancel', await readDom(x.window, READ_GUARD_DOM), GUARD_VISIBLE);
+  return { ...x, typed, xFacts, chooserCalls };
+}
+
+const uiGuardOpenSave: IsolatedCase = {
+  id: 'ui.guard-open-save',
+  realDialog: false,
+  timeoutMs: 40_000,
+  run: async (ctx) => {
+    const problems: string[] = [];
+    const x = await dirtyOpenAsks(ctx, problems);
+    // G6 / G-M7：询问期间回到编辑区继续输入（焦点离开面板），守卫仍在询问；保存的应是最新源码（版本重新校验）。
+    expectTrue(problems, 'typed while asking', await typeAtEnd(x.window, 'h'));
+    expectTrue(problems, 'still asking after typing', await waitPage(x.window, guardPhase('asking'), 1_000));
+    const latest = (await readEditor(x.window))?.value ?? '';
+    ctx.chooser.enqueue({ kind: 'path', path: ctx.fixtures.second });
+    const gate = ctx.writeGate.holdNext('openExclusive');
+    expectTrue(problems, 'save chosen', await chooseGuard(x.window, 'save'));
+    await gate.reached;
+    expectTrue(problems, 'guard saving', await waitPage(x.window, guardPhase('saving'), 3_000));
+    // G-M5 (b)：saving 阶段的 Esc 不取消进行中的保存。
+    pressKey(x.window, 'Escape');
+    await delay(300);
+    expectTrue(problems, 'Esc ignored while saving', await waitPage(x.window, guardPhase('saving'), 1_000));
+    // G6 + G-M4：保存进行中继续输入 → 保存的是捕获值，结束后仍未 clean → 守卫重新询问；焦点留在编辑区，不被抢回「取消」。
+    expectTrue(problems, 'typed while saving', await typeAtEnd(x.window, 'm'));
+    gate.release();
+    expectTrue(problems, 'asks again after an unclean save', await waitPage(x.window, guardPhase('asking'), 8_000));
+    // keep 分支不移动焦点，无法等待它生效；给 passive effect 留出稳定期，再确认焦点没被抢走。
+    await delay(300);
+    expectEqual(problems, 'focus stays in the editor when asked again', await readDom(x.window, READ_FOCUS), 'source-editor');
+    const latestAfterResave = (await readEditor(x.window))?.value ?? '';
+    expectTrue(problems, 'save chosen again', await chooseGuard(x.window, 'save'));
+    // 先保存（复用 Open 的租约），保存成功且 clean 之后才进入 Open 的对话框并替换。
+    const replaced = await waitUi(x.window, (doc) => doc.phase === 'idle' && doc.documentId !== x.opened?.documentId && doc.trust === 'trusted', 15_000);
+    expectTrue(problems, 'replaced by the chosen file after saving', replaced !== null && replaced.documentId !== x.opened?.documentId);
+    expectEqual(problems, 'X on disk holds the latest source (typed while asking and while saving)', await readFile(x.path, 'utf8'), latestAfterResave);
+    expectEqual(problems, 'typing while asking and while saving both kept', [latest === `${x.typed}h`, latestAfterResave === `${x.typed}hm`], [true, true]);
+    expectEqual(problems, 'chooser called once (after the save)', ctx.chooser.calls.length, x.chooserCalls + 1);
+    expectTrue(problems, 'guard closed', await waitPage(x.window, `document.querySelector('.replacement-guard') === null`, 3_000));
+    problems.push(...sameDocumentProblems(ctx, x.window, replaced, 'after guard save'));
+    return verdict(problems);
+  },
+};
+
+const uiGuardOpenDiscard: IsolatedCase = {
+  id: 'ui.guard-open-discard',
+  realDialog: false,
+  timeoutMs: 40_000,
+  run: async (ctx) => {
+    const problems: string[] = [];
+    const x = await dirtyOpenAsks(ctx, problems);
+    ctx.chooser.enqueue({ kind: 'path', path: ctx.fixtures.second });
+    expectTrue(problems, 'discard chosen', await chooseGuard(x.window, 'discard'));
+    // G-M8 (d)：选「不保存」后 Open 事务继续，焦点不归还编辑区（由 Open 的对话框接管）。
+    expectTrue(problems, 'guard closed after discard', await waitPage(x.window, `document.querySelector('.replacement-guard') === null`, 3_000));
+    expectTrue(problems, 'focus not restored to the editor after discard', (await readDom(x.window, READ_FOCUS)) !== 'source-editor');
+    const replaced = await waitUi(x.window, (doc) => doc.phase === 'idle' && doc.documentId !== x.opened?.documentId && doc.trust === 'trusted', 15_000);
+    expectTrue(problems, 'replaced without saving', replaced !== null && replaced.documentId !== x.opened?.documentId);
+    expectEqual(problems, 'X untouched on disk', await diskFacts(x.path), x.xFacts);
+    expectEqual(problems, 'no save dialog', ctx.saveChooser.calls.length, 0);
+    problems.push(...sameDocumentProblems(ctx, x.window, replaced, 'after guard discard'));
+    return verdict(problems);
+  },
+};
+
+const uiGuardOpenCancel: IsolatedCase = {
+  id: 'ui.guard-open-cancel',
+  realDialog: false,
+  timeoutMs: 30_000,
+  run: async (ctx) => {
+    const problems: string[] = [];
+    const x = await dirtyOpenAsks(ctx, problems);
+    expectTrue(problems, 'cancel chosen', await chooseGuard(x.window, 'cancel'));
+    expectTrue(problems, 'guard closed', await waitPage(x.window, `document.querySelector('.replacement-guard') === null`, 3_000));
+    // G-M8 (a)：以取消结束、焦点仍在面板内 → 归还打开面板前的焦点（源码面板）。
+    expectEqual(problems, 'focus restored to the source editor', await readDom(x.window, READ_FOCUS), 'source-editor');
+    const kept = await readUi(x.window);
+    expectEqual(problems, 'document kept', kept === null ? null : [kept.documentId, kept.phase], [x.opened?.documentId, 'idle']);
+    expectEqual(problems, 'still dirty', (await readEditor(x.window))?.dirty, true);
+    expectEqual(problems, 'chooser not called', ctx.chooser.calls.length, x.chooserCalls);
+    expectEqual(problems, 'X untouched on disk', await diskFacts(x.path), x.xFacts);
+    // 取消后租约已释放：再次 Open 仍会询问。
+    expectTrue(problems, 'open clicked again', clickMenu('open', x.window.win));
+    expectTrue(problems, 'guard asks again (focus on cancel)', await waitPage(x.window, guardAskingFocused, 5_000));
+    // G-M5 (a)：询问阶段的 Esc 等同取消，修改不丢失，焦点归还源码面板。
+    expectEqual(problems, 'focus on cancel when asked again', await readDom(x.window, READ_FOCUS), 'cancel');
+    pressKey(x.window, 'Escape');
+    expectTrue(problems, 'Esc cancels', await waitPage(x.window, `document.querySelector('.replacement-guard') === null`, 3_000));
+    expectEqual(problems, 'still dirty after Esc', (await readEditor(x.window))?.dirty, true);
+    expectEqual(problems, 'focus restored after Esc', await readDom(x.window, READ_FOCUS), 'source-editor');
+    // G-M8 (b)：用户把焦点移到面板之外（这里是「重新解析」按钮）后再 Esc：取消，但不覆盖用户的焦点。
+    expectTrue(problems, 'open clicked a third time', clickMenu('open', x.window.win));
+    expectTrue(problems, 'guard asks a third time (focus on cancel)', await waitPage(x.window, guardAskingFocused, 5_000));
+    await x.window.call(`(document.querySelector('.editor-status-reparse')?.focus(), true)`);
+    expectEqual(problems, 'focus moved out of the panel', await readDom(x.window, READ_FOCUS), 'secondary editor-status-reparse');
+    pressKey(x.window, 'Escape');
+    expectTrue(problems, 'Esc cancels from outside the panel', await waitPage(x.window, `document.querySelector('.replacement-guard') === null`, 3_000));
+    expectEqual(problems, 'user focus not overwritten', await readDom(x.window, READ_FOCUS), 'secondary editor-status-reparse');
+    // G6 + G-M4：询问期间回到编辑区继续输入，Esc 仍取消；输入保留，焦点留在编辑区。
+    expectTrue(problems, 'open clicked a fourth time', clickMenu('open', x.window.win));
+    expectTrue(problems, 'guard asks a fourth time (focus on cancel)', await waitPage(x.window, guardAskingFocused, 5_000));
+    expectTrue(problems, 'typed while asking', await typeAtEnd(x.window, 'k'));
+    expectTrue(problems, 'still asking after typing', await waitPage(x.window, guardPhase('asking'), 1_000));
+    pressKey(x.window, 'Escape');
+    expectTrue(problems, 'Esc cancels while editing', await waitPage(x.window, `document.querySelector('.replacement-guard') === null`, 3_000));
+    const edited = await readEditor(x.window);
+    expectEqual(problems, 'typing while asking kept', [edited?.dirty, edited?.value.endsWith('k')], [true, true]);
+    expectEqual(problems, 'focus stays in the editor', await readDom(x.window, READ_FOCUS), 'source-editor');
+    // G-M8 (a) 的鼠标路径：点击 Open 时焦点先落到 body。原焦点退回最近一次聚焦的元素（源码面板），Esc 后归还给它。
+    await x.window.call(`((document.activeElement instanceof HTMLElement) && document.activeElement.blur(), true)`);
+    expectEqual(problems, 'editor blurred before Open', await readDom(x.window, READ_FOCUS), 'body');
+    expectTrue(problems, 'open clicked a fifth time', clickMenu('open', x.window.win));
+    expectTrue(problems, 'guard asks a fifth time (focus on cancel)', await waitPage(x.window, guardAskingFocused, 5_000));
+    pressKey(x.window, 'Escape');
+    expectTrue(problems, 'Esc cancels (opener was body)', await waitPage(x.window, `document.querySelector('.replacement-guard') === null`, 3_000));
+    expectEqual(problems, 'focus falls back to the last focused editor', await readDom(x.window, READ_FOCUS), 'source-editor');
+    expectEqual(problems, 'X still untouched on disk', await diskFacts(x.path), x.xFacts);
+    expectEqual(problems, 'chooser never called', ctx.chooser.calls.length, x.chooserCalls);
+    return verdict(problems);
+  },
+};
+
+/** 保存入口与保存提示的布局（真实 DOM）：入口按钮可见且未被遮挡、提示可读、二者不与主工作区重叠。 */
+const READ_SAVE_LAYOUT = `(() => { ${DOM_HELPERS}
+  const grid = document.querySelector('.app-grid'); const entry = document.querySelector('.save-entry'); const diag = document.querySelector('.save-diagnostics');
+  return {
+    entries: [...document.querySelectorAll('[data-save-entry]')].map((b) => [b.getAttribute('data-save-entry'), hits(b)]),
+    entryOverlapsGrid: overlaps(entry, grid),
+    diagnosticsVisible: diag === null ? null : hits(diag.querySelector('span')),
+    diagnosticsText: diag?.querySelector('span')?.textContent ?? null,
+    diagnosticsOverlapsGrid: overlaps(diag, grid),
+  };
+})()`;
+
+/** B4 L-2：Open 通知条与保存入口 / 替换守卫（真实 DOM）：通知条可见可点、不与二者重叠，二者的关键元素仍可命中。 */
+const READ_NOTICE_LAYOUT = `(() => { ${DOM_HELPERS}
+  const notice = document.querySelector('.open-notice'); const guard = document.querySelector('.replacement-guard');
+  return {
+    notice: notice === null ? null : notice.getAttribute('data-notice'),
+    noticeVisible: [hits(notice?.querySelector('span') ?? null), hits(notice?.querySelector('button') ?? null)],
+    overlapsEntry: overlaps(notice, document.querySelector('.save-entry')),
+    overlapsGuard: overlaps(notice, guard),
+    entries: [...document.querySelectorAll('[data-save-entry]')].map((b) => [b.getAttribute('data-save-entry'), hits(b)]),
+    guard: guard === null ? null : [hits(guard.querySelector('#replacement-guard-message')), ...[...guard.querySelectorAll('[data-guard-choice]')].map((b) => hits(b))],
+  };
+})()`;
+
+interface NoticeLayout {
+  readonly notice: string | null;
+  readonly noticeVisible: readonly boolean[];
+  readonly overlapsEntry: boolean | null;
+  readonly overlapsGuard: boolean | null;
+  readonly entries: readonly (readonly [string, boolean])[];
+  readonly guard: readonly boolean[] | null;
+}
+
+interface SaveLayout {
+  readonly entries: readonly (readonly [string, boolean])[];
+  readonly entryOverlapsGrid: boolean | null;
+  readonly diagnosticsVisible: boolean | null;
+  readonly diagnosticsText: string | null;
+  readonly diagnosticsOverlapsGrid: boolean | null;
+}
+
+/** M3 T4 B4 UI 定点修复（r0.2 §2、§3 T3）：SaveEntry 在正常状态可见（GB18030 文档另有「另存为 UTF-8…」），保存提示可读、不遮挡主工作区。 */
+const uiSaveLayout: IsolatedCase = {
+  id: 'ui.save-layout',
+  realDialog: false,
+  timeoutMs: 40_000,
+  run: async (ctx) => {
+    const problems: string[] = [];
+    const x = await editableFile(ctx);
+    expectTrue(problems, 'X opened in an editable window', x.ready);
+    const initial = (await readDom(x.window, READ_SAVE_LAYOUT)) as SaveLayout | null;
+    expectEqual(problems, 'save entry visible (utf-8: no UTF-8 entry)', initial?.entries, [['save', true], ['save-as', true]]);
+    expectEqual(problems, 'save entry does not overlap the workspace', initial?.entryOverlapsGrid, false);
+    expectTrue(problems, 'typed', await typeAtEnd(x.window, 'q'));
+    expectTrue(problems, 'save menu clicked', clickMenu('save', x.window.win));
+    expectEqual(problems, 'saved', (await waitSave(x.window, 'saved', 8_000))?.message, 'saved');
+    const saved = (await readDom(x.window, READ_SAVE_LAYOUT)) as SaveLayout | null;
+    expectEqual(problems, 'save diagnostics readable', [saved?.diagnosticsVisible, saved?.diagnosticsText?.startsWith('已保存') === true], [true, true]);
+    expectEqual(problems, 'save diagnostics does not overlap the workspace', saved?.diagnosticsOverlapsGrid, false);
+    // GB18030（D6 D0 = 「中」，不是合法 UTF-8）→ 写回编码为 gb18030，出现「另存为 UTF-8…」入口。
+    const gbPath = join(x.dir, 'gb.jcx');
+    await writeFile(gbPath, Buffer.concat([Buffer.from('X:1\nT:', 'latin1'), Buffer.from([0xd6, 0xd0]), Buffer.from('\nK:C\nCDEF|\n', 'latin1')]));
+    const gb = await openViaMenu(ctx, x.window, gbPath);
+    expectEqual(problems, 'gb18030 document opened', gb?.trust, 'trusted');
+    const gbLayout = (await readDom(x.window, READ_SAVE_LAYOUT)) as SaveLayout | null;
+    expectEqual(problems, 'UTF-8 save as entry visible', gbLayout?.entries, [['save', true], ['save-as', true], ['save-as-utf8', true]]);
+    // B4 L-2：打开失败的通知条与 GB18030 的三个保存入口同时显示——通知条可见可点，不与保存入口重叠。
+    ctx.chooser.enqueue({ kind: 'path', path: join(x.dir, 'missing.jcx') });
+    expectTrue(problems, 'open clicked (missing file)', clickMenu('open', x.window.win));
+    expectTrue(problems, 'open-failed notice shown', await waitPage(x.window, `document.querySelector('.open-notice') !== null`, 5_000));
+    const withNotice = (await readDom(x.window, READ_NOTICE_LAYOUT)) as NoticeLayout | null;
+    expectEqual(problems, 'L-2 notice and save entries both reachable', withNotice === null ? null : [withNotice.notice, withNotice.noticeVisible, withNotice.overlapsEntry, withNotice.entries],
+      ['open-failed', [true, true], false, [['save', true], ['save-as', true], ['save-as-utf8', true]]]);
+    // 通知条未关闭时进入守卫询问：通知条不与守卫重叠，问句、三个按钮与「知道了」都可命中；关闭通知后守卫仍在询问。
+    expectTrue(problems, 'typed (dirty)', await typeAtEnd(x.window, 'n'));
+    expectTrue(problems, 'open clicked (guard)', clickMenu('open', x.window.win));
+    expectTrue(problems, 'guard asks with the notice shown (focus on cancel)', await waitPage(x.window, guardAskingFocused, 5_000));
+    const withGuard = (await readDom(x.window, READ_NOTICE_LAYOUT)) as NoticeLayout | null;
+    expectEqual(problems, 'L-2 notice and guard both reachable', withGuard === null ? null : [withGuard.notice, withGuard.noticeVisible, withGuard.overlapsEntry, withGuard.overlapsGuard, withGuard.guard],
+      ['open-failed', [true, true], false, false, [true, true, true, true]]);
+    const dismissed = await x.window.call(`(() => { const b = document.querySelector('.open-notice button'); if (b === null) return false; b.click(); return true; })()`);
+    expectTrue(problems, 'notice dismissed', dismissed.ok && dismissed.value === true);
+    expectTrue(problems, 'notice gone, guard still asking', await waitPage(x.window, `document.querySelector('.open-notice') === null && ${guardPhase('asking')}`, 3_000));
+    const dismissedLayout = (await readDom(x.window, READ_NOTICE_LAYOUT)) as NoticeLayout | null;
+    expectEqual(problems, 'L-2 guard still reachable after the notice is dismissed', dismissedLayout === null ? null : [dismissedLayout.notice, dismissedLayout.guard], [null, [true, true, true, true]]);
+    expectTrue(problems, 'guard canceled', await chooseGuard(x.window, 'cancel'));
+    return verdict(problems);
+  },
+};
+
 const uiWinUnc: IsolatedCase = {
   id: 'ui.win-unc',
   realDialog: false,
@@ -307,4 +978,19 @@ export const UI_CASES: readonly IsolatedCase[] = [
   uiActivationHeldRetry,
   uiActivationUnresolved,
   uiWinUnc,
+  // M3 T4 B3a-1：R20 送达门的 Open 部分（Save / Save As 部分在 B3a-2 另立用例）。
+  uiOpenActivationLostLedger,
+  uiOpenRejectGate,
+  // M3 T4 B3a-2：保存流程（菜单、M18、Save As 切换）与 R20 送达门的保存部分（H-7）。
+  uiSaveMenuOnce,
+  uiSaveWhileTyping,
+  uiSaveAsCommit,
+  uiSaveAsActivationLost,
+  uiSaveRejectGate,
+  // M3 T4 B3b：替换守卫三分支。
+  uiGuardOpenSave,
+  uiGuardOpenDiscard,
+  uiGuardOpenCancel,
+  // M3 T4 B4 UI 定点修复：保存入口与保存提示的布局。
+  uiSaveLayout,
 ];

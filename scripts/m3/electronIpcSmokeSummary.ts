@@ -108,6 +108,41 @@ export const SMOKE_CASES: readonly CaseSpec[] = [
   isolated('ui.edit-path-ime', ALL_PASS),
   isolated('ui.edit-path-guard', ALL_PASS),
   isolated('ui.edit-gate-platform', ALL_PASS),
+  // M3 T4 B2：保存（W-DISK 用例本体：Windows / Linux 在 B5 三平台 CI 中必须 pass，是 T4 Seal 的阻塞条件，不得列为可跳过）。
+  matrix('save.basic'),
+  matrix('save-as.absent-link'),
+  matrix('save-as.existing'),
+  matrix('save-as.link-eexist'),
+  matrix('save-as.dangling-symlink', { darwin: 'pass', linux: 'pass' }),
+  matrix('save-as.anchor-forged-document-id'),
+  matrix('save-as.anchor-changed-after-grant'),
+  matrix('save-target.one-shot'),
+  matrix('save.cross-window-token'),
+  matrix('save.reset-before-commit'),
+  // PR #5 CI 修复：win32 跳过目录 fsync，提交后 await 窗口的真实导航用例只在 POSIX；同步注入的等价用例三平台。
+  matrix('save.committed-unconfirmed', { darwin: 'pass', linux: 'pass' }),
+  matrix('save.committed-unconfirmed-sync-reset'),
+  matrix('save-as.activation-lost-reject-delivered'),
+  matrix('save-as.activation-lost-reject-lost'),
+  matrix('save-as.demo-stale-anchor'),
+  matrix('open.activation-lost-reject-lost'),
+  matrix('save-as.dialog-returns-after-reload'),
+  matrix('save.late-release-after-reset'),
+  // M3 T4 B3a-1：R20 送达门的 Open 部分（生产 renderer，reject 应答 swallow / hold）；Save / Save As 部分属 B3a-2。
+  isolated('ui.open-activation-lost-ledger', ALL_PASS),
+  isolated('ui.open-reject-gate', ALL_PASS),
+  // M3 T4 B3a-2：保存流程与 R20 送达门的保存部分（H-7）。
+  isolated('ui.save-menu-once', ALL_PASS),
+  isolated('ui.save-while-typing', ALL_PASS),
+  isolated('ui.save-as-commit', ALL_PASS),
+  isolated('ui.save-as-activation-lost', ALL_PASS),
+  isolated('ui.save-reject-gate', ALL_PASS),
+  // M3 T4 B3b：替换守卫三分支（dirty 的 Open 询问保存 / 不保存 / 取消）。
+  isolated('ui.guard-open-save', ALL_PASS),
+  isolated('ui.guard-open-discard', ALL_PASS),
+  isolated('ui.guard-open-cancel', ALL_PASS),
+  // M3 T4 B4 UI 定点修复：保存入口与保存提示的布局（真实 DOM）。
+  isolated('ui.save-layout', ALL_PASS),
 ];
 
 export const RESULT_PREFIX = 'MUSE_IPC_SMOKE_RESULT ';

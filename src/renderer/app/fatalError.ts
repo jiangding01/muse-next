@@ -4,8 +4,8 @@
  * - 编辑器不变量错误（补丁越界、版本倒退、写回校验失败、事件处理器中的异常）：先由调用方回滚 / 拒绝写入，这里记录；
  *   **开发期再用微任务异步重新抛出**（不打断当前事件处理、不卸载 React 根），生产期只记录（§19.1）。
  * - React 根错误回调只做记录与致命处理，不是 ErrorBoundary 式的 UI 恢复（§19.2）：`onUncaughtError`（整个根已卸载）时
- *   在 React 之外插入最小提示，并订阅 dirty 状态实时更新文案（r3 复查 L-6，避免用户盲目撤销）。T3 没有 Save，
- *   提示不写「先保存」（r0 审查 R0-13）。
+ *   在 React 之外插入最小提示，并订阅 dirty 状态实时更新文案（r3 复查 L-6，避免用户盲目撤销）。M3 T4 B3a-2 起有 Save：
+ *   文案可以提示经菜单保存，但不承诺「已保存」（H-8）；根卸载后菜单 Save / Save As 的结果也经这里的提示呈现（R12）。
  * - 根卸载后 `#root` 仍占满一屏高度（`html, body, #root { height: 100% }`），追加在 body 末尾的提示会落在首屏之外
  *   （r3a 复核 M-2）：提示插入 body 最前面，并经 CSSOM 固定在视口顶部。CSSOM 写入不受 CSP `style-src` 约束，
  *   不需要放宽 CSP，也不改 global.css。
@@ -13,6 +13,7 @@
  */
 
 import { isSourceDirty } from '../../editor/session/derive';
+import { saveMessageText } from './save/saveMessages';
 import { useMuseAppStore } from './store';
 
 export interface ErrorReporterDeps {
@@ -52,7 +53,7 @@ export const reportEditorError: ErrorReporter = createErrorReporter({
 export function fatalNoticeText(dirty: boolean): string {
   const head = '界面发生错误，已停止显示。';
   return dirty
-    ? `${head}当前有未保存的修改（本阶段尚不能保存），请先用菜单撤销回到未修改状态，再关闭窗口。`
+    ? `${head}当前有未保存的修改：可以用菜单「保存」或「另存为」保存，或用菜单撤销回到未修改状态，再关闭窗口。`
     : `${head}当前没有未保存的修改，可以关闭窗口后重新打开。`;
 }
 
@@ -61,6 +62,8 @@ export interface FatalNoticeDeps<E extends { textContent: string | null }> {
   readonly attach: (element: E) => void;
   /** 订阅 dirty 状态；立即以当前值回调一次，返回取消订阅。 */
   readonly subscribeDirty: (listener: (dirty: boolean) => void) => () => void;
+  /** 订阅最近一次保存结果的文案（R12，根卸载后的非 React 出口）；立即以当前值回调一次，返回取消订阅。 */
+  readonly subscribeSave?: (listener: (text: string | null) => void) => () => void;
 }
 
 /** 在 React 之外显示致命提示；重复调用只显示一次。返回取消订阅函数。 */
@@ -70,9 +73,24 @@ export function createFatalNotice<E extends { textContent: string | null }>(deps
     if (shown !== null) return shown;
     const element = deps.create();
     deps.attach(element);
-    shown = deps.subscribeDirty((dirty) => {
-      element.textContent = fatalNoticeText(dirty);
+    let dirty = false;
+    let saved: string | null = null;
+    const render = (): void => {
+      element.textContent = saved === null ? fatalNoticeText(dirty) : `${fatalNoticeText(dirty)}保存：${saved}`;
+    };
+    const offDirty = deps.subscribeDirty((value) => {
+      dirty = value;
+      render();
     });
+    const offSave =
+      deps.subscribeSave?.((text) => {
+        saved = text;
+        render();
+      }) ?? (() => undefined);
+    shown = () => {
+      offDirty();
+      offSave();
+    };
     return shown;
   };
 }
@@ -101,6 +119,15 @@ const showMuseFatalNotice = createFatalNotice({
     listener(isSourceDirty(useMuseAppStore.getState().session));
     return useMuseAppStore.subscribe((state) => {
       listener(isSourceDirty(state.session));
+    });
+  },
+  subscribeSave: (listener) => {
+    // 只显示提示出现之后的保存结果：崩溃之前的旧结果（例如「已保存」）不与「当前有未保存的修改」同时出现（H-8）。
+    const before = useMuseAppStore.getState().save.message;
+    listener(null);
+    return useMuseAppStore.subscribe((state) => {
+      const { message } = state.save;
+      listener(message === null || message === before ? null : saveMessageText(message));
     });
   },
 });

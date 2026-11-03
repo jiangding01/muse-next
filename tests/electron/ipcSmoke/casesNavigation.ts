@@ -27,6 +27,14 @@ async function reload(window: SmokeWindow): Promise<void> {
 }
 
 /** 页面换代之后：旧票据无效、可重新 Open 并激活（恢复能力）。 */
+/** M3 T4 B2：页面重建（`did-navigate`，A5）之后该窗口的墓碑与锚点已清空。 */
+function rebuiltProblems(ctx: SmokeContext, window: SmokeWindow): string[] {
+  const problems: string[] = [];
+  expectEqual(problems, 'records after rebuild (A5)', capabilitiesOf(ctx, window.ownerId), []);
+  expectEqual(problems, 'anchor after rebuild (A5)', ownerMeta(ctx, window.ownerId)?.committed, { kind: 'none' });
+  return problems;
+}
+
 async function recoveryProblems(ctx: SmokeContext, window: SmokeWindow, oldTicket: { capabilityId: string; documentId: number }): Promise<string[]> {
   const problems: string[] = [];
   expectEqual(problems, 'old ticket after reset', await window.activate(oldTicket), { ok: false, code: 'capability-invalid' });
@@ -233,6 +241,7 @@ const crashRendererGone: SmokeCase = {
       expectTrue(problems, 'webContents render-process-gone not observed within 5 s', gate.contentsEvent !== null);
       expectTrue(problems, 'app render-process-gone for the target not observed within 5 s', gate.appEvent?.matchesTarget === true);
       expectTrue(problems, 'capabilities not cleared after the exit', gate.clearedAtMs !== null && gate.capabilitiesAfter === 0);
+      expectEqual(problems, 'tombstones after the exit (A4)', gate.tombstonesAfter, 1);
       expectTrue(problems, 'generation did not advance', gate.generationAfter > gate.generationBefore);
       expectTrue(problems, 'old token still authorized after the exit', gate.oldTokenAuthorizedAfter === false);
       expectTrue(problems, 'coordinator invariants violated', gate.invariantsHold);
@@ -242,6 +251,7 @@ const crashRendererGone: SmokeCase = {
       expectTrue(problems, 'exit events or cleanup later than 5 s', withinWindow(gate.contentsEvent?.ms) && withinWindow(gate.appEvent?.ms) && withinWindow(gate.clearedAtMs));
       if (problems.length === 0) {
         await reload(window);
+        problems.push(...rebuiltProblems(ctx, window));
         problems.push(...(await recoveryProblems(ctx, window, ticket)));
       }
       return verdict(problems, { trigger: 'os-sigkill', gate });
@@ -250,11 +260,13 @@ const crashRendererGone: SmokeCase = {
     expectTrue(problems, 'old token was not authorized before the crash', crash.oldTokenAuthorizedBefore === true);
     expectTrue(problems, 'webContents render-process-gone not observed', crash.contentsEvent !== null);
     expectTrue(problems, 'capabilities not cleared after the crash', crash.clearedAtMs !== null && crash.capabilitiesAfter === 0);
+    expectEqual(problems, 'tombstones after the crash (A4)', crash.tombstonesAfter, 1);
     expectTrue(problems, 'generation did not advance', crash.generationAfter > crash.generationBefore);
     expectTrue(problems, 'old token still authorized after the crash', crash.oldTokenAuthorizedAfter === false);
     expectEqual(problems, 'crash cleanup within 5 s', crash.category, 'ok');
     if (problems.length === 0) {
       await reload(window);
+      problems.push(...rebuiltProblems(ctx, window));
       problems.push(...(await recoveryProblems(ctx, window, ticket)));
     }
     return verdict(problems, { trigger: 'force-crash', forceCrash: crash });

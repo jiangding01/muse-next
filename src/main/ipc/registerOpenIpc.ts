@@ -1,7 +1,8 @@
 /**
  * Open IPC 接线（M3 T1b-2a，`docs/M3_EDITOR_CORE_PLAN.md` §13；T1b preflight 裁决 1–10，T1b-2 preflight 裁决 1–8）。
  *
- * 注册 `muse:open-document` / `muse:activate-document` / `muse:reject-document` 三个 handler，持有进程内唯一的协调器状态、
+ * 注册 `muse:open-document` / `muse:activate-document` / `muse:reject-document` 三个 handler（M3 T4 B2：并经 `registerSaveIpc`
+ * 在同一闭包中注册 `muse:request-save-target` / `muse:save-document`），持有进程内唯一的协调器状态、
  * documentId 分配器与 TTL 清理定时器。**本模块不 import electron**：`ipcMain`、`BrowserWindow.fromWebContents`、原生对话框、
  * 文件系统、单调时钟、定时器与 token 生成都由 main 注入，因此整个异常边界可以用 fake 精确测试；main 只负责把窗口事件转发进来。
  *
@@ -10,7 +11,8 @@
  * - **同步校验**：每个 handler 在第一个 `await` 之前用 `authenticate` 把 Electron 事件转换成可信快照并校验（登记窗口、未销毁、
  *   主 frame、页面身份），再校验 payload；任一失败都抛出固定文案的 `Request rejected`，不改任何状态、不泄露细节。
  * - **对话框锁**：`beginOpen` 置 `dialogOpen`；选择器结束（选中 / 取消 / 抛错）后在 `finally` 中对最新状态 `endDialog(ticket)`。
- *   主 frame 跨文档导航**开始**与**提交**时、以及渲染进程退出时，都先 `resetOwner`（作废能力、generation + 1），再用该窗口
+ *   主 frame 跨文档导航**开始**与**提交**时、以及渲染进程退出时，都先作废能力、generation + 1（导航开始与渲染进程退出为
+ *   `resetOwner`，即 M3 T4 的 A4：active 转墓碑、锚点保留；导航提交为 `rebuildOwner`，即 A5：页面已重建，清空墓碑与锚点），再用该窗口
  *   进行中的票据 `endDialog` 释放逻辑锁。提交时再失效一次是必要的：导航开始到提交之间旧文档仍然存活，它发出的 Open 会拿到
  *   开始时 reset 之后的新 generation（实测）；提交时的失效把这类请求一并作废，并释放它占用的
  *   **逻辑**锁——这不表示原生对话框已关闭（实测 reload 后 sheet 仍挂在原窗口上，destroy 后 promise 永不结束）。
@@ -38,7 +40,7 @@ import { createDocumentIdAllocator } from '../document/documentIds';
 import type { ReadOnlyFileSystem } from '../document/fileSystemPort';
 import { openDocumentAtPath, openDocumentError } from '../document/openDocument';
 import type { OpenAtPathResult } from '../document/openDocument';
-import type { OpenCapabilityRecord } from '../document/capabilities';
+import type { ActiveOpenRecord } from '../document/capabilities';
 import {
   activateDocument,
   authorizeCapability,
@@ -49,6 +51,7 @@ import {
   endDialog,
   expireCandidates,
   PENDING_TTL_MS,
+  rebuildOwner,
   registerOwner,
   rejectDocument,
   resetOwner,
@@ -58,6 +61,8 @@ import { parseActivationTicket, parseOpenRequest, validateSender } from '../open
 import type { PageIdentity } from '../open/ipcValidation';
 import type { ActivateDocumentReply, OpenDocumentReply, RejectDocumentReply } from '../../shared/activationContracts';
 import { IPC } from '../../shared/ipc';
+import { registerSaveIpc } from './saveIpc';
+import type { SaveIpcDeps } from './saveIpc';
 
 /** `event.senderFrame` / `webContents.mainFrame` 中本模块用到的部分。 */
 export interface FrameLike {
@@ -81,7 +86,7 @@ export interface IpcRegistrarLike<S extends SenderLike> {
   handle(channel: string, listener: (event: InvokeEventLike<S>, payload: unknown) => unknown): void;
 }
 
-export interface OpenIpcDeps<S extends SenderLike, W> {
+export interface OpenIpcDeps<S extends SenderLike, W> extends SaveIpcDeps {
   readonly ipc: IpcRegistrarLike<S>;
   /** `BrowserWindow.fromWebContents`；只在 handler 同步段、sender 未销毁时调用。 */
   windowForSender(sender: S): W | null;
@@ -89,6 +94,8 @@ export interface OpenIpcDeps<S extends SenderLike, W> {
   readonly pageIdentity: PageIdentity;
   /** 父窗口模态的原生打开对话框；取消返回 null。 */
   chooseOpenPath(parent: W): Promise<string | null>;
+  /** M3 T4：父窗口模态的原生保存对话框；取消返回 null。 */
+  chooseSavePath(parent: W, defaultPath: string): Promise<string | null>;
   readonly fs: ReadOnlyFileSystem;
   readonly platform: string;
   /** 单调时钟（毫秒）。 */
@@ -113,7 +120,7 @@ export interface OpenIpcHandle<W> {
   /** `closed` / `destroyed` 转发（幂等）。 */
   disposeWindow(ownerId: number): void;
   /** 授权查询（T4 Save 使用）：只认 active。 */
-  authorize(ownerId: number, token: string): OpenCapabilityRecord | null;
+  authorize(ownerId: number, token: string): ActiveOpenRecord | null;
   /** 只读诊断快照（测试与日志）；不是授权入口。 */
   currentState(): OpenCoordinatorState;
   /** 进程内尚未 settle 的原生对话框操作数（诊断，不是准入条件）。 */
@@ -283,16 +290,38 @@ export function registerOpenIpc<S extends SenderLike, W>(deps: OpenIpcDeps<S, W>
     return step.result.reply;
   }
 
-  /** 页面代次失效：作废能力，并释放该窗口进行中对话框的逻辑锁。 */
-  function invalidateOwner(ownerId: number): void {
-    state = resetOwner(state, ownerId).state;
+  /** 页面代次失效：作废能力（A4；页面已重建时 A5），并释放该窗口进行中对话框的逻辑锁。 */
+  function invalidateOwner(ownerId: number, rebuilt: boolean): void {
+    state = (rebuilt ? rebuildOwner : resetOwner)(state, ownerId).state;
     const ticket = dialogTickets.get(ownerId);
     if (ticket !== undefined) releaseDialog(ticket);
+  }
+
+  /** M3 T4：保存对话框的物理所有权，形态与 Open 相同（登记 → await 选择器的 try → finally 首句释放）。 */
+  async function chooseSavePathOwned(ownerId: number, window: W, defaultPath: string): Promise<string | null> {
+    const operation: NativeDialogOperation<W> = { ownerId, window };
+    dialogByWindow.set(window, operation);
+    unsettledDialogs.add(operation);
+    try {
+      return await deps.chooseSavePath(window, defaultPath);
+    } finally {
+      releaseNativeDialog(operation);
+    }
   }
 
   deps.ipc.handle(IPC.openDocument, (event, payload) => openDocument(event, payload));
   deps.ipc.handle(IPC.activateDocument, (event, payload) => activate(event, payload));
   deps.ipc.handle(IPC.rejectDocument, (event, payload) => reject(event, payload));
+  registerSaveIpc({
+    deps,
+    authenticate,
+    getState: () => state,
+    setState: (next) => (state = next),
+    hasNativeDialog: (window) => dialogByWindow.has(window),
+    chooseSavePath: chooseSavePathOwned,
+    isCurrentWindow,
+    expire: () => (state = expireCandidates(state, deps.now()).state),
+  });
 
   return {
     attachWindow(ownerId, window) {
@@ -300,13 +329,13 @@ export function registerOpenIpc<S extends SenderLike, W>(deps: OpenIpcDeps<S, W>
       state = registerOwner(state, ownerId);
     },
     handleNavigation(ownerId, navigation) {
-      if (navigation.isMainFrame && !navigation.isSameDocument) invalidateOwner(ownerId);
+      if (navigation.isMainFrame && !navigation.isSameDocument) invalidateOwner(ownerId, false);
     },
     handleNavigationCommitted(ownerId) {
-      invalidateOwner(ownerId);
+      invalidateOwner(ownerId, true);
     },
     handleRendererGone(ownerId) {
-      invalidateOwner(ownerId);
+      invalidateOwner(ownerId, false);
     },
     disposeWindow(ownerId) {
       windows.delete(ownerId);

@@ -4,7 +4,7 @@
  */
 
 import { PENDING_TTL_MS } from '../../../src/main/open/openCoordinator';
-import { capabilitiesOf, expectEqual, expectTrue, leaksPath, SECOND_SOURCE, UTF8_SOURCE, verdict } from './context';
+import { capabilitiesOf, expectEqual, expectTrue, leaksPath, ownerMeta, SECOND_SOURCE, UTF8_SOURCE, verdict } from './context';
 import type { CaseOutcome, SmokeCase, SmokeContext } from './context';
 import { deferred, waitFor } from './harness';
 import type { ChooserStep } from './harness';
@@ -106,7 +106,11 @@ const openRejectAfterActivate: SmokeCase = {
     expectEqual(problems, 'reject active', await window.reject(second), { ok: true });
     expectTrue(problems, 'second still authorized after reject', !authorized(ctx, window, second));
     expectTrue(problems, 'first restored after rejecting second', !authorized(ctx, window, first));
-    expectEqual(problems, 'capabilities', capabilitiesOf(ctx, window.ownerId), []);
+    // M3 T4 B2（A2 + 修剪）：只剩 first 的墓碑（不授权），锚点回退到 first。
+    expectEqual(problems, 'capabilities', capabilitiesOf(ctx, window.ownerId), [
+      { token: first.capabilityId, purpose: 'tombstone', state: null, documentId: first.documentId },
+    ]);
+    expectEqual(problems, 'anchor rolled back to first', ownerMeta(ctx, window.ownerId)?.committed, { kind: 'record', token: first.capabilityId });
     return verdict(problems);
   },
 };
@@ -125,7 +129,8 @@ const openReplaceActive: SmokeCase = {
     expectEqual(problems, 'activate second', await window.activate(reply.ticket), { ok: true });
     expectTrue(problems, 'old active not revoked', !authorized(ctx, window, first));
     expectTrue(problems, 'new active not authorized', authorized(ctx, window, reply.ticket));
-    expectEqual(problems, 'one active', capabilitiesOf(ctx, window.ownerId).map((c) => c.state), ['active']);
+    expectEqual(problems, 'one active', capabilitiesOf(ctx, window.ownerId).filter((c) => c.purpose === 'open').map((c) => c.state), ['active']);
+    expectEqual(problems, 'superseded became a tombstone', capabilitiesOf(ctx, window.ownerId).filter((c) => c.purpose === 'tombstone').map((c) => c.token), [first.capabilityId]);
     return verdict(problems);
   },
 };

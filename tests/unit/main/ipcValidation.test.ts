@@ -106,6 +106,11 @@ describe('parseActivationTicket —— 恰为 { capabilityId, documentId }', () 
     expect(parseActivationTicket(ticket)).toEqual(ticket);
   });
 
+  it('M3 T4 R9：documentId 为 0（demo 的 Save As 候选）被接受；负数与非整数仍被拒绝', () => {
+    expect(parseActivationTicket({ capabilityId: 'abc', documentId: 0 })).toEqual({ capabilityId: 'abc', documentId: 0 });
+    expect(parseActivationTicket({ capabilityId: 'abc', documentId: -0.5 })).toBeNull();
+  });
+
   it.each([
     ['缺 documentId', { capabilityId: 'abc' }],
     ['多余字段', { capabilityId: 'abc', documentId: 1, path: '/x' }],
@@ -113,7 +118,6 @@ describe('parseActivationTicket —— 恰为 { capabilityId, documentId }', () 
     ['capabilityId 为空', { capabilityId: '', documentId: 1 }],
     ['capabilityId 含路径字符', { capabilityId: '../etc', documentId: 1 }],
     ['capabilityId 过长', { capabilityId: 'a'.repeat(65), documentId: 1 }],
-    ['documentId 为 0（demo）', { capabilityId: 'abc', documentId: 0 }],
     ['documentId 为负', { capabilityId: 'abc', documentId: -1 }],
     ['documentId 非整数', { capabilityId: 'abc', documentId: 1.5 }],
     ['documentId 超出安全整数', { capabilityId: 'abc', documentId: Number.MAX_SAFE_INTEGER + 1 }],

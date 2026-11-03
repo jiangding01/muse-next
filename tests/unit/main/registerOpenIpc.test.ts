@@ -7,7 +7,8 @@ import { describe, expect, it } from 'vitest';
 
 import { registerOpenIpc } from '../../../src/main/ipc/registerOpenIpc';
 import type { InvokeEventLike } from '../../../src/main/ipc/registerOpenIpc';
-import { ACTIVATE, APP_URL, createHarness, DIALOG, flush, mainFrameEvent, OPEN, REJECT } from './openIpcHarness';
+import { ACTIVATE, APP_URL, createHarness, DIALOG, flush, mainFrameEvent, OPEN, REJECT, rejectingWriteFs } from './openIpcHarness';
+import { IPC } from '../../../src/shared/ipc';
 import type { FakeSender } from './openIpcHarness';
 
 const READ_FAILED = { kind: 'failed', error: { code: 'read-failed', message: 'The file could not be read.' } };
@@ -40,9 +41,13 @@ describe('registerOpenIpc —— 注册', () => {
       now: () => 0,
       issueToken: () => 't',
       schedule: () => undefined,
+      chooseSavePath: async () => null,
+      writeFs: rejectingWriteFs(),
+      tempName: () => 'tmp',
     };
     registerOpenIpc(deps);
-    expect(handled).toEqual([OPEN, ACTIVATE, REJECT]);
+    // M3 T4 B2（G-12）：同一次注册另挂两条保存通道。
+    expect(handled).toEqual([OPEN, ACTIVATE, REJECT, IPC.requestSaveTarget, IPC.saveDocument]);
     expect(() => registerOpenIpc(deps)).toThrow('duplicate');
   });
 });
@@ -67,6 +72,9 @@ describe('registerOpenIpc —— 完整流程与父窗口', () => {
     expect(h.handle.authorize(1, a.capabilityId)).toBeNull();
     expect(await h.invoke(REJECT, mainFrameEvent(sender), b)).toEqual({ ok: true });
     expect(h.handle.authorize(1, b.capabilityId)).toBeNull();
+    // M3 T4 B2（A2）：锚点回退到 a（墓碑），但 a 不恢复授权。
+    expect(h.handle.currentState().owners.get(1)?.committed).toEqual({ kind: 'record', token: a.capabilityId });
+    expect(h.handle.authorize(1, a.capabilityId)).toBeNull();
     h.expectConsistent();
   });
 });
@@ -120,7 +128,10 @@ describe('registerOpenIpc —— 同步 sender / payload 校验，零状态修�
     const h = createHarness();
     const { sender } = h.window(1);
     const before = h.handle.currentState();
-    await expect(h.invoke(ACTIVATE, mainFrameEvent(sender), { capabilityId: 'x', documentId: 0 })).rejects.toThrow(/^Request rejected$/);
+    await expect(h.invoke(ACTIVATE, mainFrameEvent(sender), { capabilityId: 'x', documentId: -1 })).rejects.toThrow(/^Request rejected$/);
+    // M3 T4 R9：documentId 0 能通过解析，但未知能力仍然无效 / 幂等，状态零修改（由下面的 toBe(before) 覆盖）。
+    expect(await h.invoke(ACTIVATE, mainFrameEvent(sender), { capabilityId: 'x', documentId: 0 })).toEqual({ ok: false, code: 'capability-invalid' });
+    expect(await h.invoke(REJECT, mainFrameEvent(sender), { capabilityId: 'x', documentId: 0 })).toEqual({ ok: true });
     await expect(h.invoke(REJECT, mainFrameEvent(sender), { capabilityId: '../x', documentId: 1 })).rejects.toThrow(/^Request rejected$/);
     await expect(h.invoke(ACTIVATE, { sender, senderFrame: null }, { capabilityId: 'x', documentId: 1 })).rejects.toThrow(/^Request rejected$/);
     expect(h.handle.currentState()).toBe(before);

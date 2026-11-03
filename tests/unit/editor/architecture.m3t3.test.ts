@@ -92,6 +92,13 @@ const EXPECTED_WRITES: Record<string, string[]> = {
   publishEditorView: ['editor'],
   downgradeCapabilityTrust: ['capabilityTrust'],
   publishOpenView: ['open'],
+  // M3 T4 B3a-1（H-4）：文件操作检查点写入只换会话（begin 另结束历史合并组；Save As 成功与失败收尾另写授权）。
+  beginFileOperation: ['history', 'session'],
+  settleSave: ['session'],
+  settleSaveAs: ['capabilityTrust', 'session'],
+  finishFileOperation: ['capabilityTrust', 'session'],
+  // M3 T4 B3a-2（H-4）：保存诊断视图只写自己的字段。
+  publishSaveView: ['save'],
 };
 
 describe('M3 T3a 架构守卫 —— store 写入字段精确集合', () => {
@@ -306,7 +313,8 @@ describe('M3 T3b 架构守卫 —— preload 的菜单命令订阅', () => {
     expect(ipc).toContain('onMenuCommand(listener: (message: MenuCommandMessage) => void): () => void;');
     const { MENU_COMMAND_SOURCES, MENU_COMMANDS } = await import('../../../src/shared/menuContracts');
     expect([...MENU_COMMAND_SOURCES]).toEqual(['key-intercept', 'menu-click', 'menu-accelerator']);
-    expect([...MENU_COMMANDS]).toEqual(['undo', 'redo', 'reparse', 'open']);
+    // M3 T4 B3a-2（H-5）：Save / Save As。
+    expect([...MENU_COMMANDS]).toEqual(['undo', 'redo', 'reparse', 'open', 'save', 'saveAs']);
   });
 });
 
@@ -415,10 +423,10 @@ describe('M3 T3b 架构守卫 —— 状态栏', () => {
     expect(users).toEqual(['src/renderer/app/editor/editorController.ts', 'src/renderer/components/EditorStatusBar.tsx']);
   });
 
-  it('Toolbar：dirty 只用于禁用 Open（读取 Editor Core 的派生函数），不新增其它入口', () => {
+  it('Toolbar：Open 在事务中或文件操作中禁用（M3 T4 B3b H-9：dirty 时可点、改为询问）；读取 Editor Core 的派生函数，不新增其它入口', () => {
     const toolbar = stripComments(read(join(RENDERER, 'components/Toolbar.tsx')));
     expect(toolbar).toContain('const dirty = useMuseAppStore((state) => isSourceDirty(state.session));');
-    expect(toolbar).toContain("disabled={open.phase !== 'idle' || dirty}");
+    expect(toolbar).toContain("disabled={open.phase !== 'idle' || fileBusy}");
     expect(/museEditorController|menuBridge/.test(toolbar)).toBe(false);
   });
 });
@@ -483,10 +491,13 @@ describe('M3 T3b 架构守卫 —— main 菜单与窗口接线', () => {
     expect(smoke).toContain('sendMenuCommand(contents, message);');
   });
 
-  it('src/main/** 不出现写盘 API（T3 零写盘）', () => {
+  it('src/main/** 中只有写 port 的 Node 实现调用写盘 API（M3 T4 受控放宽：T3 零写盘 → 单文件白名单；补偿见 architecture.m3t4）', () => {
     const WRITE_API = /\b(writeFile|appendFile|createWriteStream|rename|unlink|rmdir|rm|mkdir|copyFile|truncate|ftruncate|symlink|chmod|utimes|cp)(Sync)?\s*\(/;
-    const offenders = collectTsFiles(join(REPO_ROOT, 'src/main')).filter((file) => WRITE_API.test(stripComments(read(file))));
-    expect(offenders.map(posixPath)).toEqual([]);
+    // 是否持有 Node fs 能力按 AST 导入记录判定（含 import type、再导出、require、动态 import），不按字符串匹配。
+    const FS_MODULES: ReadonlySet<string> = new Set(['fs', 'node:fs', 'fs/promises', 'node:fs/promises', 'original-fs']);
+    const importsFs = (file: string): boolean => parseImports(file, read(file)).some((record) => FS_MODULES.has(record.specifier));
+    const offenders = collectTsFiles(join(REPO_ROOT, 'src/main')).filter((file) => importsFs(file) && WRITE_API.test(stripComments(read(file))));
+    expect(offenders.map(posixPath)).toEqual(['src/main/document/nodeWriteFileSystem.ts']);
     expect(WRITE_API.test("await writeFile(path, 'x');")).toBe(true);
     expect(WRITE_API.test('fs.renameSync(a, b);')).toBe(true);
   });

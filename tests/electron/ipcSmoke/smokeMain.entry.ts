@@ -20,9 +20,10 @@ import { join } from 'node:path';
 import { app, BrowserWindow, dialog, ipcMain, Menu } from 'electron';
 
 import { createNodeReadOnlyFileSystem } from '../../../src/main/document/fileSystemPort';
+import { createNodeWriteFileSystem } from '../../../src/main/document/nodeWriteFileSystem';
 import { resolvePageEntry } from '../../../src/main/ipc/pageIdentity';
 import { registerOpenIpc } from '../../../src/main/ipc/registerOpenIpc';
-import { createOpenPathChooser } from '../../../src/main/ipc/wireOpenIpcWindow';
+import { createOpenPathChooser, createSavePathChooser } from '../../../src/main/ipc/wireOpenIpcWindow';
 import { installAppMenu } from '../../../src/main/menu/appMenu';
 import { createEditorCommandRouter, sendMenuCommand } from '../../../src/main/menu/wireEditorWindow';
 import { createMenuCommandLog, createSecurityLog, residueProblems, SECOND_SOURCE, STAFF_SOURCE, UTF8_SOURCE } from './context';
@@ -36,11 +37,13 @@ import { ENVIRONMENT_CASES } from './casesEnvironment';
 import { NAVIGATION_CASES } from './casesNavigation';
 import { ISOLATED_CASES } from './casesIsolated';
 import { PRODUCTION_CASES, SECURITY_MATRIX_CASES } from './casesSecurity';
+import { SAVE_CASES } from './casesSave';
+import { SAVE_FAULT_CASES } from './casesSaveFaults';
 import { SENDER_CASES } from './casesSender';
 import { UI_CASES } from './casesUi';
 import { runtimeEvidence, sandboxEvidence } from './evidence';
 import type { SandboxEvidence } from './evidence';
-import { createGatedFileSystem, createManualScheduler, createScriptedChooser, createTestClock, createTokenFaults, withTimeout } from './harness';
+import { createGatedFileSystem, createGatedWriteFileSystem, createManualScheduler, createScriptedChooser, createTestClock, createTokenFaults, withTimeout } from './harness';
 import { createActivationFaults } from './ipcFaults';
 import { isRecord } from './replies';
 import { createWindowFactory } from './windows';
@@ -106,6 +109,7 @@ function describeError(error: unknown): string {
 
 async function runCase(ctx: SmokeContext, smokeCase: SmokeCase, checkResidue: boolean): Promise<CaseResult> {
   ctx.chooser.reset();
+  ctx.saveChooser.reset();
   ctx.scheduler.clear();
   ctx.menuCommands.clear();
   let outcome: CaseOutcome;
@@ -120,6 +124,8 @@ async function runCase(ctx: SmokeContext, smokeCase: SmokeCase, checkResidue: bo
   // 残留检查之后强制回收测试侧资源，避免一个失败用例连锁影响后续用例（失败本身已记录）。
   ctx.fs.releaseAll();
   ctx.chooser.reset();
+  ctx.saveChooser.reset();
+  ctx.writeGate.reset();
   ctx.tokenFaults.clear();
   ctx.faults.reset();
   if (residue.length > 0 && outcome.status !== 'failed') outcome = { status: 'failed', detail: [residue.join('; '), outcome.detail ?? ''].join(' | ') };
@@ -161,6 +167,10 @@ async function main(): Promise<number> {
   // 激活应答扣留只包装交给生产 registerOpenIpc 的 registrar（M3 T1c-2）；未布置时完全透明。
   const faults = createActivationFaults();
   const realChooser = createOpenPathChooser((parent: BrowserWindow, options) => dialog.showOpenDialog(parent, options));
+  // M3 T4 B2：保存对话框同样分为与产品完全相同的真实选择器与 main 持有的受控选择器。
+  const saveChooser = createScriptedChooser<BrowserWindow>();
+  const writeGate = createGatedWriteFileSystem(createNodeWriteFileSystem());
+  const realSaveChooser = createSavePathChooser((parent: BrowserWindow, options) => dialog.showSaveDialog(parent, options));
 
   const openIpc = registerOpenIpc({
     ipc: faults.registrar(ipcMain),
@@ -173,6 +183,9 @@ async function main(): Promise<number> {
     now: () => clock.now(),
     issueToken: () => tokenFaults.issue(() => randomUUID()),
     schedule: (delayMs, task) => scheduler.schedule(delayMs, task),
+    chooseSavePath: isolated?.realDialog === true ? realSaveChooser : (parent) => saveChooser.choose(parent),
+    writeFs: writeGate.fs,
+    tempName: () => `.muse-save-${randomUUID()}.tmp`,
   });
   const security = createSecurityLog((ownerId) => openIpc.currentState().owners.get(ownerId)?.generation ?? null);
   // M3 T3b：与产品 main 相同的编辑命令路由与菜单；发送函数仍是生产 sendMenuCommand，外层只记录实际发出的命令。
@@ -202,7 +215,9 @@ async function main(): Promise<number> {
   const ctx: SmokeContext = {
     openIpc,
     chooser,
+    saveChooser,
     fs,
+    writeGate,
     clock,
     scheduler,
     tokenFaults,
@@ -222,6 +237,8 @@ async function main(): Promise<number> {
   const results: CaseResult[] = [];
   if (config.mode === 'matrix') {
     const cases = [...ENVIRONMENT_CASES, ...CAPABILITY_CASES, ...NAVIGATION_CASES, ...SENDER_CASES, ...SECURITY_MATRIX_CASES, ...DIALOG_CASES];
+    // M3 T4 B2：保存与保存故障注入（matrix）。
+    cases.push(...SAVE_CASES, ...SAVE_FAULT_CASES);
     for (const smokeCase of cases) results.push(await runCase(ctx, smokeCase, true));
     results.push(await runCase(ctx, FINAL_CASE, false));
   } else if (isolated !== undefined) {

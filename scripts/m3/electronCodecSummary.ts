@@ -59,10 +59,34 @@ export const EXPECTED_CASE_IDS: readonly string[] = [
   'file.permission-denied',
   'file.allocation-only-on-success',
   'file.zero-write',
+  // M3 T4 B1：保存的编码自校验与真实磁盘写入（tests/electron/saveCases.ts）。
+  'save.verify utf8-bom',
+  'save.verify utf8 lone-surrogate',
+  'save.verify gb18030 lone-surrogate',
+  'save.verify gb18030-to-ascii',
+  'save.verify gb18030 valid-utf8-bytes U+4E00',
+  'save.verify gb18030 EF-BB-BF-prefix',
+  'save.verify leading-feff gb18030 / utf8',
+  'save.verify mixed-eol',
+  'save.verify mapping-vectors',
+  'save.disk crlf-lone-cr exact',
+  'save.disk gb18030 round-trip',
+  'save.disk in-place-modification refused',
+  'save.disk link-publish and EEXIST',
+  'save.disk read-only refused',
+  'save.disk symlink preserved',
 ];
 
-/** 只有这两个用例允许因平台条件跳过（Windows symlink 特权、win32 / root 下的 POSIX 权限）；其余必须执行并通过。 */
-export const SKIPPABLE_CASE_IDS: ReadonlySet<string> = new Set(['file.symlink-realpath', 'file.permission-denied']);
+/**
+ * 只有这些用例允许因平台条件跳过（Windows symlink 特权、root 下的 POSIX 权限）；其余必须执行并通过。
+ * T4 B1 的保存用例只追加同类的两个平台条件用例，编码自校验与写盘安全用例一律不可跳过。
+ */
+export const SKIPPABLE_CASE_IDS: ReadonlySet<string> = new Set([
+  'file.symlink-realpath',
+  'file.permission-denied',
+  'save.disk read-only refused',
+  'save.disk symlink preserved',
+]);
 
 export interface ProbeCaseSummary {
   readonly id: string;

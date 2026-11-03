@@ -7,6 +7,8 @@
  *   `(documentId, sourceVersion)`，调用 `loadJcx(source, { sourceEncoding: writeEncoding })`，再读 store，经 T0
  *   `acceptParsedSnapshot` 校验两者都未变才发布；不一致丢弃（`loadJcx` 是同步的，这是零成本防线）。
  * - 显式 Reparse（`force: true`）不改变 sourceVersion、不创建 History 事务；同版本的新快照对象照常发布。
+ * - `refreshSnapshot()`（M3 T4 B3a-2，裁决 Q4）：Save As 切换后对**同一版本**做一次静默强制解析，使快照的编码标注与新的
+ *   `writeEncoding` 一致；不发「已重新解析」提示；组字中不解析（留待下一次解析）。
  * - 整个立即解析过程（读取、`loadJcx`、校验、发布）中的异常都归入编辑器错误：报告、保留原有快照不变（stale 或同版本
  *   旧快照）、给出「解析失败」提示，不向定时器回调或 undo / redo 的调用方抛出（方案 §19.2）。发布被 store 拒绝说明不变量
  *   被破坏（刚用当前会话校验通过），同样报告。
@@ -47,6 +49,8 @@ export interface ParseController {
   compositionStart(): void;
   compositionEnd(): void;
   documentReplaced(): void;
+  /** Q4：同版本静默强制解析；组字中返回 `ignored-composing`。 */
+  refreshSnapshot(): FlushOutcome;
   /** 只读诊断快照（测试）。 */
   state(): ParseScheduleState;
 }
@@ -55,7 +59,7 @@ export function createParseController(deps: ParseControllerDeps): ParseControlle
   let state = initialParseSchedule();
   const timers = new Map<number, () => void>();
 
-  function parseOnce(force: boolean): ParseOutcome {
+  function parseOnce(force: boolean, announce: boolean): ParseOutcome {
     const session = deps.read();
     if (!force && !isParseStale(session)) return 'skipped';
     const { documentId, sourceVersion } = session;
@@ -67,13 +71,13 @@ export function createParseController(deps: ParseControllerDeps): ParseControlle
       deps.report(new Error(`parse publish rejected: ${published.reason}`));
       return 'discarded';
     }
-    if (force) deps.notify({ kind: 'reparsed' });
+    if (announce) deps.notify({ kind: 'reparsed' });
     return 'parsed';
   }
 
-  function parseNow(force: boolean): ParseOutcome {
+  function parseNow(force: boolean, announce = force): ParseOutcome {
     try {
-      return parseOnce(force);
+      return parseOnce(force, announce);
     } catch (error) {
       deps.report(error);
       deps.notify({ kind: 'parse-failed' });
@@ -126,6 +130,7 @@ export function createParseController(deps: ParseControllerDeps): ParseControlle
     documentReplaced: () => {
       dispatch({ type: 'document-replaced' });
     },
+    refreshSnapshot: () => (state.composing ? 'ignored-composing' : parseNow(true, false)),
     state: () => state,
   };
 }

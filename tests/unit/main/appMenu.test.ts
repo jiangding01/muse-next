@@ -77,7 +77,7 @@ describe('appMenu —— 模板', () => {
     expect(template('linux', false).all.filter((item) => item.role === 'toggleDevTools')).toHaveLength(0);
   });
 
-  it('Edit 的剪贴板项使用 role（浏览器原生）；没有文档命令（New / Save / Close）', () => {
+  it('Edit 的剪贴板项使用 role（浏览器原生）；Save 与 Save As… 各恰一项，没有 New / Close / Reload（M3 T4 B3a-2 H-6）', () => {
     const { all } = template('darwin');
     expect(all.filter((item) => item.role !== undefined && ['cut', 'copy', 'paste', 'selectAll'].includes(item.role)).map((item) => item.role)).toEqual([
       'cut',
@@ -86,7 +86,10 @@ describe('appMenu —— 模板', () => {
       'selectAll',
     ]);
     const labels = all.map((item) => item.label ?? '').join('|');
-    expect(/New|Save|Close|Reload/i.test(labels)).toBe(false);
+    expect(/New|Close|Reload/i.test(labels)).toBe(false);
+    expect(all.filter((item) => item.label === 'Save').length).toBe(1);
+    expect(all.filter((item) => item.label === 'Save As…').length).toBe(1);
+    expect(all.filter((item) => /Save/i.test(item.label ?? '')).map((item) => item.label)).toEqual(['Save', 'Save As…']);
   });
 
   it('回调只转交 onCommand，原样带上命令、窗口与事件', () => {

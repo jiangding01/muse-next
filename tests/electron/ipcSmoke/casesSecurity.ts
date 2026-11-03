@@ -132,7 +132,8 @@ const prodRendererLoads: SmokeCase = {
     expectEqual(problems, 'demo layers', facts.layers, ['system-layer-jianpu', 'system-layer-tab']);
     expectEqual(problems, 'demo chord diagrams', facts.chordDiagrams, 3);
     // M3 T3b：桥增加菜单命令订阅 onMenuCommand（用户授权的最小修改）。
-    expectEqual(problems, 'bridge methods', facts.bridge, ['activateDocument', 'onMenuCommand', 'openDocument', 'rejectDocument']);
+    // M3 T4 B2（15b）：另加保存的两个方法。
+    expectEqual(problems, 'bridge methods', facts.bridge, ['activateDocument', 'onMenuCommand', 'openDocument', 'rejectDocument', 'requestSaveTarget', 'saveDocument']);
     expectEqual(problems, 'page main world has no require / process', [facts.hasRequire, facts.hasProcess], [false, false]);
     expectEqual(problems, 'unexpected console errors or CSP refusals during startup', startup.unexpected, []);
     expectEqual(problems, 'no CSP refusal at all on a normal load', startup.expected, []);

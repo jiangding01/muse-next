@@ -159,7 +159,9 @@ const uiMenuTemplate: IsolatedCase = {
     expectEqual(problems, 'undo registerAccelerator', menuItem('undo')?.registerAccelerator, !nonMac);
     expectEqual(problems, 'redo registerAccelerator', menuItem('redo')?.registerAccelerator, !nonMac);
     const labels = items.map((item) => item.label).join('|');
-    expectTrue(problems, `no document commands or reload labels (${labels})`, !/\b(New|Save|Reload)\b/i.test(labels));
+    // M3 T4 B3a-2（H-7，同 H-6）：Save 与 Save As… 各恰一项；New / Reload 仍禁止。
+    expectTrue(problems, `no New / Reload labels (${labels})`, !/\b(New|Reload)\b/i.test(labels));
+    expectEqual(problems, 'Save and Save As… exactly once each', items.filter((item) => /Save/i.test(item.label)).map((item) => item.label), ['Save', 'Save As…']);
     return Promise.resolve(verdict(problems, { roles }));
   },
 };

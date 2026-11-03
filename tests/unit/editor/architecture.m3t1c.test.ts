@@ -102,9 +102,23 @@ describe('M3 T1c-2 架构守卫 —— 旧 Open 通道零残留', () => {
   it('preload 只暴露三个方法；MuseDesktopApi 恰为三个方法', () => {
     const preload = stripComments(read(join(REPO_ROOT, 'src/preload/preload.ts')));
     // M3 T3b（用户裁决 Q1 / S1，G1）：另有订阅方法 onMenuCommand；下面返回 Promise 的方法仍恰为三个（G6 钉住完整集合）。
-    expect([...preload.matchAll(/^\s{2}(\w+): \(/gm)].map((m) => m[1]).sort()).toEqual(['activateDocument', 'onMenuCommand', 'openDocument', 'rejectDocument']);
+    // M3 T4 B2（G-7）：另加 requestSaveTarget / saveDocument。
+    expect([...preload.matchAll(/^\s{2}(\w+): \(/gm)].map((m) => m[1]).sort()).toEqual([
+      'activateDocument',
+      'onMenuCommand',
+      'openDocument',
+      'rejectDocument',
+      'requestSaveTarget',
+      'saveDocument',
+    ]);
     const ipc = stripComments(read(join(REPO_ROOT, 'src/shared/ipc.ts')));
-    expect([...ipc.matchAll(/^\s{2}(\w+)\(.*\): Promise</gm)].map((m) => m[1]).sort()).toEqual(['activateDocument', 'openDocument', 'rejectDocument']);
+    expect([...ipc.matchAll(/^\s{2}(\w+)\(.*\): Promise</gm)].map((m) => m[1]).sort()).toEqual([
+      'activateDocument',
+      'openDocument',
+      'rejectDocument',
+      'requestSaveTarget',
+      'saveDocument',
+    ]);
   });
 
   it('main 不再含旧对话框与解码路径', () => {
@@ -119,7 +133,15 @@ describe('M3 T1c-2 架构守卫 —— 跨进程事务只在 openController', ()
   it('renderer 中只有 openController.ts 使用 museDesktop（global.d.ts 只是类型声明）', () => {
     const users = rendererFiles.filter((file) => /museDesktop/.test(stripComments(read(file)))).map(posixPath);
     // M3 T3b（G2）：menuBridge 只订阅菜单命令，不调用 Open 三方法（architecture.m3t3 钉住）。
-    expect(users.sort()).toEqual(['src/renderer/app/editor/menuBridge.ts', 'src/renderer/app/editor/openController.ts', 'src/renderer/global.d.ts']);
+    // M3 T4 B3a-1（H-1，按阶段）：未确认 reject 账本是 renderer 中唯一调用 rejectDocument 的模块（architecture.m3t4b3 钉住）。
+    // M3 T4 B3a-2（H-1，按阶段）：保存控制器是唯一调用 requestSaveTarget / saveDocument 的模块（architecture.m3t4b3 钉住）。
+    expect(users.sort()).toEqual([
+      'src/renderer/app/editor/menuBridge.ts',
+      'src/renderer/app/editor/openController.ts',
+      'src/renderer/app/save/rejectLedger.ts',
+      'src/renderer/app/save/saveController.ts',
+      'src/renderer/global.d.ts',
+    ]);
     expect(stripComments(read(join(RENDERER, 'global.d.ts')))).toContain('museDesktop: MuseDesktopApi;');
   });
 
@@ -140,16 +162,23 @@ describe('M3 T1c-2 架构守卫 —— 会话只由 commitSession 写入', () =>
     const sessionWriters = writes.filter((write) => SESSION_FIELDS.test(write.fields)).map((write) => write.fn);
     // M3 T3a（用户裁决 Q1 / S1，T3 Preflight r3 §10.1 G3）：编辑 / undo / redo 与解析发布各有一个原子写入函数；
     // 每个函数写入的字段集合由 architecture.m3t3 精确钉住。
-    expect(sessionWriters).toEqual(['commitSession', 'applyEditorStep', 'publishParsedSession']);
+    // M3 T4 B3a-1（H-2 / H-3，按阶段）：文件操作检查点的四个 CAS 写入函数（B1 fileOps 的原子写入）。
+    expect(sessionWriters).toEqual(['commitSession', 'applyEditorStep', 'publishParsedSession', 'beginFileOperation', 'settleSave', 'settleSaveAs', 'finishFileOperation']);
     expect(writes.map((write) => write.fn).sort()).toEqual(
       [
         'commitSession',
         'applyEditorStep',
         'publishParsedSession',
+        'beginFileOperation',
+        'settleSave',
+        'settleSaveAs',
+        'finishFileOperation',
         'setEditorSelection',
         'publishEditorView',
         'downgradeCapabilityTrust',
         'publishOpenView',
+        // M3 T4 B3a-2（H-3）：保存诊断视图。
+        'publishSaveView',
         '<module>',
       ].sort(),
     );

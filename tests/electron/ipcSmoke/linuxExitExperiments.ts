@@ -121,6 +121,8 @@ export interface ExitObservation {
   readonly pidExited: boolean | null;
   readonly generationAfter: number;
   readonly capabilitiesAfter: number;
+  /** 退出后（A4）留下的墓碑数。 */
+  readonly tombstonesAfter: number;
   readonly oldTokenAuthorizedAfter: boolean | null;
   readonly invariantsHold: boolean;
 }
@@ -149,6 +151,7 @@ async function observeExit(ctx: SmokeContext, probe: OwnerProbe, watcher: GoneWa
     pidExited: sentAt === null ? null : aliveAfterKill === false || procAfterKill?.stateLabel === 'zombie',
     generationAfter: probe.gen(),
     capabilitiesAfter: probe.caps(),
+    tombstonesAfter: probe.tombstones(),
     oldTokenAuthorizedAfter: probe.authorized(),
     invariantsHold: invariantProblems(ctx).length === 0,
   };

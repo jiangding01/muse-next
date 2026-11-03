@@ -37,7 +37,7 @@ describe('judgeProbe —— 正常输出', () => {
     expect(judgeProbe(0, summaryLine(validCases())).ok).toBe(true);
   });
 
-  it('允许跳过的两个平台用例被跳过 → 仍 ok', () => {
+  it('允许跳过的平台条件用例（含 T4 B1 的只读 / 符号链接写盘用例）被跳过 → 仍 ok', () => {
     const cases = validCases().map((c) => (SKIPPABLE_CASE_IDS.has(c.id) ? { id: c.id, pass: true, skipped: true as const } : c));
     expect(judgeProbe(0, summaryLine(cases)).ok).toBe(true);
   });
@@ -64,6 +64,12 @@ describe('judgeProbe —— 故障注入必须失败', () => {
     ['重复的普通用例 id（数量不变）', 0, summaryLine(cases.map((c) => (c.id === OTHER_ORDINARY ? { id: ORDINARY, pass: true } : c)))],
     ['全部跳过', 0, summaryLine(cases.map((c) => ({ id: c.id, pass: true, skipped: true as const })))],
     ['摘要正常但子进程退出码非 0', 2, summaryLine(cases)],
+    // M3 T4 B1：保存用例同样受清单与「不可跳过」约束。
+    ['缺少保存编码自校验用例', 0, summaryLine(cases.filter((c) => c.id !== 'save.verify gb18030 valid-utf8-bytes U+4E00'))],
+    ['保存编码自校验用例被跳过', 0, summaryLine(cases.map((c) => (c.id === 'save.verify utf8 lone-surrogate' ? { id: c.id, pass: true, skipped: true as const } : c)))],
+    ['C2 原地改写反例失败', 0, summaryLine(cases.map((c) => (c.id === 'save.disk in-place-modification refused' ? { id: c.id, pass: false } : c)))],
+    ['link 不覆盖发布用例被跳过', 0, summaryLine(cases.map((c) => (c.id === 'save.disk link-publish and EEXIST' ? { id: c.id, pass: true, skipped: true as const } : c)))],
+    ['可跳过的写盘用例未跳过但失败', 0, summaryLine(cases.map((c) => (c.id === 'save.disk read-only refused' ? { id: c.id, pass: false } : c)))],
   ];
 
   it.each(scenarios)('%s', (_label, exitCode, stdout) => {

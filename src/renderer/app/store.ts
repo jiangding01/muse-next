@@ -9,6 +9,10 @@
  * - `capabilityTrust`：demo 恒为 `none`；明确激活成功后为 `trusted`；观察到吊销信号后为 `unverified`（只降级，不升级）。
  * - `open` 与 `editor` 只是展示视图（阶段与提示），不参与任何判断。
  * - `zoom` 等纯 UI 状态独立于会话，不参与 dirty。
+ * - 文件操作检查点（M3 T4 B3a-1，B1 `fileOps.ts`）：`beginFileOperation` / `settleSave` / `settleSaveAs` / `finishFileOperation`
+ *   都以 store **当前**会话为底，按 documentId 与 op 对象引用做 CAS；只写 `session`（begin 另结束历史合并组，Save As 成功另写授权，
+ *   失败收尾可降级授权），不碰 source / version / parsed / history 内容 / selection。
+ * - 保存诊断视图（M3 T4 B3a-2，r0 §3.8）：`save` 字段只由 `publishSaveView` 写入，不触碰会话。
  * - 格式层只经 renderer-safe parse façade（`src/formats/jcxParse.ts`）。
  */
 
@@ -18,7 +22,16 @@ import type { DomainIndex, Score } from '../../domain';
 import type { JcxDiagnostic, LoadResult } from '../../formats/jcxParse';
 import type { HistoryState } from '../../editor/history/types';
 import type { EditorSelection } from '../../editor/selection/types';
-import type { DocumentSession } from '../../editor/session/types';
+import type { DocumentSession, FileOperation, FileOperationKind } from '../../editor/session/types';
+import { endCoalescing } from '../../editor/history/history';
+import {
+  acceptSaveAsSuccess,
+  acceptSaveSuccess,
+  beginFileOperation as beginOperation,
+  finishFileOperation as finishOperation,
+} from '../../editor/session/fileOps';
+import type { FileOpRejection, SavedAsFacts } from '../../editor/session/fileOps';
+import type { SaveMessage } from './save/saveMessages';
 import { SCORE_VIEW_METRICS } from '../../notation/layout/metrics';
 import { initialEditorCore } from './editor/editorTransitions';
 import type { EditorCore, EditorNotice } from './editor/editorTransitions';
@@ -31,6 +44,11 @@ export interface OpenView {
 }
 
 /** 编辑器的展示视图（T3a 中尚无界面呈现，状态栏在 T3b）。 */
+/** 保存诊断视图（M3 T4 B3a-2，r0 §3.8）：独立于编辑器轻提示的单槽位；只由保存控制器与诊断区的「知道了」写入。 */
+export interface SaveView {
+  readonly message: SaveMessage | null;
+}
+
 export interface EditorView {
   readonly composing: boolean;
   readonly notice: EditorNotice | null;
@@ -50,6 +68,7 @@ interface MuseAppState extends DerivedDocument {
   readonly capabilityTrust: CapabilityTrust;
   readonly open: OpenView;
   readonly editor: EditorView;
+  readonly save: SaveView;
   /** 谱面缩放比例（T6.4，D6：只影响 renderer 层像素换算，不改任何 layout 数值）。 */
   readonly zoom: number;
   /** 设置缩放比例，clamp 到 `SCORE_VIEW_METRICS.zoomMin/zoomMax`。 */
@@ -75,6 +94,7 @@ function clampZoom(zoom: number): number {
 
 const IDLE_VIEW: OpenView = { phase: 'idle', notice: null };
 const IDLE_EDITOR: EditorView = { composing: false, notice: null };
+const IDLE_SAVE: SaveView = { message: null };
 
 export const useMuseAppStore = create<MuseAppState>((set) => {
   const core = initialEditorCore(createDemoSession());
@@ -84,6 +104,7 @@ export const useMuseAppStore = create<MuseAppState>((set) => {
     ...derive(core.session),
     open: IDLE_VIEW,
     editor: IDLE_EDITOR,
+    save: IDLE_SAVE,
     zoom: 1,
     setZoom(zoom) {
       set({ zoom: clampZoom(zoom) });
@@ -204,6 +225,57 @@ export function downgradeCapabilityTrust(): void {
 
 export function publishOpenView(view: OpenView): void {
   useMuseAppStore.setState({ open: view });
+}
+
+/** 保存诊断视图；不触碰会话。 */
+export function publishSaveView(view: SaveView): void {
+  useMuseAppStore.setState({ save: view });
+}
+
+export type BeginFileOperationResult =
+  | { readonly ok: true; readonly op: FileOperation; readonly documentId: number; readonly capturedSource: string }
+  | { readonly ok: false; readonly reason: FileOpRejection };
+
+export type FileOperationWriteResult = { readonly ok: true } | { readonly ok: false; readonly reason: FileOpRejection };
+
+/**
+ * 开始一次文件操作：捕获当前 source 作为检查点候选，`fileOp` 置为新建对象（CAS 依据）；同一次 `set()` 中结束历史合并组
+ * （§9.3：保存点之后的输入不再与之前的输入合并）。已有进行中的操作 → `file-op-busy`，不写入。
+ */
+export function beginFileOperation(kind: FileOperationKind): BeginFileOperationResult {
+  const { session, history } = useMuseAppStore.getState();
+  const begun = beginOperation(session, kind);
+  if (!begun.ok) return begun;
+  useMuseAppStore.setState({ session: begun.session, history: endCoalescing(history) });
+  return { ok: true, op: begun.op, documentId: session.documentId, capturedSource: session.source };
+}
+
+/** 普通 Save 成功（或已提交但未确认、仍前移检查点时）：检查点前移到捕获值并结束操作。 */
+export function settleSave(documentId: number, op: FileOperation, capturedSource: string): FileOperationWriteResult {
+  const settled = acceptSaveSuccess(useMuseAppStore.getState().session, documentId, op, capturedSource);
+  if (!settled.ok) return settled;
+  useMuseAppStore.setState({ session: settled.session });
+  return { ok: true };
+}
+
+/** Save As 激活成功：文件事实与检查点同次切换，授权同次写为 `trusted`（`file !== null ⇔ trust !== none`）。 */
+export function settleSaveAs(documentId: number, op: FileOperation, capturedSource: string, facts: SavedAsFacts): FileOperationWriteResult {
+  const settled = acceptSaveAsSuccess(useMuseAppStore.getState().session, documentId, op, capturedSource, facts);
+  if (!settled.ok) return settled;
+  useMuseAppStore.setState({ session: settled.session, capabilityTrust: 'trusted' });
+  return { ok: true };
+}
+
+/**
+ * 文件操作失败 / 未提交 / 激活失败：只清 `fileOp`，检查点不前移。`downgrade` 为真时把 `trusted` 降为 `unverified`
+ * （demo 的 `none` 与已降级的会话不变，与 `downgradeCapabilityTrust` 同一规则，即 H-5 `trustAfterSaveAsFailure`）。
+ */
+export function finishFileOperation(documentId: number, op: FileOperation, downgrade: boolean): FileOperationWriteResult {
+  const { session, capabilityTrust } = useMuseAppStore.getState();
+  const finished = finishOperation(session, documentId, op);
+  if (!finished.ok) return finished;
+  useMuseAppStore.setState({ session: finished.session, capabilityTrust: downgrade && capabilityTrust === 'trusted' ? 'unverified' : capabilityTrust });
+  return { ok: true };
 }
 
 type ConsistencyInput = Pick<MuseAppState, 'session' | 'history' | 'selection' | 'score' | 'index' | 'diagnostics' | 'capabilityTrust'>;

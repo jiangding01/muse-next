@@ -17,11 +17,13 @@
  * - 迟到事件（事务号不是当前值，或事务已经终结）一律忽略，不能覆盖后续事务或当前会话。
  * - `openDocument` 不设超时：用户可以长时间停留在原生文件对话框里。
  * - 单飞：已有事务进行中时的 Open 请求不产生任何副作用。
- * - 阶段性数据安全（M3 T3a，用户裁决 Q3 / S5，T3 Preflight r3 §8）：`open-replied` 与 `activate-replied` 携带控制器同步读取的
- *   `dirty`。收到 `opened` 时若文档已 dirty → 只丢弃 pending 候选（`send-reject`，main 的旧 active 不受影响），不进入激活；
- *   激活成功时若文档已 dirty（编辑在 Open 进行中被禁止，只可能来自缺陷）→ 不提交、对已激活的候选 `send-reject`，
- *   并 `downgrade-trust`（main 已在激活时吊销旧能力），提示沿用 `activation-invalid`。两处都产生 `replacement-refused`，
- *   由控制器转成编辑器提示。入口处的 dirty / 组字拒绝在控制器中完成，不进入本状态机。
+ * - 阶段性数据安全（M3 T3a，用户裁决 Q3 / S5，T3 Preflight r3 §8；M3 T4 B3b 改为批准判据，r0.1 勘误 §4、H-12）：
+ *   `open-replied` 与 `activate-replied` 携带控制器同步算出的 `replacementBlocked`——当前状态**不被批准覆盖**（未经守卫或
+ *   批准不属于本次 Open / 当前文档时等同 proceed：dirty 即 blocked；proceed 要求 clean；discard 要求 sourceVersion 未变）。
+ *   收到 `opened` 时若 blocked → 只丢弃 pending 候选（`send-reject`，main 的旧 active 不受影响），不进入激活；
+ *   激活成功时若 blocked（最后防线）→ 不提交、对已激活的候选 `send-reject`，并 `downgrade-trust`（main 已在激活时吊销旧能力），
+ *   提示沿用 `activation-invalid`。两处都产生 `replacement-refused`，由控制器转成编辑器提示（并在批准失效时重新询问）。
+ *   入口处的组字拒绝与 dirty 询问在控制器中完成，不进入本状态机。
  * - 控制器自身异常的 fail-closed 终结（r3a 复核 H-1）：`controller-failed` 按事务所处阶段收束——requesting 时 main 至多持有
  *   pending 候选：已知票据则只 reject 它（旧 active 未受影响，不降级），应答含义未知则按 open 抛错处理（降级）；
  *   activating / uncertain 时 main 可能已经激活候选、吊销了旧能力：reject 候选并降级，提示 `activation-unresolved`；
@@ -66,9 +68,9 @@ export interface OpenFlowState {
 
 export type OpenFlowEvent =
   | { readonly type: 'open-requested' }
-  | { readonly type: 'open-replied'; readonly txn: number; readonly reply: OpenDocumentReply; readonly dirty: boolean }
+  | { readonly type: 'open-replied'; readonly txn: number; readonly reply: OpenDocumentReply; readonly replacementBlocked: boolean }
   | { readonly type: 'open-threw'; readonly txn: number }
-  | { readonly type: 'activate-replied'; readonly txn: number; readonly attempt: number; readonly reply: ActivateDocumentReply; readonly dirty: boolean }
+  | { readonly type: 'activate-replied'; readonly txn: number; readonly attempt: number; readonly reply: ActivateDocumentReply; readonly replacementBlocked: boolean }
   | { readonly type: 'activate-failed'; readonly txn: number; readonly attempt: number }
   /** 控制器在处理本事务时抛错；`ticket` 是 requesting 阶段已从 open 应答中识别出的票据。 */
   | { readonly type: 'controller-failed'; readonly txn: number; readonly ticket: DocumentActivationTicket | null }
@@ -83,7 +85,7 @@ export type OpenFlowEffect =
   /** `ticket` 是被提交候选的票据：store 写入失败时据此撤回已激活的候选（r3a 复核 H-1）。 */
   | { readonly type: 'commit'; readonly session: DocumentSession; readonly ticket: DocumentActivationTicket }
   | { readonly type: 'downgrade-trust' }
-  /** 因文档已 dirty 而放弃替换：激活之前（只丢候选）或激活之后的提交时（最后防线）。 */
+  /** 因替换未被批准覆盖而放弃替换：激活之前（只丢候选）或激活之后的提交时（最后防线）。 */
   | { readonly type: 'replacement-refused'; readonly stage: 'before-activation' | 'at-commit' };
 
 export interface OpenFlowStep {
@@ -106,7 +108,7 @@ function finish(state: OpenFlowState, notice: OpenNotice | null, effects: readon
 
 const unchanged = (state: OpenFlowState): OpenFlowStep => ({ state, effects: [] });
 
-function onOpenReplied(state: OpenFlowState, reply: OpenDocumentReply, dirty: boolean, prepare: PrepareCandidate): OpenFlowStep {
+function onOpenReplied(state: OpenFlowState, reply: OpenDocumentReply, replacementBlocked: boolean, prepare: PrepareCandidate): OpenFlowStep {
   switch (reply.kind) {
     case 'canceled':
       return finish(state, null);
@@ -121,7 +123,7 @@ function onOpenReplied(state: OpenFlowState, reply: OpenDocumentReply, dirty: bo
         return finish(state, { kind: 'prepare-failed' }, prepared.ticket === null ? [] : [{ type: 'send-reject', ticket: prepared.ticket }]);
       }
       const { candidate } = prepared;
-      if (dirty) return finish(state, null, [{ type: 'send-reject', ticket: candidate.ticket }, { type: 'replacement-refused', stage: 'before-activation' }]);
+      if (replacementBlocked) return finish(state, null, [{ type: 'send-reject', ticket: candidate.ticket }, { type: 'replacement-refused', stage: 'before-activation' }]);
       return {
         state: { ...state, phase: 'activating', attempt: 1, candidate, notice: null },
         effects: [{ type: 'invoke-activate', txn: state.txn, attempt: 1, ticket: candidate.ticket }],
@@ -151,14 +153,14 @@ export function stepOpenFlow(state: OpenFlowState, event: OpenFlowEvent, prepare
     }
     case 'open-replied':
       if (event.txn !== state.txn || state.phase !== 'requesting') return unchanged(state);
-      return onOpenReplied(state, event.reply, event.dirty, prepare);
+      return onOpenReplied(state, event.reply, event.replacementBlocked, prepare);
     case 'open-threw':
       if (event.txn !== state.txn || state.phase !== 'requesting') return unchanged(state);
       return finish(state, { kind: 'request-rejected' }, [DOWNGRADE]);
     case 'activate-replied': {
       if (!activating(state, event.txn) || state.candidate === null) return unchanged(state);
       const { reply } = event;
-      if (reply.ok && event.dirty) {
+      if (reply.ok && event.replacementBlocked) {
         return finish(state, { kind: 'activation-invalid' }, [
           { type: 'send-reject', ticket: state.candidate.ticket },
           DOWNGRADE,

@@ -1,4 +1,4 @@
-import { isSourceDirty } from '../../editor/session/derive';
+import { isFileOperationBusy, isSourceDirty } from '../../editor/session/derive';
 import { SCORE_VIEW_METRICS } from '../../notation/layout/metrics';
 import { museOpenController } from '../app/editor/openController';
 import type { OpenNotice, OpenPhase } from '../app/editor/openTransaction';
@@ -95,6 +95,8 @@ export function Toolbar() {
   const trust = useMuseAppStore((state) => state.capabilityTrust);
   // M3 T3b：dirty 时禁用 Open（只是界面提示；真正的拒绝在 Open 控制器入口，T3a）。
   const dirty = useMuseAppStore((state) => isSourceDirty(state.session));
+  // M3 T4 B3b（H-9）：dirty 时 Open 可点（改为询问守卫）；文件操作进行中禁用。
+  const fileBusy = useMuseAppStore((state) => isFileOperationBusy(state.session));
   const { file } = session;
 
   return (
@@ -110,8 +112,8 @@ export function Toolbar() {
         <button
           type="button"
           data-open-phase={open.phase}
-          disabled={open.phase !== 'idle' || dirty}
-          title={dirty ? '当前文档有未保存的修改；本阶段尚不能保存，撤销到未修改状态后才能打开其它文件。' : undefined}
+          disabled={open.phase !== 'idle' || fileBusy}
+          title={dirty ? '当前文档有未保存的修改：打开其它文件之前会询问是否保存。' : undefined}
           onClick={() => { museOpenController.open(); }}
         >
           {OPEN_LABELS[open.phase]}

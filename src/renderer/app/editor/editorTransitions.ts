@@ -27,6 +27,9 @@ import type { SourceRange, TextPatch } from '../../../editor/text/types';
 export type EditorNoticeKind =
   | 'open-refused-dirty'
   | 'open-refused-composing'
+  // M3 T4 B3a-1：共享准入租约被占用；未确认的 reject 尚未送达（R20）。
+  | 'open-refused-busy'
+  | 'open-refused-reject-pending'
   | 'open-candidate-dropped-dirty'
   | 'open-commit-refused-dirty'
   | 'command-ignored-composing'
@@ -39,6 +42,8 @@ export type EditorNoticeKind =
   | 'editor-error'
   | 'unload-blocked-dirty'
   | 'unload-blocked-composing'
+  // M3 T4 B3a-2：保存进行中（含准入期）阻止卸载。
+  | 'unload-blocked-saving'
   // M3 T3c：源码编辑。
   | 'input-unsupported'
   | 'input-rejected'

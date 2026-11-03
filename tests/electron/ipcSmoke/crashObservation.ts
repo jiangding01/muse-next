@@ -61,6 +61,8 @@ export interface CrashTimeline {
   readonly generationAfter: number;
   readonly capabilitiesBefore: number;
   readonly capabilitiesAfter: number;
+  /** 崩溃后（A4）留下的墓碑数。 */
+  readonly tombstonesAfter: number;
   /** 旧 token 崩溃前 / 后能否授权（没有 token 时为 null）。 */
   readonly oldTokenAuthorizedBefore: boolean | null;
   readonly oldTokenAuthorizedAfter: boolean | null;
@@ -116,14 +118,17 @@ export function watchRendererGone(contents: WebContents): GoneWatcher {
 
 export interface OwnerProbe {
   gen(): number;
+  /** 授权类记录数（open 与 save-target）。M3 T4 B2：A4 把 active 转为墓碑而不删除，墓碑另计。 */
   caps(): number;
+  tombstones(): number;
   authorized(): boolean | null;
 }
 
 export function ownerProbe(ctx: SmokeContext, window: SmokeWindow, token: string | null): OwnerProbe {
   return {
     gen: () => ownerMeta(ctx, window.ownerId)?.generation ?? -1,
-    caps: () => capabilitiesOf(ctx, window.ownerId).length,
+    caps: () => capabilitiesOf(ctx, window.ownerId).filter((c) => c.purpose !== 'tombstone').length,
+    tombstones: () => capabilitiesOf(ctx, window.ownerId).filter((c) => c.purpose === 'tombstone').length,
     authorized: () => (token === null ? null : ctx.openIpc.authorize(window.ownerId, token) !== null),
   };
 }
@@ -188,6 +193,7 @@ export async function crashAndObserve(ctx: SmokeContext, window: SmokeWindow, to
     generationAfter: probe.gen(),
     capabilitiesBefore,
     capabilitiesAfter: probe.caps(),
+    tombstonesAfter: probe.tombstones(),
     oldTokenAuthorizedBefore,
     oldTokenAuthorizedAfter: probe.authorized(),
     contentsEvent: contentsSeen,

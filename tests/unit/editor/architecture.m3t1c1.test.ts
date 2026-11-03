@@ -233,8 +233,48 @@ describe('M3 T1c-1 架构守卫 —— 判定不放宽', () => {
       'ui.edit-path-ime',
       'ui.edit-path-guard',
       'ui.edit-gate-platform',
+      // M3 T4 B2（G-8）：保存（W-DISK 用例本体）与故障注入；只追加，期望一律 PASS（悬空符号链接只在 POSIX）。
+      'save.basic',
+      'save-as.absent-link',
+      'save-as.existing',
+      'save-as.link-eexist',
+      'save-as.dangling-symlink',
+      'save-as.anchor-forged-document-id',
+      'save-as.anchor-changed-after-grant',
+      'save-target.one-shot',
+      'save.cross-window-token',
+      'save.reset-before-commit',
+      'save.committed-unconfirmed',
+      // PR #5 CI 修复：提交后授权丢失的同步注入（三平台；原 save.committed-unconfirmed 改为只在 POSIX，见下方 special）。
+      'save.committed-unconfirmed-sync-reset',
+      'save-as.activation-lost-reject-delivered',
+      'save-as.activation-lost-reject-lost',
+      'save-as.demo-stale-anchor',
+      'open.activation-lost-reject-lost',
+      'save-as.dialog-returns-after-reload',
+      'save.late-release-after-reset',
+      // M3 T4 B3a-1（H-13）：R20 送达门的 Open 部分；只追加，期望一律 PASS。
+      'ui.open-activation-lost-ledger',
+      'ui.open-reject-gate',
+      // M3 T4 B3a-2（H-13）：保存流程与 R20 送达门的保存部分；只追加，期望一律 PASS。
+      'ui.save-menu-once',
+      'ui.save-while-typing',
+      'ui.save-as-commit',
+      'ui.save-as-activation-lost',
+      'ui.save-reject-gate',
+      // M3 T4 B3b（H-13）：替换守卫三分支；只追加，期望一律 PASS。
+      'ui.guard-open-save',
+      'ui.guard-open-discard',
+      'ui.guard-open-cancel',
+      // M3 T4 B4 UI 定点修复：保存入口与保存提示的布局；只追加，期望 PASS。
+      'ui.save-layout',
     ]);
-    for (const id of added) expect(SMOKE_CASES.find((spec) => spec.id === id)?.expect).toEqual(id === 'ui.win-unc' ? { win32: 'pass-or-unverified' } : PASS);
+    const special: Readonly<Record<string, unknown>> = {
+      'ui.win-unc': { win32: 'pass-or-unverified' },
+      'save-as.dangling-symlink': { darwin: 'pass', linux: 'pass' },
+      'save.committed-unconfirmed': { darwin: 'pass', linux: 'pass' },
+    };
+    for (const id of added) expect(SMOKE_CASES.find((spec) => spec.id === id)?.expect, id).toEqual(special[id] ?? PASS);
   });
 
   it('反例：判定器哈希对规则改动敏感', () => {

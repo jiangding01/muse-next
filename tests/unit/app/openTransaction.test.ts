@@ -41,9 +41,9 @@ function run(events: readonly OpenFlowEvent[], start: OpenFlowState = initialOpe
 }
 
 const OPEN: OpenFlowEvent = { type: 'open-requested' };
-const opened = (txn = 1, dirty = false): OpenFlowEvent => ({ type: 'open-replied', txn, reply: { kind: 'opened', document: DOCUMENT }, dirty });
-const ok = (attempt: number, txn = 1, dirty = false): OpenFlowEvent => ({ type: 'activate-replied', txn, attempt, reply: { ok: true }, dirty });
-const invalid = (attempt: number, txn = 1): OpenFlowEvent => ({ type: 'activate-replied', txn, attempt, reply: { ok: false, code: 'capability-invalid' }, dirty: false });
+const opened = (txn = 1, replacementBlocked = false): OpenFlowEvent => ({ type: 'open-replied', txn, reply: { kind: 'opened', document: DOCUMENT }, replacementBlocked });
+const ok = (attempt: number, txn = 1, replacementBlocked = false): OpenFlowEvent => ({ type: 'activate-replied', txn, attempt, reply: { ok: true }, replacementBlocked });
+const invalid = (attempt: number, txn = 1): OpenFlowEvent => ({ type: 'activate-replied', txn, attempt, reply: { ok: false, code: 'capability-invalid' }, replacementBlocked: false });
 const failed = (attempt: number, txn = 1): OpenFlowEvent => ({ type: 'activate-failed', txn, attempt });
 
 const types = (effects: readonly OpenFlowEffect[]): string[] => effects.map((effect) => effect.type);
@@ -75,7 +75,7 @@ describe('openTransaction —— open 阶段的结果', () => {
     ['busy', { kind: 'rejected', reason: 'busy' } as const, { kind: 'busy' }, []],
     ['superseded', { kind: 'rejected', reason: 'superseded' } as const, { kind: 'superseded' }, ['downgrade-trust']],
   ])('%s：回到 idle，不提交；只有 superseded 是吊销信号', (_label, reply, notice, extraEffects) => {
-    const { state, effects } = run([OPEN, { type: 'open-replied', txn: 1, reply, dirty: false }]);
+    const { state, effects } = run([OPEN, { type: 'open-replied', txn: 1, reply, replacementBlocked: false }]);
     expect(state.phase).toBe('idle');
     expect(state.notice).toEqual(notice);
     expect(types(effects)).toEqual(['invoke-open', ...extraEffects]);
@@ -108,7 +108,7 @@ describe('openTransaction —— 激活结果（保守 R1）', () => {
   });
 
   it('document-mismatch：不提交、降级、提示内部错误', () => {
-    const { state, effects } = run([OPEN, opened(), { type: 'activate-replied', txn: 1, attempt: 1, reply: { ok: false, code: 'document-mismatch' }, dirty: false }]);
+    const { state, effects } = run([OPEN, opened(), { type: 'activate-replied', txn: 1, attempt: 1, reply: { ok: false, code: 'document-mismatch' }, replacementBlocked: false }]);
     expect(state.notice).toEqual({ kind: 'activation-mismatch' });
     expect(types(effects).slice(2)).toEqual(['downgrade-trust']);
   });
@@ -158,7 +158,7 @@ describe('openTransaction —— 迟到事件与重入', () => {
   });
 
   it('旧事务的应答不影响新事务：txn 1 的 ok 在 txn 2 进行中到达被忽略', () => {
-    const first = run([OPEN, { type: 'open-replied', txn: 1, reply: { kind: 'canceled' }, dirty: false }, OPEN, opened(2)]);
+    const first = run([OPEN, { type: 'open-replied', txn: 1, reply: { kind: 'canceled' }, replacementBlocked: false }, OPEN, opened(2)]);
     const late = run([ok(1, 1)], first.state);
     expect(commits(late.effects)).toBe(0);
     expect(late.state).toBe(first.state);
@@ -182,13 +182,13 @@ describe('openTransaction —— 迟到事件与重入', () => {
   });
 
   it('关闭提示只清除提示，不影响事务', () => {
-    const { state } = run([OPEN, { type: 'open-replied', txn: 1, reply: { kind: 'rejected', reason: 'busy' }, dirty: false }, { type: 'notice-dismissed' }]);
+    const { state } = run([OPEN, { type: 'open-replied', txn: 1, reply: { kind: 'rejected', reason: 'busy' }, replacementBlocked: false }, { type: 'notice-dismissed' }]);
     expect(state).toEqual({ txn: 1, phase: 'idle', attempt: 0, candidate: null, notice: null });
   });
 });
 
 describe('openTransaction —— 阶段性数据安全（M3 T3a，S5）', () => {
-  it('opened 时文档已 dirty：只丢弃 pending 候选，不进入激活、不提交、不降级', () => {
+  it('opened 时替换未被批准覆盖（dirty 且无 discard 批准）：只丢弃 pending 候选，不进入激活、不提交、不降级', () => {
     const { state, effects } = run([OPEN, opened(1, true)]);
     expect(types(effects)).toEqual(['invoke-open', 'send-reject', 'replacement-refused']);
     expect(effects[1]).toEqual({ type: 'send-reject', ticket: TICKET });
@@ -198,7 +198,7 @@ describe('openTransaction —— 阶段性数据安全（M3 T3a，S5）', () => 
     expect(state.notice).toBeNull();
   });
 
-  it('激活成功时文档已 dirty（最后防线）：不提交，reject 已激活候选，降级授权并沿用 activation-invalid 提示', () => {
+  it('激活成功时替换未被批准覆盖（最后防线）：不提交，reject 已激活候选，降级授权并沿用 activation-invalid 提示', () => {
     const { state, effects } = run([OPEN, opened(), ok(1, 1, true)]);
     expect(types(effects)).toEqual(['invoke-open', 'invoke-activate', 'send-reject', 'downgrade-trust', 'replacement-refused']);
     expect(commits(effects)).toBe(0);
@@ -206,17 +206,17 @@ describe('openTransaction —— 阶段性数据安全（M3 T3a，S5）', () => 
     expect(state).toEqual({ txn: 1, phase: 'idle', attempt: 0, candidate: null, notice: { kind: 'activation-invalid' } });
   });
 
-  it('激活失败的应答不看 dirty：capability-invalid 照旧只降级', () => {
-    const dirtyInvalid: OpenFlowEvent = { type: 'activate-replied', txn: 1, attempt: 1, reply: { ok: false, code: 'capability-invalid' }, dirty: true };
-    const { effects } = run([OPEN, opened(), dirtyInvalid]);
+  it('激活失败的应答不看 replacementBlocked：capability-invalid 照旧只降级', () => {
+    const blockedInvalid: OpenFlowEvent = { type: 'activate-replied', txn: 1, attempt: 1, reply: { ok: false, code: 'capability-invalid' }, replacementBlocked: true };
+    const { effects } = run([OPEN, opened(), blockedInvalid]);
     expect(types(effects)).toEqual(['invoke-open', 'invoke-activate', 'downgrade-trust']);
   });
 
-  it('反例：dirty 为 false 时提交照常（新字段不改变既有路径）', () => {
+  it('反例：replacementBlocked 为 false 时提交照常', () => {
     expect(commits(run([OPEN, opened(1, false), ok(1, 1, false)]).effects)).toBe(1);
   });
 
-  it('迟到的 dirty 应答被忽略：事务已终结后不产生任何效果', () => {
+  it('迟到的应答（replacementBlocked 为 true）被忽略：事务已终结后不产生任何效果', () => {
     const done = run([OPEN, opened(), ok(1)]);
     expect(run([ok(1, 1, true)], done.state).effects).toEqual([]);
   });
@@ -272,5 +272,17 @@ describe('openTransaction —— 控制器异常的 fail-closed 终结（r3a 复
     expect(run([{ type: 'commit-failed', txn: 2, ticket: TICKET }], done.state).effects).toEqual([]);
     const active = run([OPEN, opened()]);
     expect(run([{ type: 'commit-failed', txn: 1, ticket: TICKET }], active.state)).toEqual({ state: active.state, effects: [] });
+  });
+});
+
+describe('openTransaction —— 批准判据字段（M3 T4 B3b；H-12 §3 N-1）', () => {
+  it.each([
+    ['opened', true, ['invoke-open', 'send-reject', 'replacement-refused']],
+    ['opened', false, ['invoke-open', 'invoke-activate']],
+    ['commit', true, ['invoke-open', 'invoke-activate', 'send-reject', 'downgrade-trust', 'replacement-refused']],
+    ['commit', false, ['invoke-open', 'invoke-activate', 'commit']],
+  ] as const)('检查点 %s、replacementBlocked = %s：事件 / 效果序列与 §2 一致', (at, blocked, expected) => {
+    const events: OpenFlowEvent[] = at === 'opened' ? [OPEN, opened(1, blocked)] : [OPEN, opened(), ok(1, 1, blocked)];
+    expect(types(run(events).effects)).toEqual(expected);
   });
 });

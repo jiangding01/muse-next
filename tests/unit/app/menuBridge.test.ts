@@ -53,7 +53,8 @@ describe('parseMenuCommandMessage —— 白名单校验与归一化', () => {
       { command: 'undo' },
       { source: 'menu-click' },
       { command: 'Undo', source: 'menu-click' },
-      { command: 'save', source: 'menu-click' },
+      // M3 T4 B3a-2（STOP-1 获批）：save 已是合法命令，未知命令的反例改用 close。
+      { command: 'close', source: 'menu-click' },
       { command: 'undo', source: 'key' },
       { command: 'undo', source: 'menu-click ' },
       { command: ['undo'], source: 'menu-click' },
@@ -181,7 +182,7 @@ describe('menuBridge —— 幂等订阅与路由', () => {
   it('畸形消息（纵深防御）：不路由，只报告', () => {
     const rig = bridgeRig();
     rig.bridge.install();
-    rig.emit({ command: 'save', source: 'menu-click' });
+    rig.emit({ command: 'close', source: 'menu-click' }); // M3 T4 B3a-2（STOP-1 获批）：原为 save
     rig.emit({ command: 'undo', source: 'status-bar' });
     rig.emit(null);
     expect(rig.calls).toEqual([]);

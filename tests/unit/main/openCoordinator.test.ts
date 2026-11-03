@@ -53,9 +53,20 @@ describe('openCoordinator —— 基本生命周期', () => {
     expectConsistent(done.state);
 
     const active = activateDocument(done.state, W, file.ticket, T0);
-    // 回复不含任何「renderer 已提交」之类的字段；协调器状态里也没有这种事实。
+    // 回复不含任何「renderer 已提交」之类的字段。M3 T4 B2：`committed` 是 main 推出的最近一次激活结果（锚点），
+    // 不是 renderer 自报的提交事实——renderer 是否真的切换，只在下一次请求时由 R19 等值核对检验。
     expect(active.result.reply).toEqual({ ok: true });
-    expect(Object.keys(active.state.owners.get(W) ?? {}).sort()).toEqual(['candidates', 'dialogOpen', 'generation', 'inFlightSeq', 'latestRequestSeq']);
+    expect(Object.keys(active.state.owners.get(W) ?? {}).sort()).toEqual([
+      'candidates',
+      'committed',
+      'dialogOpen',
+      'generation',
+      'inFlightSeq',
+      'latestRequestSeq',
+      'saveOperation',
+    ]);
+    expect(active.state.owners.get(W)?.committed).toEqual({ kind: 'record', token: 'a' });
+    expect(active.state.owners.get(W)?.saveOperation).toBeNull();
     expect(authorizeCapability(active.state, W, 'a')?.state).toBe('active');
     expectConsistent(active.state);
   });
@@ -102,6 +113,11 @@ describe('openCoordinator —— 替换、取消、失败', () => {
     expect(active.result.revoked).toEqual(['a']);
     expect(authorizeCapability(active.state, W, 'a')).toBeNull();
     expect(tokensOf(active.state, W, 'active')).toEqual(['b']);
+    // M3 T4 B2（A1）：被取代的 a 转为墓碑（不授权），b 的 prevCommitted 指向它。
+    expect(active.state.table.get('a')?.purpose).toBe('tombstone');
+    expect(active.state.owners.get(W)?.committed).toEqual({ kind: 'record', token: 'b' });
+    const b2 = active.state.table.get('b');
+    expect(b2?.purpose === 'open' && b2.state === 'active' ? b2.prevCommitted : null).toEqual({ kind: 'record', token: 'a' });
     expectConsistent(active.state);
   });
 
@@ -197,9 +213,17 @@ describe('openCoordinator —— generation（reload / 渲染进程退出 / 窗�
     expect(reset.result).toEqual(['old']);
     expect(reset.state.owners.get(W)?.generation).toBe(2);
     expect(reset.state.owners.get(W)?.dialogOpen).toBe(true);
+    // M3 T4 B2（A4）：旧 active 转墓碑——不再授权，但 committed 仍指向它（页面可能仍存活）。
+    expect(authorizeCapability(reset.state, W, 'old')).toBeNull();
+    expect(reset.state.table.get('old')?.purpose).toBe('tombstone');
+    expect(reset.state.owners.get(W)?.committed).toEqual({ kind: 'record', token: 'old' });
     const late = completeOpen(reset.state, ticketA, opened(W, 'a', 11).completion, T0);
     expect(late.result).toEqual({ kind: 'rejected', reason: 'superseded' });
-    expect(late.state.table.size).toBe(0);
+    expect(late.state.table.size).toBe(1);
+    expect(late.state.table.get('old')?.purpose).toBe('tombstone');
+    expect(authorizeCapability(late.state, W, 'old')).toBeNull();
+    expect(tokensOf(late.state, W, 'active')).toEqual([]);
+    expect(late.state.owners.get(W)?.generation).toBe(2);
     expect(late.state.owners.get(W)?.dialogOpen).toBe(false);
     expectConsistent(late.state);
   });

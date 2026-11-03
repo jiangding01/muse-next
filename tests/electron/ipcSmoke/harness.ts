@@ -15,6 +15,7 @@
 import { performance } from 'node:perf_hooks';
 
 import type { FileStat, ReadOnlyFileHandle, ReadOnlyFileSystem } from '../../../src/main/document/fileSystemPort';
+import type { WriteFileSystem } from '../../../src/main/document/writeFileSystemPort';
 
 export interface Deferred<T> {
   readonly promise: Promise<T>;
@@ -262,6 +263,128 @@ export function createTokenFaults(): TokenFaults {
     pending: () => queue.length,
     clear: () => {
       queue.length = 0;
+    },
+  };
+}
+
+/** M3 T4 B2：可在异步步骤前挂起的写 port（包裹生产 Node 写实现）。同步提交临界区（C2）不能也不应被挂起。 */
+export type GatedWriteMethod = 'openExclusive' | 'syncDirectory';
+
+export interface WriteGate {
+  readonly reached: Promise<void>;
+  release(): void;
+}
+
+/** PR #5 CI 修复：一次性的提交后同步注入（见 `afterNextRename`）。 */
+export interface RenameHook {
+  /** 已执行次数（一次性：0 或 1）。 */
+  fired(): number;
+  /** hook 抛出的异常（已拦截，不向产品写入管线传播）；没有为 null。 */
+  error(): string | null;
+}
+
+export interface GatedWriteFileSystem {
+  readonly fs: WriteFileSystem;
+  /** 下一次调用该方法时停在调用之前，直到 `release`。`openExclusive` 在提交点之前，`syncDirectory` 在提交点之后。 */
+  holdNext(method: GatedWriteMethod): WriteGate;
+  /**
+   * 下一次底层 `renameSync` 成功返回（已越过提交点）后，在同一同步调用栈里执行 hook 一次：不挂起、不 await、不让出事件循环。
+   * rename 抛出时 hook 不执行、保持待触发。hook 的异常被记录（残留检查报告）而不传回产品，以免已提交被映射为未提交；
+   * hook 必须同步，返回 thenable 同样记为失败。
+   */
+  afterNextRename(hook: () => void): RenameHook;
+  /** 自上次 `reset` 以来经过本包装的调用次数。 */
+  calls(method: GatedWriteMethod): number;
+  /** 是否还有未触发或未放行的闸门、未触发的 rename hook，或 hook 抛出过异常（用例收尾的残留检查）。 */
+  hasPendingGate(): boolean;
+  reset(): void;
+}
+
+const isThenable = (value: unknown): value is PromiseLike<unknown> =>
+  (typeof value === 'object' || typeof value === 'function') && value !== null && typeof (value as { then?: unknown }).then === 'function';
+
+/** hook 异常的描述；格式化本身抛出（无原型对象、会抛的 message getter）时退回固定文本，绝不让异常穿出 hook 包装。 */
+function describeHookError(thrown: unknown): string {
+  try {
+    return thrown instanceof Error ? thrown.message : String(thrown);
+  } catch {
+    return 'unprintable rename hook error';
+  }
+}
+
+export function createGatedWriteFileSystem(base: WriteFileSystem): GatedWriteFileSystem {
+  const pending = new Map<GatedWriteMethod, { reached: () => void; wait: Promise<void>; release: () => void; gate: WriteGate }[]>();
+  const open = new Set<WriteGate>();
+  const counts = new Map<GatedWriteMethod, number>();
+  const renameHooks: (() => void)[] = [];
+  let hookFailures = 0;
+  const pass = async (method: GatedWriteMethod): Promise<void> => {
+    counts.set(method, (counts.get(method) ?? 0) + 1);
+    const queue = pending.get(method) ?? [];
+    const next = queue.shift();
+    if (next === undefined) return;
+    next.reached();
+    await next.wait;
+  };
+  return {
+    fs: {
+      ...base,
+      openExclusive: async (path, mode) => {
+        await pass('openExclusive');
+        return base.openExclusive(path, mode);
+      },
+      syncDirectory: async (path) => {
+        await pass('syncDirectory');
+        return base.syncDirectory(path);
+      },
+      renameSync: (from, to) => {
+        base.renameSync(from, to);
+        renameHooks.shift()?.();
+      },
+    },
+    holdNext(method) {
+      let reached: () => void = () => undefined;
+      let releaseWait: () => void = () => undefined;
+      const reachedPromise = new Promise<void>((resolve) => (reached = resolve));
+      const wait = new Promise<void>((resolve) => (releaseWait = resolve));
+      const gate: WriteGate = {
+        reached: reachedPromise,
+        release: () => {
+          open.delete(gate);
+          releaseWait();
+        },
+      };
+      open.add(gate);
+      pending.set(method, [...(pending.get(method) ?? []), { reached, wait, release: gate.release, gate }]);
+      return gate;
+    },
+    afterNextRename(hook) {
+      let fired = 0;
+      let error: string | null = null;
+      renameHooks.push(() => {
+        fired += 1;
+        try {
+          const returned: unknown = hook();
+          // hook 必须同步：返回 thenable 即失败（await 之后的部分会落在提交后的异步窗口里）；其 rejection 也在这里接住。
+          if (isThenable(returned)) {
+            returned.then(undefined, () => undefined);
+            throw new Error('rename hook must be synchronous');
+          }
+        } catch (thrown) {
+          error = describeHookError(thrown);
+          hookFailures += 1;
+        }
+      });
+      return { fired: () => fired, error: () => error };
+    },
+    calls: (method) => counts.get(method) ?? 0,
+    hasPendingGate: () => open.size > 0 || renameHooks.length > 0 || hookFailures > 0,
+    reset() {
+      for (const gate of [...open]) gate.release();
+      pending.clear();
+      counts.clear();
+      renameHooks.length = 0;
+      hookFailures = 0;
     },
   };
 }
