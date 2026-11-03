@@ -44,13 +44,21 @@ describe('ReplacementGuardPanel —— 非模态语义与按钮', () => {
 describe('global.css —— app-shell 六行布局（G-M1：守卫、保存入口与保存提示不重叠、不错位）', () => {
   const css = readFileSync(join(REPO_ROOT, 'src/renderer/styles/global.css'), 'utf8');
 
-  it('行模板为六行，主工作区在第 4 行（minmax(0, 1fr)）', () => {
-    expect(css).toContain('.app-shell { height: 100%; display: grid; grid-template-rows: 64px auto auto minmax(0, 1fr) auto auto; overflow: hidden; }');
+  it('行模板为六行，主工作区在第 4 行（minmax(0, 1fr)）；第 1 行随工具栏高度（L-2：通知条占工具栏第二行）', () => {
+    expect(css).toContain('.app-shell { height: 100%; display: grid; grid-template-rows: auto auto auto minmax(0, 1fr) auto auto; overflow: hidden; }');
   });
 
   it('每个子元素固定 grid-row（条件渲染不会让后续元素错位）', () => {
     const rows = [...css.matchAll(/^\.app-shell > \.([\w-]+) \{ grid-row: (\d); \}$/gm)].map((m) => `${m[1] ?? ''}:${m[2] ?? ''}`);
     expect(rows).toEqual(['toolbar:1', 'save-entry:2', 'replacement-guard:3', 'app-grid:4', 'save-diagnostics:5', 'editor-status:6']);
+  });
+
+  it('L-2：Open 通知条在工具栏第二行随文档流，不以固定定位浮在保存入口与守卫之上', () => {
+    expect(css).toMatch(/^\.toolbar \{[^}]*grid-template-rows: 64px auto;/m);
+    const notice = [...css.matchAll(/^\.open-notice \{[^}]*\}/gm)].map((m) => m[0]);
+    expect(notice).toHaveLength(1);
+    expect(notice[0]).toContain('grid-column: 1 / -1; grid-row: 2;');
+    expect(notice[0]).not.toMatch(/position:\s*(fixed|absolute|sticky)|z-index|transform/);
   });
 
   it('守卫没有全屏遮罩（保留 G6：询问期间允许继续编辑）', () => {

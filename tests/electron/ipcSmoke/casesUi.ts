@@ -871,6 +871,28 @@ const READ_SAVE_LAYOUT = `(() => { ${DOM_HELPERS}
   };
 })()`;
 
+/** B4 L-2：Open 通知条与保存入口 / 替换守卫（真实 DOM）：通知条可见可点、不与二者重叠，二者的关键元素仍可命中。 */
+const READ_NOTICE_LAYOUT = `(() => { ${DOM_HELPERS}
+  const notice = document.querySelector('.open-notice'); const guard = document.querySelector('.replacement-guard');
+  return {
+    notice: notice === null ? null : notice.getAttribute('data-notice'),
+    noticeVisible: [hits(notice?.querySelector('span') ?? null), hits(notice?.querySelector('button') ?? null)],
+    overlapsEntry: overlaps(notice, document.querySelector('.save-entry')),
+    overlapsGuard: overlaps(notice, guard),
+    entries: [...document.querySelectorAll('[data-save-entry]')].map((b) => [b.getAttribute('data-save-entry'), hits(b)]),
+    guard: guard === null ? null : [hits(guard.querySelector('#replacement-guard-message')), ...[...guard.querySelectorAll('[data-guard-choice]')].map((b) => hits(b))],
+  };
+})()`;
+
+interface NoticeLayout {
+  readonly notice: string | null;
+  readonly noticeVisible: readonly boolean[];
+  readonly overlapsEntry: boolean | null;
+  readonly overlapsGuard: boolean | null;
+  readonly entries: readonly (readonly [string, boolean])[];
+  readonly guard: readonly boolean[] | null;
+}
+
 interface SaveLayout {
   readonly entries: readonly (readonly [string, boolean])[];
   readonly entryOverlapsGrid: boolean | null;
@@ -904,6 +926,26 @@ const uiSaveLayout: IsolatedCase = {
     expectEqual(problems, 'gb18030 document opened', gb?.trust, 'trusted');
     const gbLayout = (await readDom(x.window, READ_SAVE_LAYOUT)) as SaveLayout | null;
     expectEqual(problems, 'UTF-8 save as entry visible', gbLayout?.entries, [['save', true], ['save-as', true], ['save-as-utf8', true]]);
+    // B4 L-2：打开失败的通知条与 GB18030 的三个保存入口同时显示——通知条可见可点，不与保存入口重叠。
+    ctx.chooser.enqueue({ kind: 'path', path: join(x.dir, 'missing.jcx') });
+    expectTrue(problems, 'open clicked (missing file)', clickMenu('open', x.window.win));
+    expectTrue(problems, 'open-failed notice shown', await waitPage(x.window, `document.querySelector('.open-notice') !== null`, 5_000));
+    const withNotice = (await readDom(x.window, READ_NOTICE_LAYOUT)) as NoticeLayout | null;
+    expectEqual(problems, 'L-2 notice and save entries both reachable', withNotice === null ? null : [withNotice.notice, withNotice.noticeVisible, withNotice.overlapsEntry, withNotice.entries],
+      ['open-failed', [true, true], false, [['save', true], ['save-as', true], ['save-as-utf8', true]]]);
+    // 通知条未关闭时进入守卫询问：通知条不与守卫重叠，问句、三个按钮与「知道了」都可命中；关闭通知后守卫仍在询问。
+    expectTrue(problems, 'typed (dirty)', await typeAtEnd(x.window, 'n'));
+    expectTrue(problems, 'open clicked (guard)', clickMenu('open', x.window.win));
+    expectTrue(problems, 'guard asks with the notice shown (focus on cancel)', await waitPage(x.window, guardAskingFocused, 5_000));
+    const withGuard = (await readDom(x.window, READ_NOTICE_LAYOUT)) as NoticeLayout | null;
+    expectEqual(problems, 'L-2 notice and guard both reachable', withGuard === null ? null : [withGuard.notice, withGuard.noticeVisible, withGuard.overlapsEntry, withGuard.overlapsGuard, withGuard.guard],
+      ['open-failed', [true, true], false, false, [true, true, true, true]]);
+    const dismissed = await x.window.call(`(() => { const b = document.querySelector('.open-notice button'); if (b === null) return false; b.click(); return true; })()`);
+    expectTrue(problems, 'notice dismissed', dismissed.ok && dismissed.value === true);
+    expectTrue(problems, 'notice gone, guard still asking', await waitPage(x.window, `document.querySelector('.open-notice') === null && ${guardPhase('asking')}`, 3_000));
+    const dismissedLayout = (await readDom(x.window, READ_NOTICE_LAYOUT)) as NoticeLayout | null;
+    expectEqual(problems, 'L-2 guard still reachable after the notice is dismissed', dismissedLayout === null ? null : [dismissedLayout.notice, dismissedLayout.guard], [null, [true, true, true, true]]);
+    expectTrue(problems, 'guard canceled', await chooseGuard(x.window, 'cancel'));
     return verdict(problems);
   },
 };
